@@ -7,7 +7,9 @@ análisis de anomalías con RAG, la operación sin enlace y el cierre/certificac
 de órdenes.
 
 > Nota: el repositorio de la planta es la **simulación**; este repositorio es la
-> **solución**. El informe técnico está en [`INFORME.md`](INFORME.md).
+> **solución**. El informe técnico está en [`INFORME.md`](INFORME.md) y la
+> bitácora de avance, decisiones y verificación en
+> [`docs/estado_de_implementacion.md`](docs/estado_de_implementacion.md).
 
 ## Estado
 
@@ -305,6 +307,10 @@ Las principales están documentadas en `.env.example`:
 .
 ├── README.md
 ├── INFORME.md
+├── docs/
+│   ├── estado_de_implementacion.md
+│   ├── evidencia_fase4_retrieval.json
+│   └── evidencia_fase4_pgvector.json
 ├── docker-compose.yml
 ├── Dockerfile
 ├── .env.example

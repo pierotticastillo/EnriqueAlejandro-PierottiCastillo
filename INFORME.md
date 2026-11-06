@@ -501,8 +501,8 @@ python -m rag.cli evaluar --corpus <planta>/datos/documentos --embedder fastembe
 python -m rag.cli evaluar-pgvector --suite <planta>/datos/documentos/evaluacion/retrieval.json
 ```
 
-La evidencia quedó en `Plan_de_implementación/evidencia_fase4_retrieval.json`
-(índice en memoria) y `Plan_de_implementación/evidencia_fase4_pgvector.json`
+La evidencia quedó en [`docs/evidencia_fase4_retrieval.json`](docs/evidencia_fase4_retrieval.json)
+(índice en memoria) y [`docs/evidencia_fase4_pgvector.json`](docs/evidencia_fase4_pgvector.json)
 (índice real de PostgreSQL).
 
 ### 8.4 Citas y context builder
@@ -716,8 +716,10 @@ _(Se completa con la corrida de verificación sobre la planta simulada.)_
 
 ## 13. Referencias
 
-- Plan de implementación: `Plan_de_implementación/Plan_de_implementación.md`
-  (carpeta ignorada por Git; se conserva como documento de traspaso).
+- Estado de implementación (bitácora de avance, decisiones y verificación):
+  [`docs/estado_de_implementacion.md`](docs/estado_de_implementacion.md).
+- Plan de implementación: documento interno del curso, conservado fuera de este
+  repositorio (`Plan_de_implementación/`, ignorado por Git).
 - Contrato: `planta-contrato` 0.2.0, commit
   `ab65b95e911731351dba395817a74a8cc60da2b2`, subdirectorio `contrato`.
 - Planta simulada: `NovitSoftware/academia2026-tp`.

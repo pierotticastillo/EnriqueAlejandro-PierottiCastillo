@@ -1,0 +1,84 @@
+{
+  "lexico": {
+    "total": {
+      "mrr": 0.558,
+      "hit@1": 0.338,
+      "recall@1": 0.244,
+      "distractor@1": 0.056,
+      "hit@3": 0.746,
+      "recall@3": 0.58,
+      "distractor@3": 0.07,
+      "hit@5": 0.817,
+      "recall@5": 0.643,
+      "distractor@5": 0.085,
+      "hit@10": 0.915,
+      "recall@10": 0.758,
+      "distractor@10": 0.085
+    },
+    "revision_vencida_antes": 40
+  },
+  "denso": {
+    "total": {
+      "mrr": 0.357,
+      "hit@1": 0.225,
+      "recall@1": 0.167,
+      "distractor@1": 0.028,
+      "hit@3": 0.423,
+      "recall@3": 0.282,
+      "distractor@3": 0.042,
+      "hit@5": 0.521,
+      "recall@5": 0.366,
+      "distractor@5": 0.056,
+      "hit@10": 0.634,
+      "recall@10": 0.465,
+      "distractor@10": 0.056
+    },
+    "revision_vencida_antes": 45
+  },
+  "hibrido": {
+    "total": {
+      "mrr": 0.573,
+      "hit@1": 0.366,
+      "recall@1": 0.256,
+      "distractor@1": 0.042,
+      "hit@3": 0.732,
+      "recall@3": 0.573,
+      "distractor@3": 0.056,
+      "hit@5": 0.803,
+      "recall@5": 0.664,
+      "distractor@5": 0.07,
+      "hit@10": 0.887,
+      "recall@10": 0.742,
+      "distractor@10": 0.07
+    },
+    "revision_vencida_antes": 36
+  },
+  "hibrido_vigente": {
+    "total": {
+      "mrr": 0.687,
+      "hit@1": 0.563,
+      "recall@1": 0.38,
+      "distractor@1": 0.0,
+      "hit@3": 0.789,
+      "recall@3": 0.638,
+      "distractor@3": 0.0,
+      "hit@5": 0.845,
+      "recall@5": 0.695,
+      "distractor@5": 0.0,
+      "hit@10": 0.901,
+      "recall@10": 0.765,
+      "distractor@10": 0.0
+    },
+    "revision_vencida_antes": 0
+  },
+  "baseline_bm25": {
+    "hit@5": 0.845,
+    "recall@5": 0.664,
+    "distractor@5": 0.099
+  },
+  "hibrido_vs_baseline": {
+    "hit@5": 0.0,
+    "recall@5": 0.031,
+    "distractor@5": -0.099
+  }
+}

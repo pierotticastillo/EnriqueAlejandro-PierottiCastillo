@@ -1,6 +1,9 @@
 # ============================================================
 # Documentación interna del proyecto (no se entrega)
 # ============================================================
+# El plan de implementación y el contrato de integración son material del
+# curso: no se publican en este repositorio. La parte propia (estado de
+# avance y evidencia de medición) sí se entrega, pero en `docs/`.
 Plan_de_implementación/
 
 # ============================================================
