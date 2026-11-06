@@ -1,0 +1,132 @@
+"""Listener MQTT de la planta: notas de recorrida y respuestas de tablet."""
+
+from __future__ import annotations
+
+import logging
+import threading
+from collections.abc import Callable
+
+import paho.mqtt.client as mqtt
+from planta_contrato import (
+    EventoSistema,
+    LecturaSensor,
+    MensajeTablet,
+    NotaRecorrida,
+    RespuestaOperador,
+    Topicos,
+)
+from pydantic import ValidationError
+
+from config import Settings
+
+logger = logging.getLogger("planta.listener")
+
+
+class ClientePlanta:
+    """Cliente MQTT con suscripciones y publicación de mensajes del sistema."""
+
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        al_nota: Callable[[NotaRecorrida], None],
+        al_respuesta: Callable[[RespuestaOperador], None],
+        al_sensor: Callable[[LecturaSensor], None],
+        cliente: mqtt.Client | None = None,
+    ) -> None:
+        self._settings = settings
+        self._al_nota = al_nota
+        self._al_respuesta = al_respuesta
+        self._al_sensor = al_sensor
+        self._cliente = cliente or self._crear_cliente()
+        self._detenido = threading.Event()
+
+    def _crear_cliente(self) -> mqtt.Client:
+        cliente = mqtt.Client(
+            mqtt.CallbackAPIVersion.VERSION2,
+            client_id=f"{self._settings.sistema_id}-listener",
+        )
+        cliente.reconnect_delay_set(min_delay=1, max_delay=30)
+        if self._settings.mqtt_usuario:
+            cliente.username_pw_set(self._settings.mqtt_usuario, self._settings.mqtt_password)
+        return cliente
+
+    def iniciar(self) -> None:
+        self._cliente.on_connect = self._al_conectar
+        self._cliente.on_message = self._al_mensaje
+        self._cliente.connect_async(self._settings.mqtt_host, self._settings.mqtt_port)
+        self._cliente.loop_start()
+        logger.info(
+            "Listener MQTT iniciado en %s:%s",
+            self._settings.mqtt_host,
+            self._settings.mqtt_port,
+        )
+
+    def detener(self) -> None:
+        self._detenido.set()
+        self._cliente.loop_stop()
+        self._cliente.disconnect()
+        logger.info("Listener MQTT detenido")
+
+    def publicar(self, topico: str, payload: str, *, qos: int = 1) -> None:
+        info = self._cliente.publish(topico, payload, qos=qos)
+        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+            logger.warning("No se pudo publicar en %s (rc=%s)", topico, info.rc)
+
+    def publicar_tablet(self, mensaje: MensajeTablet) -> None:
+        self.publicar(Topicos.TABLET, mensaje.model_dump_json())
+
+    def publicar_evento(self, evento: EventoSistema) -> None:
+        self.publicar(Topicos.EVENTOS, evento.model_dump_json())
+
+    def _al_conectar(
+        self,
+        _cliente: mqtt.Client,
+        _userdata: object,
+        _flags: object,
+        reason_code: object,
+        _properties: object,
+    ) -> None:
+        if getattr(reason_code, "is_failure", False):
+            logger.warning("MQTT rechazó la conexión: %s", reason_code)
+            return
+        self._cliente.subscribe(
+            [
+                (Topicos.RECORRIDAS, 1),
+                (Topicos.RESPUESTAS, 1),
+                (Topicos.SENSORES.format(tag="+", variable="+"), 1),
+            ]
+        )
+        logger.info("MQTT conectado; suscripciones de recorridas, respuestas y sensores activas")
+
+    def _al_mensaje(
+        self,
+        _cliente: mqtt.Client,
+        _userdata: object,
+        mensaje: mqtt.MQTTMessage,
+    ) -> None:
+        topico = mensaje.topic
+        try:
+            crudo = mensaje.payload.decode("utf-8")
+        except UnicodeDecodeError:
+            logger.warning("Payload no UTF-8 en %s", topico)
+            return
+
+        try:
+            if topico == Topicos.RECORRIDAS:
+                self._al_nota(NotaRecorrida.model_validate_json(crudo))
+            elif topico == Topicos.RESPUESTAS:
+                self._al_respuesta(RespuestaOperador.model_validate_json(crudo))
+            elif topico.startswith("planta/sensores/"):
+                lectura = LecturaSensor.model_validate_json(crudo)
+                segmentos = topico.split("/")
+                if len(segmentos) != 4 or segmentos[2:] != [lectura.tag, lectura.variable]:
+                    logger.warning("Tópico y lectura de sensor no coinciden: %s", topico)
+                    return
+                self._al_sensor(lectura)
+            else:
+                logger.debug("Tópico ignorado: %s", topico)
+        except ValidationError as exc:
+            logger.warning("Mensaje inválido en %s: %s", topico, exc)
+        except Exception:  # noqa: BLE001 - el loop de MQTT no debe morir
+            logger.exception("Error procesando mensaje de %s", topico)

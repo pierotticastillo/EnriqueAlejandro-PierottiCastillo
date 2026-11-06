@@ -1,0 +1,40 @@
+"""Lectura de números dichos en español de campo."""
+
+from __future__ import annotations
+
+import pytest
+
+from planta.numeros import parsear_numero
+
+
+@pytest.mark.parametrize(
+    ("texto", "valor", "decimal"),
+    [
+        ("mil seiscientos treinta", 1630, False),
+        ("mil seiscientos diez", 1610, False),
+        ("ciento quince", 115, False),
+        ("ciento catorce", 114, False),
+        ("cincuenta y cinco", 55, False),
+        ("treinta y un grados", 31, False),
+        ("ciento once kilos", 111, False),
+        ("mil seiscientos cuarenta", 1640, False),
+        ("dos mil quinientos", 2500, False),
+        ("uno coma tres", 1.3, True),
+        ("uno con dos", 1.2, True),
+        ("cero nueve", 0.9, True),
+        ("uno ocho", 1.8, True),
+        ("uno dos", 1.2, True),
+        ("cinco y medio", 5.5, True),
+        ("1,5", 1.5, True),
+        ("1610", 1610, False),
+    ],
+)
+def test_parsear_numero(texto: str, valor: float, decimal: bool) -> None:
+    numero = parsear_numero(texto)
+    assert numero is not None
+    assert numero.valor == pytest.approx(valor)
+    assert numero.decimal is decimal
+
+
+def test_sin_numero() -> None:
+    assert parsear_numero("está parada, en reserva") is None

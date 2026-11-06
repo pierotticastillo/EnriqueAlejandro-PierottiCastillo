@@ -1,0 +1,263 @@
+﻿# ============================================================
+# PIA-3 — Planta de inyección de agua
+# Fase 0: entorno local + PostgreSQL 16 con pgvector
+#
+# Requisitos previos:
+#   - La red externa `planta-lan` la crea el compose de la planta
+#     simulada (NovitSoftware/academia2026-tp). Si no existe:
+#       docker network create planta-lan
+#   - El proxy de enlace de la planta es http://enlace:3128
+#
+# Uso:
+#   cp .env.example .env
+#   docker compose up -d --build   # sistema completo
+#   docker compose up -d postgres  # solo base de datos
+#   docker compose --profile rag run --rm rag-indexar  # (re)indexar manuales
+#
+# Presupuesto agregado de planta: 4 CPU / 8 GB.
+#   postgres:    1.0 CPU / 2.0 GB
+#   migraciones: 0.5 CPU / 0.5 GB (efímero)
+#   sistema:     2.0 CPU / 4.0 GB
+#   mcp:         0.5 CPU / 1.0 GB
+#   reserva:     0.0 CPU / 0.5 GB
+# rag-indexar (perfil `rag`) es efímero: 1.5 CPU / 2.0 GB. Indexar 704
+# fragmentos con el modelo local lleva unos minutos; con 0,5 CPU eran ~7 min.
+# ============================================================
+
+name: pia3
+
+x-comun: &comun
+  labels:
+    academia.planta: pc
+  restart: unless-stopped
+  networks:
+    - planta-lan
+
+x-entorno: &entorno
+  # Se usan nombres PIA3_* para que el entorno del host no pise los
+  # valores exigidos por el plan (HTTP_PROXY / NO_PROXY).
+  HTTP_PROXY: ${PIA3_HTTP_PROXY:-http://enlace:3128}
+  HTTPS_PROXY: ${PIA3_HTTPS_PROXY:-http://enlace:3128}
+  # `enlace` está en NO_PROXY: su puerto de control (8081) es el que informa
+  # el estado del radioenlace y hay que poder consultarlo con el enlace caído.
+  NO_PROXY: ${PIA3_NO_PROXY:-broker,sim,enlace,localhost,127.0.0.1,postgres}
+  TZ: ${TZ:-America/Argentina/Buenos_Aires}
+
+services:
+  # ----------------------------------------------------------
+  # Base de datos: memoria, cola, idempotencia y RAG (pgvector)
+  # ----------------------------------------------------------
+  postgres:
+    <<: *comun
+    image: pgvector/pgvector:pg16
+    container_name: pia3-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pia3}
+      POSTGRES_USER: ${POSTGRES_USER:-pia3}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pia3}
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+    networks:
+      - interna
+      - debug
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Puerto del host configurable: en Windows algunos rangos dinámicos
+      # (por ejemplo 5349-5448) quedan reservados por Hyper-V/WSL y el bind
+      # a 5432 falla aunque no haya nada escuchando. El sistema siempre usa
+      # `postgres:5432` dentro de la red interna.
+      - "${POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pia3} -d ${POSTGRES_DB:-pia3}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+
+  # ----------------------------------------------------------
+  # Migraciones: aplica el esquema antes de arrancar el sistema
+  # ----------------------------------------------------------
+  migraciones:
+    <<: *comun
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pia3-migraciones
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    environment:
+      <<: *entorno
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pia3}:${POSTGRES_PASSWORD:-pia3}@postgres:5432/${POSTGRES_DB:-pia3}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - interna
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ----------------------------------------------------------
+  # Indexación RAG: vuelca manuales e historial en pgvector
+  # ----------------------------------------------------------
+  # Servicio efímero, detrás del perfil `rag`, para no frenar el arranque
+  # normal. Se corre cuando cambia el corpus de la planta:
+  #
+  #   docker compose --profile rag run --rm rag-indexar
+  #
+  # Es idempotente: una segunda corrida actualiza los mismos documentos y
+  # fragmentos en vez de duplicarlos.
+  rag-indexar:
+    <<: *comun
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pia3-rag-indexar
+    command: ["python", "-m", "rag.cli", "indexar", "--embedder", "fastembed"]
+    profiles: ["rag"]
+    restart: "no"
+    environment:
+      <<: *entorno
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pia3}:${POSTGRES_PASSWORD:-pia3}@postgres:5432/${POSTGRES_DB:-pia3}
+      PLANTA_API_URL: ${PLANTA_API_URL:-http://sim:8100}
+      RAG_EMBEDDER: fastembed
+      RAG_MODELO: ${RAG_MODELO:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      RAG_CACHE_DIR: ${RAG_CACHE_DIR:-/modelos/rag}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+    networks:
+      - planta-lan
+      - interna
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 2G
+
+  # ----------------------------------------------------------
+  # Sistema PIA-3: latido, listener, transcripción y detección
+  # ----------------------------------------------------------
+  sistema:
+    <<: *comun
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pia3-sistema
+    environment:
+      <<: *entorno
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pia3}:${POSTGRES_PASSWORD:-pia3}@postgres:5432/${POSTGRES_DB:-pia3}
+      MQTT_HOST: ${MQTT_HOST:-broker}
+      MQTT_PORT: ${MQTT_PORT:-1883}
+      PLANTA_API_URL: ${PLANTA_API_URL:-http://sim:8100}
+      SISTEMA_ID: ${SISTEMA_ID:-pia3}
+      LATIDO_INTERVALO_S: ${LATIDO_INTERVALO_S:-30}
+      # Estado del radioenlace: la planta lo publica en su puerto de control.
+      ENLACE_CHECK_URL: ${ENLACE_CHECK_URL:-http://enlace:8081/estado}
+      ENLACE_TIMEOUT_S: ${ENLACE_TIMEOUT_S:-3}
+      # Configuración de transcripción local (faster-whisper, CPU, int8).
+      ASR_MOTOR: ${ASR_MOTOR:-faster-whisper}
+      ASR_MODELO: ${ASR_MODELO:-small}
+      ASR_LOCAL_ONLY: ${ASR_LOCAL_ONLY:-true}
+      ASR_DOWNLOAD_ROOT: ${ASR_DOWNLOAD_ROOT:-/modelos}
+      ASR_HILOS_CPU: ${ASR_HILOS_CPU:-2}
+      # Directorio de datos para audios y fotos (volumen Docker).
+      DATOS_DIR: ${DATOS_DIR:-/datos}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+    networks:
+      - planta-lan
+      - interna
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+    volumes:
+      - datos:/datos
+
+  # ----------------------------------------------------------
+  # Servidor MCP: tools de solo lectura sobre la planta
+  # ----------------------------------------------------------
+  # Expone las tools de consultas (equipos, historial, inventario, catálogo
+  # de tareas y búsqueda en los manuales) por MCP streamable-http. No escribe
+  # nada: solo lee la API de la planta y los manuales que ella sirve.
+  mcp:
+    <<: *comun
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pia3-mcp
+    command: ["python", "-m", "mcp_server.server"]
+    environment:
+      <<: *entorno
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pia3}:${POSTGRES_PASSWORD:-pia3}@postgres:5432/${POSTGRES_DB:-pia3}
+      PLANTA_API_URL: ${PLANTA_API_URL:-http://sim:8100}
+      MCP_TRANSPORTE: ${MCP_TRANSPORTE:-streamable-http}
+      MCP_HOST: ${MCP_HOST:-0.0.0.0}
+      MCP_PUERTO: ${MCP_PUERTO:-8000}
+      MCP_NOMBRE: ${MCP_NOMBRE:-pia3}
+      # RAG: consulta el índice pgvector ya cargado; si no está, arma el
+      # índice en memoria y, si tampoco puede, cae a la búsqueda léxica.
+      RAG_MOTOR: ${RAG_MOTOR:-pgvector}
+      RAG_EMBEDDER: ${RAG_EMBEDDER:-fastembed}
+      RAG_MODELO: ${RAG_MODELO:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      RAG_CACHE_DIR: ${RAG_CACHE_DIR:-/modelos/rag}
+      RAG_PESO_LEXICO: ${RAG_PESO_LEXICO:-0.8}
+    networks:
+      - planta-lan
+      # `planta-lan` es una red interna (sin salida al host), así que el puerto
+      # se publica desde la red local del sistema, igual que PostgreSQL.
+      - debug
+    ports:
+      # Puerto del host configurable. Dentro de la red `planta-lan` el
+      # servidor MCP escucha en 8000.
+      - "${MCP_PORT:-58000}:8000"
+    healthcheck:
+      # El endpoint MCP exige una sesión, así que el chequeo es de puerto:
+      # que el proceso esté escuchando en 8000.
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import socket;
+          s=socket.create_connection(('127.0.0.1',8000),3); s.close()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+
+networks:
+  # Red compartida con la planta simulada (API :8100, MQTT :1883)
+  planta-lan:
+    external: true
+    name: planta-lan
+  # Red interna del sistema (base de datos y comunicación con PostgreSQL).
+  # El sistema no tiene salida directa a internet: sale por enlace:3128.
+  interna:
+    driver: bridge
+    internal: true
+  # Red de depuración: PostgreSQL y el servidor MCP, para publicar puertos en
+  # el host. `planta-lan` es interna y no permite publicar puertos.
+  debug:
+    driver: bridge
+
+volumes:
+  pgdata:
+  datos:
