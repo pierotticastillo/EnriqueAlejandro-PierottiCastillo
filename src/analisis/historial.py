@@ -16,7 +16,7 @@ nada solo, que es justo lo contrario de lo que pide el plan.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from analisis.modelos import FallaCatalogo
@@ -63,7 +63,7 @@ def es_reincidencia(
         if estado and estado not in _ORDENES_CERRADAS:
             # Una orden todavía abierta no se puede haber atendido.
             continue
-        fecha = _fecha_de(orden)
+        fecha = _fecha_de(orden, referencia)
         if limite is not None and (fecha is None or fecha < limite):
             # Vieja (o sin fecha): es historial de fondo, no una reincidencia.
             continue
@@ -87,14 +87,24 @@ def _limite(referencia: datetime | None, ventana_dias: int) -> datetime | None:
     return referencia - timedelta(days=ventana_dias)
 
 
-def _fecha_de(orden: dict[str, Any]) -> datetime | None:
-    """La fecha de una orden del historial de la planta."""
+def _fecha_de(orden: dict[str, Any], referencia: datetime | None = None) -> datetime | None:
+    """La fecha de una orden del historial de la planta.
+
+    Las fechas sin zona horaria se toman con la del evento que se está
+    analizando: comparar una fecha naive con la ventana (que es aware)
+    fallaría.
+    """
     for campo in ("fecha_aviso", "fecha", "fecha_inicio"):
         crudo = orden.get(campo)
         if not crudo:
             continue
         try:
-            return datetime.fromisoformat(str(crudo))
+            fecha = datetime.fromisoformat(str(crudo))
         except ValueError:
             logger.debug("Fecha de orden ilegible: %r", crudo)
+            continue
+        if fecha.tzinfo is None:
+            zona = referencia.tzinfo if referencia and referencia.tzinfo else UTC
+            fecha = fecha.replace(tzinfo=zona)
+        return fecha
     return None

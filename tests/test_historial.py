@@ -81,5 +81,11 @@ def test_sin_falla_no_hay_reincidencia(falla) -> None:
     assert not es_reincidencia(None, [_orden()], tarea_codigo="T-B-EMP", referencia=AHORA)
 
 
+def test_una_fecha_sin_zona_no_rompe_la_ventana(falla) -> None:
+    """El historial de la planta puede venir sin zona horaria."""
+    orden = _orden(fecha_aviso="2026-11-01T09:00:00")
+    assert es_reincidencia(falla, [orden], tarea_codigo="T-B-EMP", referencia=AHORA)
+
+
 def test_la_ventana_esta_documentada() -> None:
     assert VENTANA_REINCIDENCIA_DIAS > 0
