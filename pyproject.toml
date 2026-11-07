@@ -61,3 +61,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# El recorte de los manuales es textual: las tablas del manual tienen líneas
+# largas y partirlas rompería el texto que se parsea.
+"tests/manuales.py" = ["E501"]

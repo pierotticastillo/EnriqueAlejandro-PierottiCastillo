@@ -20,10 +20,11 @@ from planta_contrato import (
     TipoEvento,
 )
 
+from analisis.servicio import ServicioAnalisis
 from config import Settings
 from db.repositorio import Repositorio, filas_desde_json
 from deteccion import seguridad
-from deteccion.partes import clasificar_partes, fuentes_tendencia_parte
+from deteccion.partes import clasificar_partes, filas_anomalas, fuentes_tendencia_parte
 from planta.almacenamiento import Almacenamiento
 from planta.cola import encolar_aviso
 from planta.heartbeat import comprobar_enlace
@@ -59,6 +60,7 @@ class ServicioParteVoz:
         resolver: ResolutorNombres | None = None,
         historiador: Historiador | None = None,
         enlace_ok_fn: Callable[[], bool] | None = None,
+        analisis: ServicioAnalisis | None = None,
     ) -> None:
         self._settings = settings
         self._repo = repositorio
@@ -67,6 +69,7 @@ class ServicioParteVoz:
         self._cliente = cliente
         self._planta = planta
         self._historiador = historiador
+        self._analisis = analisis
         self._resolver = resolver or desde_api(planta)
         self._extractor = extractor or ExtractorParte(planta, self._resolver)
         self._enlace_ok = enlace_ok_fn or (lambda: comprobar_enlace(settings))
@@ -173,20 +176,28 @@ class ServicioParteVoz:
         evento_id = self._repo.registrar_alerta_seguridad(
             nota_id, nota.id, tipo, evidencia
         )
+        evento_seguridad = EventoSistema(
+            id=evento_id,
+            ts=nota.ts,
+            tipo=TipoEvento.alerta_seguridad,
+            equipo=equipo,
+            origen="parte",
+            parte_id=None,
+            nota_ids=[nota.id],
+            resumen=(
+                f"Alerta de seguridad {tipo} ({proc.titulo}): "
+                f"{evidencia_texto[:240]}. Procedimiento: {proc.que_hacer}"
+            ),
+        )
         self._cliente.publicar_evento(
-            EventoSistema(
-                id=evento_id,
-                ts=nota.ts,
-                tipo=TipoEvento.alerta_seguridad,
-                equipo=equipo,
-                origen="parte",
-                parte_id=None,
-                nota_ids=[nota.id],
-                resumen=(
-                    f"Alerta de seguridad {tipo} ({proc.titulo}): "
-                    f"{evidencia_texto[:240]}. Procedimiento: {proc.que_hacer}"
-                ),
-            )
+            evento_seguridad
+        )
+        # La alerta de seguridad abre también una orden: no se aprueba sola
+        # (MBP-4 §10.2), la decide una persona.
+        self.generar_orden(
+            evento_seguridad,
+            texto=evidencia_texto,
+            seguridad=True,
         )
 
         # Aviso en la tablet del operador: qué hacer, sin esperar respuesta.
@@ -394,7 +405,59 @@ class ServicioParteVoz:
                 )
             self._repo.registrar_evento(evento, nota_id=nota_id)
             self._cliente.publicar_evento(evento)
+            if evento.tipo is TipoEvento.escalado:
+                # Un escalado abre una orden de trabajo: el análisis del manual
+                # dice qué falla es, qué tarea la resuelve y si la orden se
+                # puede aprobar sola.
+                self.generar_orden(evento, filas=filas)
         return eventos
+
+    def generar_orden(
+        self,
+        evento: EventoSistema,
+        *,
+        filas: list[Hallazgo] | None = None,
+        texto: str | None = None,
+        seguridad: bool = False,
+    ) -> None:
+        """Analiza el escalado y publica la orden que sale de ese análisis.
+
+        El análisis no puede tumbar la planta: si algo sale mal, el evento ya
+        está publicado y queda registrado en la base.
+        """
+        if self._analisis is None:
+            return
+        try:
+            if seguridad:
+                analisis = self._analisis.analizar_alerta_seguridad(
+                    evento, texto=texto or evento.resumen
+                )
+            else:
+                # La evidencia es lo que motivó el escalado: las filas
+                # anómalas del parte de ese equipo.
+                anomalas = filas_anomalas(
+                    filas or [], self._planta, evento.equipo or ""
+                )
+                analisis = self._analisis.analizar_evento(evento, filas=anomalas)
+        except Exception:  # noqa: BLE001 - el análisis no frena la planta
+            logger.exception("Falló el análisis del evento %s", evento.id)
+            return
+        if analisis is None:
+            return
+        orden = self._analisis.orden_sistema(analisis)
+        try:
+            self._repo.guardar_orden(orden, **self._analisis.datos_de_orden(analisis))
+        except Exception:  # noqa: BLE001 - la orden se publica igual
+            logger.exception("No se pudo guardar la orden %s", orden.id)
+        self._cliente.publicar_orden(orden)
+        logger.info(
+            "Orden %s para %s: %s · %s · %s",
+            orden.id,
+            orden.equipo,
+            ", ".join(orden.tareas),
+            orden.estado.value,
+            analisis.falla.codigo if analisis.falla else "sin falla identificada",
+        )
 
     def procesar_respuesta(self, respuesta: RespuestaOperador) -> None:
         conversacion = self._repo.obtener_conversacion(respuesta.mensaje_id)

@@ -1,4 +1,4 @@
-"""Arranque del sistema PIA-3: latido + parte por voz."""
+"""Arranque del sistema PIA-3: latido + parte por voz + análisis y órdenes."""
 
 from __future__ import annotations
 
@@ -6,11 +6,15 @@ import logging
 import signal
 import threading
 import time
+from typing import Any
 
 import httpx
-from planta_contrato import LecturaSensor
+from planta_contrato import LecturaSensor, OrdenSistema, Repuesto
 from sqlalchemy.engine import Engine
 
+from analisis.catalogo import CatalogoManuales
+from analisis.estado import EstadoBombas
+from analisis.servicio import RecuperadorDiferido, ServicioAnalisis
 from config import Settings
 from db.repositorio import Repositorio
 from db.session import crear_engine
@@ -23,6 +27,8 @@ from planta.historial import Historiador
 from planta.mqtt_listener import ClientePlanta
 from planta.servicio import ServicioParteVoz
 from planta.transcriber import crear_transcriptor
+from rag.corpus import CorpusPlanta
+from tools.cliente import ClientePlanta as ClienteApi
 
 logger = logging.getLogger("planta.main")
 
@@ -49,6 +55,97 @@ def cargar_planta(settings: Settings, intentos: int = 20, espera_s: float = 2.0)
     return {}
 
 
+def cargar_catalogo(cliente: ClienteApi, planta: dict[str, Any]) -> CatalogoManuales:
+    """El catálogo de fallas, tareas y repuestos, leído de los manuales.
+
+    Sale del mismo corpus que usa el RAG: por lo tanto cada falla, tarea y
+    repuesto viene con su cita, sin ninguna tabla escrita a mano en el código.
+    """
+    documentos = CorpusPlanta(cliente).cargar(incluir_historial=False)
+    equipos = [
+        str(equipo.get("tag"))
+        for equipo in planta.get("equipos") or []
+        if isinstance(equipo, dict) and equipo.get("tag")
+    ]
+    catalogo = CatalogoManuales.desde_documentos(documentos, equipos=equipos)
+    logger.info(
+        "Catálogo de manuales cargado: %s fallas, %s tareas",
+        len(catalogo.fallas),
+        len(catalogo.tareas),
+    )
+    return catalogo
+
+
+def _cargar_recuperador(
+    recuperador: RecuperadorDiferido,
+    cliente: ClienteApi,
+    settings: Settings,
+    engine: Engine,
+) -> None:
+    """Arma el índice del manual en un hilo aparte.
+
+    El arranque del sistema no espera al índice: si el RAG no se puede
+    preparar, el análisis sigue con el cruce léxico del catálogo.
+    """
+    try:
+        from rag.retriever import crear_recuperador
+
+        recuperador.definir(
+            crear_recuperador(cliente, settings=settings, engine=engine)
+        )
+        logger.info("Recuperador del manual listo")
+    except Exception:  # noqa: BLE001 - el RAG no puede impedir el arranque
+        logger.warning("No se pudo preparar el índice del manual", exc_info=True)
+
+
+def _orden_recuperada(
+    fila: dict[str, Any],
+    catalogo: CatalogoManuales,
+    estado_bombas: dict[str, str],
+) -> OrdenSistema:
+    """La orden pendiente que se vuelve a publicar después de un corte.
+
+    Sale de la base: mismo id, mismo estado, mismas tareas y repuestos. Lo que
+    no se guarda en la base (el ejecutor, si la orden baja la inyección) se
+    vuelve a calcular con el catálogo y con el estado de las bombas.
+    """
+    equipo = str(fila.get("equipo") or "")
+    tareas = [str(tarea) for tarea in (fila.get("tareas") or [])]
+    ejecutor = "propio"
+    for tarea in tareas:
+        catalogo_tarea = catalogo.tarea_por_codigo(tarea, equipo)
+        if catalogo_tarea is not None and (catalogo_tarea.ejecutor or "propio") != "propio":
+            ejecutor = (catalogo_tarea.ejecutor or "propio").strip().lower()
+    detiene = bool(fila.get("detencion"))
+    reduce = False
+    if detiene and estado_bombas.get(equipo) == "marcha":
+        reduce = not any(
+            tag != equipo and estado == "parada"
+            for tag, estado in estado_bombas.items()
+        )
+    return OrdenSistema(
+        id=str(fila.get("id")),
+        ts=fila.get("creada_en") or fila.get("actualizada_en"),
+        estado="PendienteAprobacion",
+        equipo=equipo,
+        evento_ids=[str(fila.get("evento_id"))] if fila.get("evento_id") else [],
+        tareas=tareas,
+        detiene_equipo=detiene,
+        reduce_inyeccion=reduce,
+        ejecutor=ejecutor,
+        repuestos=[
+            Repuesto(
+                codigo=str(repuesto.get("codigo")),
+                cantidad=float(repuesto.get("cantidad") or 0),
+            )
+            for repuesto in fila.get("repuestos") or []
+        ],
+        motivo=fila.get("motivo"),
+        habilita=None,
+        monto_habilita_usd=None,
+    )
+
+
 def main() -> None:
     settings = Settings()
     logging.basicConfig(
@@ -73,6 +170,33 @@ def main() -> None:
         hilos_cpu=settings.asr_hilos_cpu,
     )
 
+    # ------------------------------------------------- análisis y órdenes (Fase 5)
+    cliente_api = ClienteApi(
+        settings.planta_api_url,
+        timeout_s=settings.planta_api_timeout_s,
+    )
+    try:
+        catalogo = cargar_catalogo(cliente_api, planta)
+    except Exception:  # noqa: BLE001 - sin catálogo no hay análisis, pero la planta sigue
+        logger.exception("No se pudo cargar el catálogo de manuales")
+        catalogo = CatalogoManuales.desde_documentos([])
+    estado_bombas = EstadoBombas(settings.planta_api_url)
+    recuperador = RecuperadorDiferido()
+    analisis = ServicioAnalisis(
+        catalogo,
+        estado=estado_bombas,
+        cliente=cliente_api,
+        recuperador=recuperador,
+        planta=planta,
+    )
+    hilo_rag = threading.Thread(
+        target=_cargar_recuperador,
+        args=(recuperador, cliente_api, settings, engine),
+        name="rag",
+        daemon=True,
+    )
+    hilo_rag.start()
+
     referencia: dict[str, ServicioParteVoz] = {}
     cliente_ref: dict[str, ClientePlanta] = {}
     detector_sensores = DetectorSensores(planta)
@@ -96,12 +220,33 @@ def main() -> None:
         if repositorio.registrar_evento_sensor(evento):
             cliente_ref["cliente"].publicar_evento(evento)
             logger.warning("Evento de sensor publicado: %s", evento.id)
+            # Una alarma de sensor también abre una orden: el manual dice qué
+            # hacer con esa desviación.
+            referencia["servicio"].generar_orden(evento)
+
+    def al_conectar() -> None:
+        """Al conectar (o al volver de un corte) se recupera lo pendiente.
+
+        Las órdenes que estaban esperando aprobación se vuelven a publicar con
+        el mismo id y el mismo estado: la planta no las pierde y no se abre
+        una orden nueva.
+        """
+        try:
+            pendientes = repositorio.ordenes_pendientes()
+        except Exception:  # noqa: BLE001 - recuperar no puede tumbar el sistema
+            logger.exception("No se pudieron leer las órdenes pendientes")
+            return
+        for fila in pendientes:
+            orden = _orden_recuperada(fila, catalogo, estado_bombas.de_bombas())
+            cliente_ref["cliente"].publicar_orden(orden)
+            logger.info("Orden pendiente recuperada: %s", orden.id)
 
     cliente = ClientePlanta(
         settings,
         al_nota=al_nota,
         al_respuesta=al_respuesta,
         al_sensor=al_sensor,
+        al_conectar=al_conectar,
     )
     cliente_ref["cliente"] = cliente
     servicio = ServicioParteVoz(
@@ -112,6 +257,7 @@ def main() -> None:
         cliente,
         planta,
         historiador=historiador,
+        analisis=analisis,
     )
     referencia["servicio"] = servicio
 
@@ -149,6 +295,8 @@ def main() -> None:
     servicio.detener()
     cliente.detener()
     historiador.cerrar()
+    estado_bombas.cerrar()
+    cliente_api.cerrar()
     hilo_latido.join(timeout=10)
     engine.dispose()
 

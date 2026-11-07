@@ -1,4 +1,4 @@
-"""Persistencia de notas, partes, fotos y conversaciones de tablet."""
+"""Persistencia de notas, partes, fotos, conversaciones y órdenes."""
 
 from __future__ import annotations
 
@@ -8,11 +8,23 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from planta_contrato import EventoSistema, MensajeTablet, NotaRecorrida
+from planta_contrato import EventoSistema, MensajeTablet, NotaRecorrida, OrdenSistema
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from planta.parte_extractor import Hallazgo, Pregunta
+
+# El enum de la base y el del contrato no se escriben igual.
+_ESTADO_ORDEN_DB = {
+    "Borrador": "Borrador",
+    "PendienteAprobacion": "Pendiente de aprobacion",
+    "Aprobada": "Aprobada",
+    "Rechazada": "Rechazada",
+    "Ejecutada": "Ejecutada",
+    "Observada": "Observada",
+    "Cerrada": "Cerrada",
+    "Certificada": "Certificada",
+}
 
 
 class Repositorio:
@@ -449,6 +461,203 @@ class Repositorio:
                 ),
                 {"respuesta": respuesta, "mensaje_id": mensaje_id},
             )
+
+    # ------------------------------------------------------------------ órdenes
+
+    def guardar_orden(
+        self,
+        orden: OrdenSistema,
+        *,
+        reglas: dict[str, Any] | None = None,
+        descripcion: str | None = None,
+        costo_usd: float | None = None,
+        repuestos: list[dict[str, Any]] | None = None,
+    ) -> bool:
+        """Persiste la orden y su evaluación de reglas, de forma idempotente.
+
+        El id de la orden es determinista (equipo + falla): si el mismo equipo
+        vuelve a fallar, la orden se actualiza en vez de abrir una segunda.
+        """
+        estado_db = _ESTADO_ORDEN_DB.get(orden.estado.value)
+        if estado_db is None:
+            raise ValueError(f"Estado de orden desconocido: {orden.estado.value}")
+        evento_id = orden.evento_ids[0] if orden.evento_ids else None
+        if evento_id is None:
+            raise ValueError("La orden tiene que referenciar el evento que la originó")
+        reglas_json = json.dumps(reglas or {}, ensure_ascii=False)
+        detalles = {
+            str(detalle.get("codigo")): detalle for detalle in (repuestos or [])
+        }
+        with self._engine.begin() as conexion:
+            conexion.execute(
+                text(
+                    """
+                    INSERT INTO orden (
+                        id, evento_id, equipo, estado, motivo, detencion,
+                        costo_estimado, creada_en, actualizada_en
+                    )
+                    VALUES (
+                        :id, :evento_id, :equipo, CAST(:estado AS estado_orden), :motivo,
+                        :detencion, :costo, now(), now()
+                    )
+                    ON CONFLICT (id) DO UPDATE SET
+                        estado = EXCLUDED.estado,
+                        motivo = EXCLUDED.motivo,
+                        detencion = EXCLUDED.detencion,
+                        costo_estimado = EXCLUDED.costo_estimado,
+                        actualizada_en = now()
+                    """
+                ),
+                {
+                    "id": orden.id,
+                    "evento_id": evento_id,
+                    "equipo": orden.equipo,
+                    "estado": estado_db,
+                    "motivo": orden.motivo,
+                    "detencion": orden.detiene_equipo,
+                    "costo": costo_usd,
+                },
+            )
+            conexion.execute(
+                text("DELETE FROM orden_tarea WHERE orden_id = :id"),
+                {"id": orden.id},
+            )
+            conexion.execute(
+                text("DELETE FROM orden_repuesto WHERE orden_id = :id"),
+                {"id": orden.id},
+            )
+            for tarea in orden.tareas:
+                conexion.execute(
+                    text(
+                        """
+                        INSERT INTO orden_tarea (orden_id, tarea_id, descripcion, origen)
+                        VALUES (:orden, :tarea, :descripcion, 'catalogo')
+                        """
+                    ),
+                    {
+                        "orden": orden.id,
+                        "tarea": tarea,
+                        "descripcion": descripcion if tarea == "NO-ESTANDAR" else None,
+                    },
+                )
+            for repuesto in orden.repuestos:
+                detalle = detalles.get(repuesto.codigo, {})
+                conexion.execute(
+                    text(
+                        """
+                        INSERT INTO orden_repuesto (
+                            orden_id, repuesto_id, cantidad, costo_unitario, disponible
+                        )
+                        VALUES (
+                            :orden, :repuesto, :cantidad, :costo, :disponible
+                        )
+                        """
+                    ),
+                    {
+                        "orden": orden.id,
+                        "repuesto": repuesto.codigo,
+                        "cantidad": repuesto.cantidad,
+                        "costo": float(detalle.get("costo_unitario") or 0.0),
+                        "disponible": bool(detalle.get("disponible", False)),
+                    },
+                )
+            conexion.execute(
+                text(
+                    """
+                    INSERT INTO aprobacion (orden_id, decision, motivo, reglas_evaluadas)
+                    SELECT :orden, :decision, :motivo, CAST(:reglas AS jsonb)
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM aprobacion
+                        WHERE orden_id = :orden AND decision = :decision
+                          AND COALESCE(motivo, '') = COALESCE(:motivo, '')
+                    )
+                    """
+                ),
+                {
+                    "orden": orden.id,
+                    "decision": orden.estado.value,
+                    "motivo": orden.motivo,
+                    "reglas": reglas_json,
+                },
+            )
+        return True
+
+    def obtener_orden(self, orden_id: str) -> dict[str, Any] | None:
+        with self._engine.connect() as conexion:
+            fila = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT id, evento_id, equipo, estado, motivo, detencion,
+                               costo_estimado, creada_en, actualizada_en
+                        FROM orden WHERE id = :id
+                        """
+                    ),
+                    {"id": orden_id},
+                )
+                .mappings()
+                .first()
+            )
+        return dict(fila) if fila else None
+
+    def ordenes_por_equipo(self, equipo: str) -> list[dict[str, Any]]:
+        """Las órdenes del equipo, con su estado actual."""
+        with self._engine.connect() as conexion:
+            filas = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT id, equipo, estado, motivo, costo_estimado, actualizada_en
+                        FROM orden WHERE equipo = :equipo ORDER BY actualizada_en DESC
+                        """
+                    ),
+                    {"equipo": equipo},
+                )
+                .mappings()
+                .all()
+            )
+        return [dict(fila) for fila in filas]
+
+    def ordenes_pendientes(self) -> list[dict[str, Any]]:
+        """Las órdenes que esperan aprobación, con lo que hay que republicar.
+
+        Cuando se corta la luz, la PC de planta se apaga de golpe. Al volver,
+        el sistema recupera de la base las órdenes que quedaron pendientes y
+        las vuelve a publicar **con el mismo id y el mismo estado**: la planta
+        no las pierde y no se abre una orden nueva.
+        """
+        with self._engine.connect() as conexion:
+            filas = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT o.id, o.evento_id, o.equipo, o.estado, o.motivo,
+                               o.detencion, o.creada_en, o.actualizada_en,
+                               COALESCE(
+                                   (SELECT json_agg(
+                                       json_build_object(
+                                           'codigo', r.repuesto_id,
+                                           'cantidad', r.cantidad
+                                       ) ORDER BY r.repuesto_id
+                                   )
+                                    FROM orden_repuesto r WHERE r.orden_id = o.id),
+                                   '[]'::json
+                               ) AS repuestos,
+                               COALESCE(
+                                   (SELECT json_agg(t.tarea_id ORDER BY t.tarea_id)
+                                    FROM orden_tarea t WHERE t.orden_id = o.id),
+                                   '[]'::json
+                               ) AS tareas
+                        FROM orden o
+                        WHERE o.estado = 'Pendiente de aprobacion'
+                        ORDER BY o.creada_en
+                        """
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [dict(fila) for fila in filas]
 
     # ------------------------------------------------------------------ cola
 

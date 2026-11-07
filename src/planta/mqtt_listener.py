@@ -12,6 +12,7 @@ from planta_contrato import (
     LecturaSensor,
     MensajeTablet,
     NotaRecorrida,
+    OrdenSistema,
     RespuestaOperador,
     Topicos,
 )
@@ -32,12 +33,16 @@ class ClientePlanta:
         al_nota: Callable[[NotaRecorrida], None],
         al_respuesta: Callable[[RespuestaOperador], None],
         al_sensor: Callable[[LecturaSensor], None],
+        al_conectar: Callable[[], None] | None = None,
         cliente: mqtt.Client | None = None,
     ) -> None:
         self._settings = settings
         self._al_nota = al_nota
         self._al_respuesta = al_respuesta
         self._al_sensor = al_sensor
+        # El callback del usuario no lleva argumentos; el de paho sí. Se
+        # guardan con nombres distintos para que uno no tape al otro.
+        self._callback_conectar = al_conectar
         self._cliente = cliente or self._crear_cliente()
         self._detenido = threading.Event()
 
@@ -79,6 +84,14 @@ class ClientePlanta:
     def publicar_evento(self, evento: EventoSistema) -> None:
         self.publicar(Topicos.EVENTOS, evento.model_dump_json())
 
+    def publicar_orden(self, orden: OrdenSistema) -> None:
+        """Publica la orden de trabajo en ``sistema/ordenes``.
+
+        Cada publicación es el estado actual de la orden: el id es el mismo
+        para toda la vida de la orden, así que la planta la reconoce.
+        """
+        self.publicar(Topicos.ORDENES, orden.model_dump_json())
+
     def _al_conectar(
         self,
         _cliente: mqtt.Client,
@@ -98,6 +111,13 @@ class ClientePlanta:
             ]
         )
         logger.info("MQTT conectado; suscripciones de recorridas, respuestas y sensores activas")
+        if self._callback_conectar is not None:
+            # Al conectar (o al reconectar) se recupera lo que quedó en la base:
+            # las órdenes pendientes se vuelven a publicar con el mismo id.
+            try:
+                self._callback_conectar()
+            except Exception:  # noqa: BLE001 - recuperar no puede tumbar el listener
+                logger.exception("Falló la recuperación al conectar")
 
     def _al_mensaje(
         self,

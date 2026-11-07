@@ -121,6 +121,20 @@ def clasificar_partes(
     return eventos
 
 
+def filas_anomalas(
+    filas: list[Hallazgo],
+    planta: dict[str, Any],
+    tag: str,
+) -> list[Hallazgo]:
+    """Las filas del parte que son una anomalía para ese equipo.
+
+    El análisis de la falla se hace con lo que motivó el escalado: una
+    lectura normal que el operador anotó en el mismo parte no es evidencia de
+    una falla y puede confundir el cruce con el manual.
+    """
+    return [fila for fila in filas if fila.tag == tag and _fila_anomala(fila, planta)]
+
+
 def fuentes_tendencia_parte(
     filas: list[Hallazgo],
     planta: dict[str, Any],

@@ -13,13 +13,16 @@ from tools.modelos import ConsultaCatalogoTareas, RepuestoTarea, TareaCatalogo
 
 
 def catalogo_tareas(
-    cliente: ClientePlanta,
+    cliente: ClientePlanta | None,
     consulta: ConsultaCatalogoTareas,
     *,
     corpus: CorpusManuales | None = None,
 ) -> list[TareaCatalogo]:
     """Tool ``catalogo_tareas``: tareas estándar y no estándar del manual."""
-    corpus = corpus or CorpusManuales(cliente)
+    if corpus is None:
+        if cliente is None:
+            raise ValueError("Se necesita un cliente de la planta o un corpus")
+        corpus = CorpusManuales(cliente)
     procedimientos = _procedimientos(corpus)
     salida: list[TareaCatalogo] = []
 

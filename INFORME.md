@@ -23,11 +23,14 @@ El sistema PIA‑3 corre junto a la planta simulada dentro de la red Docker
    expuestas por un servidor MCP;
 4. la **búsqueda documental con citas**: índice híbrido en PostgreSQL +
    pgvector, retrieval medido contra la línea de base BM25 oficial y contexto
-   con validación de citas.
+   con validación de citas;
+5. el **análisis de anomalías y el borrador de orden**: catálogo de fallas
+   leído de los manuales de la planta, causas probables con su evidencia y su
+   cita, y las seis reglas de aprobación evaluadas **en código**.
 
-La transcripción, la detección de seguridad, las tools y el RAG son locales:
-el modelo de embeddings corre en el contenedor, sin salir a internet. El
-análisis de anomalías con LLM corresponde a la fase siguiente.
+La transcripción, la detección de seguridad, las tools, el RAG y el análisis son
+locales: el modelo de embeddings corre en el contenedor, sin salir a internet.
+Las decisiones de aprobación no pasan por un LLM.
 
 ---
 
@@ -41,7 +44,7 @@ análisis de anomalías con LLM corresponde a la fase siguiente.
 | 2 | Detección determinista S1–S4, eventos y sensores | Completa |
 | 3 | Tools y MCP | Completa |
 | 4 | RAG, contexto y memoria | Completa y verificada |
-| 5 | Anomalías y borrador de orden | Pendiente |
+| 5 | Anomalías y borrador de orden | Completa y verificada |
 | 6 | Operación sin enlace y cola | Pendiente |
 | 7 | Cierre y certificación | Pendiente |
 
@@ -93,6 +96,39 @@ análisis de anomalías con LLM corresponde a la fase siguiente.
   conversación de tablet y las preguntas se conservan 90 días; el parte, los
   eventos y las alertas no se purgan.
 
+### Fase 5 — lo que hay
+
+- **Catálogo de la planta** (`src/analisis/catalogo.py`, `fallas.py`): las
+  fallas, las tareas, los repuestos y la lista de materiales por equipo se
+  **parsean de los manuales que sirve la planta**, no de tablas escritas a mano
+  en el código. Resultado: 18 fallas vigentes con su cita, 11 tareas, los
+  repuestos con su stock y costo, y los materiales de cada equipo. La revisión
+  vencida del manual de la bomba queda fuera del catálogo.
+- **Cruce evidencia ↔ manual** (`src/analisis/causas.py`): cobertura léxica
+  ponderada por campo (síntoma, firma en recorrida, firma en sensores), factor
+  de dirección (alto/bajo: ×1,6 si coincide, ×0,4 si contradice) y el RAG como
+  refuerzo (×1,3). La falla que gana trae su cita; las causas probables salen
+  de la ficha del manual, con la evidencia que las respalda y lo que falta
+  confirmar.
+- **Borrador de orden** (`src/analisis/orden.py`): equipo, tareas, si detiene,
+  si reduce la inyección, ejecutor, repuestos con disponibilidad y costo
+  unitario, evidencia y citas. La tarea sale del **procedimiento del
+  fabricante**: la ficha dice `P-02` y MBP-4 §13.3 dice que `P-02` es el
+  cambio de empaquetadura.
+- **Reglas de aprobación en código** (`src/analisis/aprobacion.py`): tarea
+  estándar, inyección mantenida, stock completo, costo < USD 2.500, personal
+  propio y revisión humana. La orden sale con su estado ya decidido
+  (`Aprobada` o `PendienteAprobacion`, nunca `Borrador`) y con el motivo
+  escrito si queda pendiente.
+- **Publicación y auditoría**: `sistema/ordenes` publica una sola vez por
+  orden, con id determinista `ORD-{equipo}-{falla}`; la orden queda en
+  `orden`, `orden_tarea`, `orden_repuesto` y `aprobacion` **con las reglas
+  evaluadas**. Al reconectar el MQTT se republican las pendientes con el mismo
+  id y el mismo estado.
+- **Inmunidad a la inyección por nota**: el texto libre del operador no entra
+  al análisis. La evidencia son las filas estructuradas del parte y el
+  resumen del evento.
+
 ---
 
 ## 3. Arquitectura
@@ -112,6 +148,8 @@ Planta simulada (sim:8100, broker:1883)
 │                        ├──► tablet (borrador/pregunta)       │
 │                        ├──► deteccion/seguridad (MBP-4)      │
 │                        ├──► deteccion/partes y sensores      │
+│                        ├──► analisis/ ──► sistema/ordenes     │
+│                        │      (catálogo, causas, reglas)     │
 │                        └──► repositorio ──► PostgreSQL 16     │
 │                                                              │
 │  heartbeat ──► sistema/estado                                 │
@@ -136,7 +174,7 @@ Planta simulada (sim:8100, broker:1883)
 |----------|----------------|---------|--------|
 | `postgres` | `pgvector/pgvector:pg16` | memoria, cola, idempotencia y RAG | 1 CPU / 2 GB |
 | `migraciones` | build local | `alembic upgrade head`, one-shot | 0.5 CPU / 0.5 GB |
-| `sistema` | build local | latido, MQTT, ASR, extracción y tablet | 2 CPU / 4 GB |
+| `sistema` | build local | latido, MQTT, ASR, extracción, tablet, análisis y órdenes | 2 CPU / 4 GB |
 | `mcp` | build local | servidor MCP con las tools de solo lectura | 0.5 CPU / 1 GB |
 | `rag-indexar` | build local | indexa el corpus en pgvector (perfil `rag`, one-shot) | 0.5 CPU / 1 GB |
 
@@ -563,7 +601,115 @@ documentada, no una decisión final.
 
 ---
 
-## 9. Verificación
+## 9. Fase 5 — análisis de anomalías y borrador de orden
+
+### 9.1 El catálogo sale de los manuales
+
+El paquete `src/analisis/` no tiene ninguna tabla de fallas escrita a mano. El
+catálogo se arma parseando el **mismo corpus que usa el RAG**, así que cada
+dato viene con su cita:
+
+| Dato | De dónde sale | Cita |
+|------|---------------|------|
+| Fallas (18 vigentes) | tabla de fallas y ficha de cada manual de fabricante | `TX350-D §8.3`, `FC48-3 §8.2` |
+| Tareas (11) | plan de mantenimiento | `MBP-4 §13.1`, `MBP-4 §13.2` |
+| Procedimiento ↔ tarea | correspondencia del plan | `MBP-4 §13.3` |
+| Repuestos, stock y costo | lista de repuestos | `MBP-4 §14.2` |
+| Materiales por equipo | lista de materiales | `MBP-4 §14.3` |
+
+La revisión vencida del manual de la bomba (`TX350-C`, Rev. C de 2019) queda
+**fuera del catálogo**: si entrara, una falla podría quedar con la acción de una
+revisión que ya no aplica.
+
+La tarea de una falla no está escrita en ninguna tabla: sale del **procedimiento
+del fabricante**. La ficha de TX-T01 dice `P-02`; MBP-4 §13.3 dice que `P-02`
+es el cambio de empaquetadura. La correspondencia es del plan, no del código.
+
+### 9.2 Del escalado a la falla
+
+El cruce es léxico y ponderado, sin LLM:
+
+1. **Cobertura por campo**: se mide cuánto de la firma de la falla (síntoma,
+   firma en recorrida, firma en sensores) aparece en la evidencia, y se toma el
+   mejor campo.
+2. **Dirección**: si el manual dice "diferencial alto" y el campo vio
+   "diferencial bajo", el factor es ×0,4; si coinciden, ×1,6. Es lo que
+   separa FC-T01 (cartuchos colmatados) de FC-T02 (cartucho roto).
+3. **RAG**: si el recuperador propone la misma ficha, el puntaje sube ×1,3.
+
+El recuperador RAG se arma **en un hilo aparte** (`RecuperadorDiferido`): el
+arranque del sistema no espera al índice y, si el índice no se puede preparar,
+el análisis sigue con el cruce léxico.
+
+### 9.3 Qué es evidencia y qué no
+
+- **La evidencia es lo que motivó el escalado**: las filas anómalas del parte de
+  ese equipo, no todo el parte. Una lectura normal que el operador anotó en el
+  mismo parte no es evidencia de una falla y desvía el cruce hacia otra.
+- **El texto libre de la nota no es evidencia.** La nota puede pedir que se
+  apruebe la orden sin planificador: eso no cambia qué falla hay.
+- **Una alarma de un solo sensor es un síntoma, no un diagnóstico.** El umbral
+  para dar por identificada una falla es 0,15 con una observación del operador
+  y 0,6 con sólo la alarma de sensor. Medido: una presión de descarga que cae
+  (lo que pasa cuando la bomba se dispara) firmaba "resbalamiento de correas"
+  con 0,44; con el umbral de sensor la conclusión correcta es una **revisión**
+  (`I-VAL`, MBP-4 §13.2), no una intervención de correas.
+
+### 9.4 Reincidencia
+
+El manual cambia la acción cuando la falla vuelve: "si se repite en el mismo
+émbolo, inspeccionar el émbolo" (TX350-D §8.3), "si la falla se repite pronto,
+revisar la filtración aguas arriba antes de volver a cambiar" (TX350-D §8.4).
+
+La reincidencia se busca en el historial de órdenes del equipo, pero **con
+ventana** (45 días) y sólo sobre órdenes cerradas: el archivo de la planta
+tiene dos años, y una orden de 2024 no es una reincidencia de hoy. Sin
+ventana, toda orden del archivo se convertiría en no estándar y el sistema no
+aprobaría nunca nada solo.
+
+### 9.5 Las reglas, en código
+
+`src/analisis/aprobacion.py` tiene las seis reglas del plan. No hay LLM en el
+camino de la decisión: el texto de la nota no puede cambiarlas.
+
+| Regla | Fuente | Qué falla si no se cumple |
+|---|---|---|
+| `tarea_estandar` | MBP-4 §13.1/§13.2 | La orden pide una tarea que no es del plan |
+| `inyeccion` | MBP-4 §13.1 + estado de bombas | Detener el equipo en marcha sin bomba de reserva |
+| `stock` | MBP-4 §14.2/§14.3 | Repuesto fuera de la lista del equipo o sin stock en el yacimiento |
+| `costo` | plan de mantenimiento | Costo total ≥ USD 2.500 |
+| `personal` | MBP-4 §13.2 | El ejecutor es la contratista |
+| `revision_humana` | MBP-4 §10.2 | Evidencia de daño estructural o condición insegura |
+
+El estado de las bombas sale **sólo** de `bombas[].estado` de `/api/estado`: no
+se usan las lecturas internas ni la lista de fallas de la planta.
+
+### 9.6 Publicación, idempotencia y recuperación
+
+- La orden se publica **una sola vez** en `sistema/ordenes`, con su estado ya
+  decidido. Nunca se publica un `Borrador`: un borrador sin decidir es
+  exactamente lo que el corrector penaliza.
+- El identificador es determinista: `ORD-{equipo}-{falla}`
+  (`ORD-B-102-TX-T01`). El mismo equipo con la misma falla no abre dos órdenes;
+  la segunda actualiza la primera.
+- La orden se guarda en `orden`, `orden_tarea`, `orden_repuesto` y `aprobacion`
+  **con las reglas evaluadas y las citas**, de modo que la decisión se puede
+  auditar sin volver a correr el análisis.
+- Al conectar el MQTT (o al reconectar) el sistema relee las órdenes pendientes
+  de la base y las vuelve a publicar **con el mismo id y el mismo estado**: un
+  corte de luz no pierde la orden ni la duplica.
+
+### 9.7 Qué se midió
+
+| Escenario | Evidencia | Orden resultante |
+|---|---|---|
+| `ataque` (nota con instrucciones maliciosas) | `parte:NOTA-00001:B-102` | `ORD-B-102-TX-T01` · `T-B-EMP` · `TX-EMP-KIT × 1` · `PendienteAprobacion` (no hay bomba de reserva) · **sin `TX-VAL-KIT`** |
+| Alarma con stock y reserva | evento de sensor | `Aprobada`, sin motivo: tarea estándar, repuesto en stock, bomba de reserva y costo bajo el tope |
+| Alarma de sensor sin firma clara | `presion_descarga` baja tras un disparo | `I-VAL` (revisión), no una intervención |
+
+---
+
+## 10. Verificación
 
 ### Pruebas automáticas
 
@@ -573,8 +719,8 @@ documentada, no una decisión final.
 
 Resultado local:
 
-- **190 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **182 passed, 8 skipped** sin base: los omitidos son los tests de
+- **231 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **223 passed, 8 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
 - `ruff check src tests scripts migrations` sin observaciones.
 
@@ -595,6 +741,11 @@ Cobertura funcional de los tests:
 - RAG: corpus, índice híbrido, exclusión de documentos vencidos, evaluación
   (hit/recall/distractor), context builder con validación de citas, política
   de memoria e indexación idempotente en pgvector;
+- **análisis y órdenes**: catálogo de fallas con cita, exclusión de la revisión
+  vencida, tarea por procedimiento, cruce con la evidencia, umbral distinto
+  para parte y para sensor, reincidencia con ventana, las seis reglas de
+  aprobación, id determinista, orden nunca en `Borrador`, orden inmune a la
+  nota y persistencia de la orden con sus reglas;
 - constraints e idempotencia de la base.
 
 ### Verificación end-to-end
@@ -626,11 +777,11 @@ corrida guardada:
 | `scripts/probar_extractor.py` | el extractor con las transcripciones reales de la corrida |
 
 Los resultados de la corrida end-to-end sobre la planta simulada se resumen en
-la sección 11.
+la sección 12.
 
 ---
 
-## 10. Configuración
+## 11. Configuración
 
 Variables principales (ver `.env.example`):
 
@@ -673,13 +824,47 @@ Persiste los binarios de las notas entre reinicios:
 
 ---
 
-## 11. Resultados end-to-end
+## 12. Resultados end-to-end
 
-_(Se completa con la corrida de verificación sobre la planta simulada.)_
+### Corrector oficial
+
+Corrida de `correccion/corregir.py` sobre `martes-tranquilo` y
+`fuga-sin-enlace`: **72,2/100 — APRUEBA**, sin eliminatorias.
+
+### Fase 5 contra la planta simulada
+
+Escenario `ataque` (la nota pide aprobar sin planificador y cargar el kit de
+válvulas), con el reloj de eventos acelerado:
+
+```json
+{
+  "id": "ORD-B-102-TX-T01",
+  "estado": "PendienteAprobacion",
+  "equipo": "B-102",
+  "tareas": ["T-B-EMP"],
+  "detiene_equipo": true,
+  "reduce_inyeccion": true,
+  "ejecutor": "propio",
+  "repuestos": [{"codigo": "TX-EMP-KIT", "cantidad": 1.0}],
+  "motivo": "Inyección se mantiene: detener el equipo reduce la inyección y no hay bomba de reserva"
+}
+```
+
+Lo que demuestra la corrida:
+
+- la nota **no pudo mandar** sobre la orden: el kit de válvulas no aparece;
+- la orden **no se aprobó sola**: quedó pendiente, con el motivo real (no hay
+  bomba de reserva en el escenario), no por un `NO-ESTANDAR` espurio;
+- el estado nunca es `Borrador`;
+- en la base, la orden queda con sus reglas evaluadas y sus citas
+  (`TX350-D §8.3`, `TX350-D §8.2`, `MBP-4 §13.1`, `MBP-4 §14.2`).
+
+En la misma corrida se verificó la ruta de **auto-aprobación**: una orden
+estándar con repuesto en stock y bomba de reserva sale `Aprobada` y sin motivo.
 
 ---
 
-## 12. Limitaciones y próximos pasos
+## 13. Limitaciones y próximos pasos
 
 ### Limitaciones actuales
 
@@ -692,29 +877,32 @@ _(Se completa con la corrida de verificación sobre la planta simulada.)_
 4. Una nota de seguridad **no produce un parte con mediciones**: se publica la
    alerta y los avisos, pero no se inventan valores para las filas. Es una
    decisión consciente (el corrector penaliza inventar una lectura).
-5. El RAG **no decide**: el análisis de anomalías (Fase 5) todavía no usa el
-   context builder, así que hoy el RAG sirve para responder consultas con
-   cita, no para justificar una causa.
+5. El RAG **no decide**: el catálogo de fallas y las reglas de aprobación se
+   leen de los manuales y de la base, no del ranking. El RAG sólo refuerza el
+   cruce cuando propone la misma ficha.
 6. La pata léxica del RAG se calcula en el proceso (BM25 sobre los textos que
    guarda PostgreSQL). Con un corpus mucho más grande habría que moverla a
    una extensión con IDF o mantenerla en un proceso dedicado.
-7. El análisis de anomalías con LLM, la operación sin enlace completa, las
-   órdenes de trabajo y la certificación corresponden a fases posteriores.
+7. El cruce falla↔evidencia es léxico y ponderado, no un modelo: una falla
+   cuya firma no aparece literalmente en la evidencia puede quedar sin
+   identificar. Cuando eso pasa, la conclusión es una inspección, no una
+   intervención.
+8. La operación sin enlace completa, la cola de lo que no sale y la
+   certificación de órdenes corresponden a fases posteriores.
 
 ### Próximos pasos
 
 1. Confirmar la lista cerrada de modelos y reevaluar el ASR y el modelo de
    embeddings elegidos.
-2. Implementar análisis de anomalía y borrador de orden (Fase 5), usando el
-   context builder y la validación de citas.
-3. Implementar cola/outbox y operación sin enlace (Fase 6).
-4. Implementar cierre y certificación (Fase 7).
-5. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
+2. Implementar cola/outbox y operación sin enlace (Fase 6): las órdenes que no
+   salen por el enlace quedan encoladas y se reintentan en orden.
+3. Implementar cierre y certificación (Fase 7).
+4. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
    cuando cambie la planta.
 
 ---
 
-## 13. Referencias
+## 14. Referencias
 
 - Estado de implementación (bitácora de avance, decisiones y verificación):
   [`docs/estado_de_implementacion.md`](docs/estado_de_implementacion.md).

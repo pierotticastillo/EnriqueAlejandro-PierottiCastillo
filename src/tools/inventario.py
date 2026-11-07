@@ -17,13 +17,16 @@ from tools.modelos import (
 
 
 def inventario(
-    cliente: ClientePlanta,
+    cliente: ClientePlanta | None,
     consulta: ConsultaInventario,
     *,
     corpus: CorpusManuales | None = None,
 ) -> list[RepuestoStock]:
     """Tool ``inventario``: repuestos con su stock por almacén."""
-    corpus = corpus or CorpusManuales(cliente)
+    if corpus is None:
+        if cliente is None:
+            raise ValueError("Se necesita un cliente de la planta o un corpus")
+        corpus = CorpusManuales(cliente)
     seccion = corpus.seccion(DOCUMENTO_BUENAS_PRACTICAS, "14.2")
     if seccion is None:
         return []
@@ -61,13 +64,16 @@ def inventario(
 
 
 def lista_materiales(
-    cliente: ClientePlanta,
+    cliente: ClientePlanta | None,
     consulta: ConsultaListaMateriales,
     *,
     corpus: CorpusManuales | None = None,
 ) -> list[MaterialEquipo]:
     """Tool ``lista_materiales``: repuestos que le corresponden a un equipo."""
-    corpus = corpus or CorpusManuales(cliente)
+    if corpus is None:
+        if cliente is None:
+            raise ValueError("Se necesita un cliente de la planta o un corpus")
+        corpus = CorpusManuales(cliente)
     materiales_por_equipo = _materiales_por_equipo(corpus)
     codigos = materiales_por_equipo.get(consulta.equipo, [])
     if not codigos:
