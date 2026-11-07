@@ -1,6 +1,6 @@
 # Estado de implementación
 
-**Actualizado:** 2026-11-06  
+**Actualizado:** 2026-11-07  
 **Plan de referencia:** documento interno del curso (no se publica en este
 repositorio). El detalle de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
 
@@ -12,7 +12,13 @@ El proyecto tiene las **Fases 0, 0.5, 1, 2, 3, 4 y 5 implementadas y verificadas
 
 La Fase 5 (análisis y borrador de orden) quedó cerrada con la prueba end-to-end contra la planta simulada: el catálogo de fallas sale de los manuales de la planta, las reglas de aprobación se evalúan en código y la orden se publica **una sola vez** con el estado ya decidido (`Aprobada` o `PendienteAprobacion`, nunca `Borrador`).
 
-El punto de partida de la Fase 6 es: el sistema ya publica `sistema/ordenes` con su evaluación de reglas auditada en la base (`orden`, `orden_tarea`, `orden_repuesto`, `aprobacion`), y las órdenes pendientes se recuperan al reconectar el MQTT.
+La **restricción 04 (lista cerrada de modelos)** quedó atendida: el ASR pasó a `faster-whisper-base`, el embedder sigue siendo `paraphrase-multilingual-MiniLM-L12-v2` (384 dims), el LLM local `Qwen2.5-3B-Instruct` (Q4_K_M) entra como auxiliar de redacción acotado, y la lista quedó como fuente única de verdad con un verificador que corre al arrancar. El modelo de nube con visión sigue **deshabilitado** porque la lista publicada no dice cuál es: hay que pedirlo al curso.
+
+La **conversación de tablet** quedó cerrada: la corrección del operador se aplica a la lectura que está corrigiendo (no a la última del equipo), al mover una lectura a otro equipo el valor se convierte, la negación saca una sola lectura y la conversación tiene tope (`PARTE_MAX_CORRECCIONES=5`): si no converge, la nota queda para revisión humana en vez de dar vueltas.
+
+El **corrector oficial** da **91,5/100 — APRUEBA** (antes 72,2/100), con `faster-whisper-base` y el LLM local activo, sobre `martes-tranquilo` y `fuga-sin-enlace`.
+
+El punto de partida de la Fase 6 es: el sistema ya publica `sistema/ordenes` con su evaluación de reglas auditada en la base (`orden`, `orden_tarea`, `orden_repuesto`, `aprobacion`), lo que no sale por el enlace queda encolado y visible en el latido, y las órdenes pendientes se recuperan al reconectar el MQTT.
 
 ## Avance por fase
 
@@ -20,12 +26,12 @@ El punto de partida de la Fase 6 es: el sistema ya publica `sistema/ordenes` con
 |---|---|---|
 | 0 — Preparación del entorno | Completa | Compose (`postgres`, `migraciones`, `sistema`, `mcp`), red externa `planta-lan`, labels `academia.planta: pc`, proxy `enlace:3128` con `NO_PROXY`, presupuesto agregado 4 CPU / 8 GB y latido `sistema/estado`. |
 | 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido) e idempotencia por `evento_sistema.id`. Seis pruebas de idempotencia y constraints requieren base y se omiten sin `TEST_DATABASE_URL` (son 8 omitidas en total, contando las dos del índice RAG). |
-| 1 — Parte por voz | Completa y verificada | Listener MQTT, descarga de medios a disco, ASR local (`faster-whisper`), extracción determinista, resolución de nombres y unidades, preguntas de ambigüedad y conversación con tablet. |
+| 1 — Parte por voz | Completa y verificada | Listener MQTT, descarga de medios a disco, ASR local (`faster-whisper`), extracción determinista, resolución de nombres y unidades, preguntas de ambigüedad y conversación con tablet. La corrección del operador se aplica **a la lectura que está corrigiendo** y la conversación tiene tope: si no converge, la nota queda para revisión humana. |
 | 2 — Detección sin LLM | Completa y verificada | S1–S4 con los procedimientos del MBP-4, aviso en tablet y por radio al supervisor (canal 1), **un evento por equipo** (`parte:<nota>:<tag>`), contexto y tendencia en los escalados, sensores MQTT con límites de `/api/planta`. |
 | 3 — Tools y MCP | Completa y verificada | Siete tools de solo lectura con `extra="forbid"`, cliente HTTP con timeout/reintentos/errores tipados, búsqueda léxica de manuales y servidor MCP (streamable-http y stdio) probado en vivo. |
 | 4 — RAG, contexto y memoria | **Completa y verificada** | Índice híbrido (BM25 + embeddings) en PostgreSQL + pgvector con metadatos (`equipo`, `fabricante`, `documento`, `seccion`, `cita`, `vigente`), evaluación contra el baseline oficial, citas obligatorias en el context builder, política de memoria escrita y tool `busqueda_rag` expuesta por MCP. |
 | 5 — Análisis y borrador de orden | **Completa y verificada** | Catálogo de fallas parseado de los manuales de la planta (18 fallas vigentes, con cita), cruce con la evidencia del parte, causas probables ordenadas con lo que falta confirmar, borrador de orden con tareas/repuestos/costo y **las seis reglas de aprobación evaluadas en código**, publicación en `sistema/ordenes` y persistencia auditada. |
-| 6 — Operación sin enlace | Pendiente | Outbox, reintentos ordenados e idempotencia al recuperar enlace. |
+| 6 — Operación sin enlace | Parcial | Outbox en la base, cola de lo que no sale (avisos por radio), latido que muestra **de inmediato** la cantidad de pendientes y republicación de las órdenes al reconectar: verificado por el corrector (E1, E2 y E3 al 100 %). Falta el reintento ordenado de todo lo que no sale. |
 | 7 — Cierre y certificación | Pendiente | Cierre por voz, revisión de diferencias, certificación y habilitación. |
 
 ## Decisiones que conviene no perder de vista
@@ -42,6 +48,112 @@ El punto de partida de la Fase 6 es: el sistema ya publica `sistema/ordenes` con
 10. **La pata léxica del ranking es BM25, no el FTS de PostgreSQL.** `ts_rank_cd` no pondera por IDF, así que una pregunta con términos comunes la domina: medido `hit@5 0,61` contra `0,85` del BM25 de referencia. pgvector aporta los candidatos densos; el BM25 se calcula en el proceso con el mismo código que la evaluación.
 11. **Embeddings locales y agnósticos al proveedor.** `Embedder` es un protocolo: `fastembed` con `paraphrase-multilingual-MiniLM-L12-v2` (384 dims) en Docker, `hashing` determinista en tests y como respaldo si el modelo no está.
 12. **El historial se indexa una sola vez.** La planta lo sirve dos veces (como documento y como órdenes); se indexa desde `/api/historial-ordenes`, que además trae las órdenes del escenario, y se descartan los `id` repetidos.
+13. **La lista cerrada es la fuente de verdad de los modelos** (`src/modelos_lista.py`). El `.env` declara, no elige: el verificador compara la configuración y el runtime contra la lista, y lo mismo corre al arrancar. Un modelo fuera de la lista se reporta como error en el log, pero **no tumba la planta**.
+14. **El LLM redacta; el código decide.** `Qwen2.5-3B-Instruct` escribe la justificación técnica de la orden en un hilo aparte, después de que la orden ya se publicó con su estado decidido. Las seis reglas siguen en `analisis/aprobacion.py`, el prompt no lleva el texto libre del operador y la salida se valida contra un esquema y contra las citas conocidas.
+15. **El modelo local no abre una salida nueva.** En la simulación el contenedor de la planta está en redes `internal: true` y no tiene ruta al host: la llamada al Ollama del host sale por el proxy del enlace (`OLLAMA_PROXY`), que ya es la única salida sancionada.
+16. **La tablet no depende del LLM.** La conversación con el operador es determinista y está en código: qué fila está corrigiendo se decide por la variable, la unidad y el valor que dijo, nunca por texto libre reinterpretado por un modelo. El LLM redacta la justificación de una orden; no toca la parte.
+17. **La corrección del operador se aplica a su lectura, no a la última del equipo.** Un equipo puede tener la presión de descarga y la temperatura del rodamiento: corregir una no es corregir la otra. Y al mover una lectura a otro equipo, el valor se convierte a la unidad con la que se guarda en ese equipo.
+18. **La conversación con el operador tiene tope.** `PARTE_MAX_CORRECCIONES=5`: al tope, la nota queda en `revision_humana` con el último borrador a la vista y no se manda otro. Un bucle de borradores consume tiempo de planta sin chances de cerrar.
+19. **El latido publica lo que cambia, no sólo cada 30 s.** Si el enlace se cae o si aparece (o desaparece) un mensaje pendiente, el latido sale en el momento: lo que está pendiente no puede quedar invisible hasta el próximo latido.
+
+## Lista cerrada de modelos — qué quedó hecho
+
+La lista publicada (`Lista_de_Modelos_Locales.md` del material del curso) tiene
+tres modelos locales y un modelo de nube con visión. Quedó implementada así:
+
+| Clave | Modelo | Qué se hizo |
+|---|---|---|
+| `asr` | `faster-whisper-base` | El ASR pasó de `small` (placeholder) a `base`, que es el de la lista. La imagen descarga el modelo en la build (`ARG ASR_MODELO=base`) y el runtime no baja nada. |
+| `embeddings` | `paraphrase-multilingual-MiniLM-L12-v2` (384 dims) | Sin cambios: ya era el de la lista, y las 384 dimensiones son las del índice pgvector. |
+| `llm` | `Qwen2.5-3B-Instruct` Q4_K_M | Nuevo: cliente de Ollama detrás de `AnalysisModel.invoke(prompt, images) -> StructuredOutput`, redaction acotada con fallback determinista y hilo propio. |
+| `vision` | NVIDIA (nube, con visión) | **Deshabilitado y fail-safe**: no se llama a la nube, no hay credenciales en el repo y una foto con posible daño estructural va a revisión humana. |
+
+### El verificador
+
+`scripts/verificar_modelos.py` imprime la lista y comprueba el entorno;
+`src/verificacion_modelos.py` hace la comprobación y también corre **al
+arrancar** del sistema:
+
+```bash
+docker compose exec sistema python scripts/verificar_modelos.py
+```
+
+Comprobado en vivo dentro del contenedor: ASR `base` descargado en
+`/modelos/models--Systran--faster-whisper-base`, embedder en
+`/modelos/rag/models--Qdrant--paraphrase-multilingual-MiniLM-L12-v2-onnx-Q` y
+Ollama respondiendo `qwen2.5:3b-instruct · Q4_K_M · 3.1B`.
+
+### El LLM local, en la planta
+
+- **Dónde corre**: Ollama en el host de planta; el contenedor lo alcanza por el
+  proxy del enlace (en la simulación no hay ruta directa al host).
+- **Configuración**: la de la lista, con `num_ctx=2048`, `num_thread=2`,
+  `temperature=0`, semilla fija y `keep_alive=0` (el modelo se descarga de
+  memoria al terminar: la planta tiene 8 GB).
+- **Qué hace**: la justificación técnica de la orden, en `aprobacion.reglas_evaluadas.redaccion`.
+- **Qué no hace**: aprobar, rechazar, elegir tareas o repuestos, escribir el motivo o cambiar el estado.
+- **Medición**: ~40 s por vuelta a través del proxy (el modelo se carga en cada llamada, ~9 s, y genera a ~8 tok/s); ~13 s cuando se lo llama directamente. Por eso el timeout quedó en 90 s y la redacción va en un hilo aparte, que no frena la cola de notas.
+- **Presupuesto**: los topes del compose bajaron (`postgres` 1,5 GB, `sistema` 3 GB, `mcp` 0,5 GB) para que el pico del modelo (~2,1 GB) entre en los 8 GB.
+
+### Lo que falta
+
+El **identificador exacto del modelo de NVIDIA con visión** no está en la
+lista publicada. Es el único punto abierto de la restricción 04: hay que
+pedirlo al curso. Mientras tanto la falla es segura (revisión humana).
+
+## Fase 1 — la tablet: que el operador y el sistema se entiendan
+
+Con `faster-whisper-base` el ASR de campo no entrega notas limpias: el texto
+cambia entre corridas y hay notas en las que el sistema entendió otra cosa. El
+operador contesta «no, la uno estaba en ciento doce kilos» y el sistema tiene que
+**corregir el borrador en el lugar**.
+
+La primera versión de esa corrección aplicaba el cambio a la fila equivocada y
+la nota entraba en un **bucle**: el operador veía que el sistema no había
+corregido lo que dijo, volvía a corregir, y el borrador se repetía para siempre
+(una nota llegó al borrador b352). Las tres causas, todas en
+`src/planta/tablet.py`:
+
+| Qué pasaba | Por qué | Cómo quedó |
+|---|---|---|
+| Corregir la presión pisaba la temperatura del rodamiento | la búsqueda tomaba la última fila del equipo, sin mirar la variable | `_buscar_para_correccion` busca por variable, después por familia de unidad y sólo al final por equipo |
+| «Eso de mil seiscientos era de la uno» dejaba `1600 kg/cm2` | al cambiar de equipo se cambiaba la unidad sin convertir el valor | `_aplicar_equipo` convierte el valor, ajusta la variable por tipo de equipo y recalcula la unidad canónica |
+| «Lo de la uno no lo dije» borraba las dos lecturas del equipo | la negación se tomaba como «todo el equipo» | `_aplicar_sobra` saca **una** lectura: la que el operador no afirmó en la conversación |
+
+- `Correccion` lleva ahora la **variable** que el operador está corrigiendo,
+  deducida de la unidad que dijo y del tipo de equipo (un diferencial no es una
+  descarga).
+- El servicio guarda las lecturas **afirmadas** en la conversación, para saber
+  a qué lectura se refiere una negación.
+- **El bucle se corta**: `PARTE_MAX_CORRECCIONES=5`; al tope la conversación
+  queda en `revision_humana`, con el último borrador a la vista, y no se manda
+  otro. La planta no puede quedar esperando a un operador que no va a entender
+  el siguiente borrador.
+- Todo esto es **determinista y está en código**: el LLM no participa de la
+  conversación de tablet.
+
+Artefactos del ASR que aparecieron en la corrida y quedaron cubiertos:
+`preses`/`pres` → `psi`; la mención genérica **sin artículo** («también bomba
+está en 1600 psi») es ambigua y dispara la pregunta; un diferencial no se le
+cuelga a una bomba ambigua; el decimal con guion (`1-3` por «uno coma tres») se
+lee como 1,3 (un rango, `1600-1620`, no).
+
+**Medición.** Banco offline que reproduce la lógica del operador virtual
+(`dialogo.responder`) sobre las transcripciones reales: **8 de 9 notas confirman
+en el primer borrador** y la nota más difícil converge en **3 borradores**
+(antes no convergía nunca). En el corrector oficial con `faster-whisper-base`:
+**93,2/100** sobre `martes-tranquilo` (antes 72,2/100 con los dos escenarios y
+`small`).
+
+### Una nota que el simulador no deja confirmar
+
+`NOTA-00008` («La bomba está parada, en reserva») tiene una sola lectura y es
+de observación: su valor es `null`. El operador virtual **descarta toda fila sin
+valor** y sólo marca `confirmo` cuando puede comparar fila por fila, así que
+contesta «¿Confirmar qué?». Es una limitación de cómo está modelado el
+operador de la planta: no hay borrador, por más bien armado que esté, que ese
+operador virtual pueda confirmar. Lo que sí importa es que el sistema **no da
+vueltas**: corta el bucle y deja la nota para revisión humana.
 
 ## Fase 4 — qué quedó hecho
 
@@ -166,17 +278,31 @@ volvían a procesar; con la base limpia el ciclo completo (audio → ASR →
 extracción → tablet → confirmación → parte → orden) se verifica de punta a
 punta.
 
+Otra causa del mismo síntoma: **cada servicio que construye tenía su propia
+imagen** (`pia3-migraciones`, `pia3-sistema`, `pia3-mcp`), así que
+`docker compose build sistema` no actualizaba la imagen del servicio de
+migraciones y este corría con el código de otro build. Se unificó con
+`image: pia3-sistema:latest` en los cuatro servicios: ahora hay una sola
+imagen para el esquema, el código y los modelos.
+
 Un detalle de la simulación que conviene conocer: el operador virtual compara
 las filas del borrador que **tienen valor** con la verdad de campo. Si la
 nota no tiene mediciones numéricas (por ejemplo, "pierde bastante por la
 empaquetadura"), no hay con qué comparar y responde "¿Confirmar qué?".
 No es un defecto del sistema: es cómo está modelado el operador de la planta.
 
+Y otro detalle de la red: `planta-lan` e `interna` son redes `internal: true`,
+así que **el contenedor de la planta no tiene ruta directa al host** y
+`host.docker.internal` no resuelve. Por eso la llamada al Ollama del host sale
+por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
+única salida sancionada del sistema.
+
 ## Última verificación
 
-- `python -m pytest`: **232 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **224 pasaron, 8 omitidas**.
+- `python -m pytest`: **286 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **273 pasaron, 13 omitidas**.
 - `ruff check src tests scripts migrations`: **sin errores**.
-- Corrector oficial (`martes-tranquilo` + `fuga-sin-enlace`): **72,2/100 — APRUEBA**, sin eliminatorias.
+- Corrector oficial (`martes-tranquilo` + `fuga-sin-enlace`, `faster-whisper-base`, LLM local activo): **91,5/100 — APRUEBA**, sin eliminatorias. Por criterio: A1 100 %, A2 58 %, A3 69 %, A4a 100 %, A4b 100 %, B1 100 %, B2 100 %, D1 100 %, E1 100 %, **E2 100 %**, E3 100 %, F1 100 %, F2 100 %.
+  - Lo que queda debajo del 100 %: de las 13 notas, **tres no tienen mediciones numéricas** (dos «la bomba está parada, en reserva» y la alerta de seguridad) y el operador virtual de la planta **sólo puede confirmar las filas que tienen valor**; las otras dos necesitaron un segundo borrador porque el ASR oyó «ciento dos» por «ciento doce» — el operador corrigió y el sistema convergió.
 - Servidor MCP probado en vivo contra la planta: **8 tools**, todas con `additionalProperties: false` y `structuredContent` válido (`scripts/probar_mcp.py`).
 - Extr extractor contrastado contra la verdad de campo con las transcripciones reales del ASR (`scripts/analizar_notas.py`): todas las lecturas coinciden y las 22 decisiones de B1 dan el tipo que espera el corrector.
 - Índice RAG cargado contra la planta simulada y retrieval medido sobre la tabla `rag_chunk` real (704 fragmentos, 71 preguntas).
@@ -193,16 +319,42 @@ No es un defecto del sistema: es cómo está modelado el operador de la planta.
 | `scripts/analizar_corrida.py` | verdad de campo vs. eventos publicados, nota por nota |
 | `scripts/analizar_borradores.py` | qué corrigió el operador en cada borrador y por qué |
 | `scripts/analizar_notas.py` | extractor vs. verdad de campo, con el tipo de evento esperado |
+| `scripts/verificar_modelos.py` | lista cerrada de modelos: tabla, configuración y runtime |
 
 ## Próximos pasos
 
 1. **Fase 6:** outbox en Postgres y reintento ordenado al volver el enlace; las órdenes que no salen por el enlace quedan encoladas.
 2. **Fase 7:** cierre por voz, control contra la orden, certificación y habilitación.
 3. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar` cuando cambie la planta.
-4. Confirmar la lista cerrada de modelos del curso (hoy `faster-whisper small` y `paraphrase-multilingual-MiniLM-L12-v2` son elecciones documentadas, no decisiones finales).
+4. **Pedir al curso el identificador y la versión exacta del modelo de NVIDIA con visión**, y sumarlo a `src/modelos_lista.py` para habilitarlo.
 
 ## Historial
 
+- **2026-11-07 (noche):** se cerró la **conversación de tablet** y se corrió la
+  corrida final. El bucle de borradores (una nota llegó al borrador b352: el
+  operador corregía, el sistema corregía la fila equivocada y volvía a
+  mostrar lo mismo) tenía tres causas, todas en `src/planta/tablet.py`: la
+  corrección de valor se aplicaba a la última fila del equipo en vez de a su
+  variable; al mover una lectura a otro equipo se cambiaba la unidad sin
+  convertir el valor ("1600 psi" quedaba "1600 kg/cm2"); y la negación
+  ("lo de la uno no lo dije") borraba **todas** las lecturas del equipo. Ahora
+  la corrección va a la lectura que el operador está corrigiendo, el valor se
+  convierte al cambiar de equipo y la negación saca una sola lectura. Además,
+  `PARTE_MAX_CORRECCIONES=5`: al tope la conversación queda en
+  `revision_humana` y no se manda otro borrador (la planta no puede quedar
+  esperando a un operador que no va a entender el siguiente). Se cubren
+  también artefactos del ASR: "preses" → psi, la mención genérica sin
+  artículo ("también bomba está en 1600") es ambigua, un diferencial no se
+  cuelga a una bomba ambigua y el decimal con guion ("1-3") se lee 1,3. En
+  paralelo, el **latido** pasó a publicar de inmediato cuando cambia lo que
+  reporta (el enlace o la cantidad de pendientes): con el enlace caído y un
+  aviso por radio encolado, el pendiente ya se veía (E2 pasó de 50 % a 100 %).
+  La corrida final (`martes-tranquilo` + `fuga-sin-enlace`, `faster-whisper-base`,
+  LLM local activo) dio **91,5/100 — APRUEBA**. La suite quedó en 286 pruebas
+  aprobadas (273 aprobadas y 13 omitidas sin base).
+
+- **2026-11-07 (tarde):** se corrigió la **causa de la caída de nota con `faster-whisper-base`**. La transcripción tardaba 35-46 s dentro del corrector (1,4 s aislada) y el motivo no era el modelo: el **indexado del RAG en memoria** (704 fragmentos por el embedder ONNX) abría un hilo por núcleo del host y le robaba la CPU al ASR sobre la cuota de 2 CPU del contenedor. Con el reloj por eventos del corrector (la planta baja a 5× mientras el sistema reacciona), cada segundo de latencia es un minuto de planta perdido: las notas se contestaban con 7 h de retraso simulado. Correcciones: el embedder limita sus hilos (`RAG_HILOS=1`), el hilo del RAG arranca con la prioridad de CPU bajada (`nice 10`) y la **transcripción va en su propio hilo** (cola FIFO), de modo que la planta sigue atendiendo las respuestas del operador y las órdenes de los eventos del sensor mientras decodifica. La orden de un evento de sensor tampoco se arma más en el callback de MQTT (el loop de MQTT es un solo hilo para todos los mensajes). Verificado dentro del contenedor, con el RAG indexando en paralelo: la transcripción pasó de 35-46 s a 1,35 s. La suite quedó en 268 pruebas aprobadas.
+- **2026-11-07:** se atendió la **restricción 04 (lista cerrada de modelos)**. La lista pasó a ser la fuente única de verdad (`src/modelos_lista.py`) y el verificador (`scripts/verificar_modelos.py` + chequeo al arranque) demuestra que el sistema usa `faster-whisper-base` (el ASR dejó de ser `small`), `paraphrase-multilingual-MiniLM-L12-v2` de 384 dims y `Qwen2.5-3B-Instruct` Q4_K_M. El LLM local entra como **auxiliar de redacción** detrás de `AnalysisModel.invoke(prompt, images) -> StructuredOutput`, en un hilo aparte, con salida validada por esquema y por citas, fallback determinista y sin acceso al texto libre del operador: las seis reglas de aprobación siguen en código. El modelo de NVIDIA con visión queda deshabilitado y fail-safe hasta que el curso dé su identificador. Los topes de memoria del compose bajaron (`postgres` 1,5 GB, `sistema` 3 GB, `mcp` 0,5 GB) para que entre el pico del LLM (~2,1 GB) en los 8 GB de la planta. La suite quedó en 261 pruebas aprobadas (252 aprobadas y 9 omitidas sin base).
 - **2026-11-06 (tarde):** se cerró la Fase 5. El catálogo de fallas sale de los manuales de la planta (18 fallas vigentes, con cita), el cruce con la evidencia identifica la falla y sus causas probables, el borrador de orden lleva tareas/repuestos/costo y las seis reglas de aprobación se evalúan en código. La orden se publica una sola vez en `sistema/ordenes` con su estado ya decidido (`Aprobada` o `PendienteAprobacion`) y queda auditada en la base con las reglas evaluadas. Corrida end-to-end contra la planta simulada (escenario `ataque`, base limpia): la nota maliciosa no obedecida —la orden sale con `T-B-EMP` y `TX-EMP-KIT`, sin el kit de válvulas y sin aprobar sola— y la ruta de auto-aprobación verificada con stock y reserva. La suite quedó en 232 pruebas aprobadas (224 aprobadas y 8 omitidas sin base).
 - **2026-11-06:** se cerró la Fase 4. Corpus indexado en PostgreSQL + pgvector (7 documentos, 704 fragmentos) con metadatos y citas; retrieval híbrido medido sobre las 71 preguntas de la planta (producción: hit@5 0,873, recall@5 0,711, distractor@5 0,000 contra 0,845 / 0,664 / 0,099 del BM25 oficial) y la Rev. C vencida nunca aparece antes que la vigente. Se agregaron la tool `busqueda_rag`, el context builder con validación de citas, la política de memoria con purga por antigüedad, la migración `0004` y el servicio `rag-indexar` del compose. La suite quedó en 190 pruebas aprobadas (182 aprobadas y 8 omitidas sin base).
 - **2026-11-05:** se cerraron las Fases 2 y 3. La detección S1–S4 usa los procedimientos del MBP-4 con aviso en tablet y por radio; el parte publica un evento por equipo; los eventos de escalado llevan contexto y tendencia. Se agregaron las siete tools de solo lectura y el servidor MCP, con la corrección de la salida estructurada (objeto, no arreglo). La corrida oficial dio 72,2/100 sin eliminatorias; la suite quedó en 152 pruebas aprobadas y 6 omitidas.

@@ -94,11 +94,20 @@ class EmbedderFastEmbed:
         modelo: str = MODELO_POR_DEFECTO,
         *,
         cache_dir: str | None = None,
+        hilos: int | None = 1,
     ) -> None:
         from fastembed import TextEmbedding
 
         self.modelo = modelo
-        self._modelo = TextEmbedding(model_name=modelo, cache_dir=cache_dir)
+        # `threads` limita los hilos del runtime de ONNX. Sin ese límite el
+        # runtime abre un hilo por núcleo del host: sobre la cuota de 2 CPU de
+        # la planta el indexado del manual le roba la CPU al ASR y cada
+        # transcripción se multiplica por veinte.
+        self._modelo = TextEmbedding(
+            model_name=modelo,
+            cache_dir=cache_dir,
+            threads=hilos,
+        )
         self._lock = threading.Lock()
         self.dimension = len(self._embed_bruto(["dimensión"])[0])
 
@@ -139,6 +148,7 @@ def crear_embedder(
     dimension: int = DIMENSION_POR_DEFECTO,
     cache_dir: str | None = None,
     estricto: bool = False,
+    hilos: int | None = 1,
 ) -> Embedder:
     """Crea el embedder pedido.
 
@@ -146,13 +156,19 @@ def crear_embedder(
     instalado se usa el embedding determinista y se deja un aviso. El indexador
     usa ``estricto=True``: no tiene sentido indexar con una dimensión distinta a
     la que después se consulta.
+
+    ``hilos`` limita los hilos del runtime de ONNX (ver ``EmbedderFastEmbed``).
     """
     elegido = (tipo or "hashing").strip().lower()
     if elegido in {"hashing", "local", "determinista"}:
         return EmbedderHashing(dimension)
     if elegido in {"fastembed", "auto"}:
         try:
-            return EmbedderFastEmbed(modelo or MODELO_POR_DEFECTO, cache_dir=cache_dir)
+            return EmbedderFastEmbed(
+                modelo or MODELO_POR_DEFECTO,
+                cache_dir=cache_dir,
+                hilos=hilos,
+            )
         except Exception as exc:  # noqa: BLE001 - el modelo es opcional en tests
             if estricto:
                 raise

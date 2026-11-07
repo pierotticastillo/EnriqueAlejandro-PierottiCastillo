@@ -20,7 +20,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Descargar el modelo ASR local en la build (CPU, int8) y dejarlo en el mismo
 # directorio que usa el contenedor (ASR_DOWNLOAD_ROOT=/modelos). Así el runtime
 # puede trabajar con local_files_only=True, sin salir a internet.
-ARG ASR_MODELO=small
+#
+# El modelo es `base`: es el de la lista cerrada de modelos del curso
+# (`Plan_de_implementación/Lista_de_Modelos_Locales.md`) y el que fija la
+# restricción 04. `scripts/verificar_modelos.py` lo comprueba.
+ARG ASR_MODELO=base
 ENV ASR_MODELO=${ASR_MODELO} \
     ASR_DOWNLOAD_ROOT=/modelos
 RUN python -c "from faster_whisper.utils import download_model; download_model('${ASR_MODELO}', cache_dir='/modelos'); print('Modelo ASR listo')"
@@ -35,6 +39,7 @@ ENV RAG_MODELO=${RAG_MODELO} \
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='${RAG_MODELO}', cache_dir='/modelos/rag'); print('Modelo RAG listo')"
 
 COPY src ./src
+COPY scripts ./scripts
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install .[asr,rag]

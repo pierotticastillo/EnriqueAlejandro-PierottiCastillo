@@ -38,3 +38,19 @@ def test_parsear_numero(texto: str, valor: float, decimal: bool) -> None:
 
 def test_sin_numero() -> None:
     assert parsear_numero("está parada, en reserva") is None
+
+
+def test_decimal_con_guion() -> None:
+    """El ASR escribe "uno coma tres" como "1-3"."""
+    numero = parsear_numero("el filtro A medio 1-3 de diferencial")
+    assert numero is not None
+    assert numero.valor == pytest.approx(1.3)
+    assert numero.decimal is True
+
+
+def test_un_guion_entre_digitos_no_es_un_rango() -> None:
+    """Un rango ("1600-1620") no es un decimal."""
+    numero = parsear_numero("estaba entre 1600-1620 psi")
+    assert numero is not None
+    assert numero.valor == pytest.approx(1600)
+    assert numero.decimal is False

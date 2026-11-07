@@ -3,9 +3,9 @@
 **Trabajo práctico:** Academia Novit 2026 — planta de inyección de agua PIA‑3
 **Repositorio de la solución:** `EnriqueAlejandro-PierottiCastillo`
 **Planta simulada:** [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
-**Fecha del informe:** 2026-11-06
-**Estado:** Fases 0, 0.5, 1, 2, 3 y 4 implementadas; Fases 2, 3 y 4 verificadas
-con pruebas automáticas y contra la planta simulada.
+**Fecha del informe:** 2026-11-07
+**Estado:** Fases 0, 0.5, 1, 2, 3, 4 y 5 implementadas y verificadas; Fase 6
+(operación sin enlace) parcial. Corrector oficial: **91,5/100 — APRUEBA**.
 
 ---
 
@@ -26,7 +26,10 @@ El sistema PIA‑3 corre junto a la planta simulada dentro de la red Docker
    con validación de citas;
 5. el **análisis de anomalías y el borrador de orden**: catálogo de fallas
    leído de los manuales de la planta, causas probables con su evidencia y su
-   cita, y las seis reglas de aprobación evaluadas **en código**.
+   cita, y las seis reglas de aprobación evaluadas **en código**;
+6. la **operación sin enlace**: lo que no sale queda encolado, el latido
+   muestra de inmediato cuánto hay pendiente, y las órdenes se republican al
+   reconectar con el mismo id y el mismo estado.
 
 La transcripción, la detección de seguridad, las tools, el RAG y el análisis son
 locales: el modelo de embeddings corre en el contenedor, sin salir a internet.
@@ -45,7 +48,7 @@ Las decisiones de aprobación no pasan por un LLM.
 | 3 | Tools y MCP | Completa |
 | 4 | RAG, contexto y memoria | Completa y verificada |
 | 5 | Anomalías y borrador de orden | Completa y verificada |
-| 6 | Operación sin enlace y cola | Pendiente |
+| 6 | Operación sin enlace y cola | Parcial: cola, pendientes visibles y republicación |
 | 7 | Cierre y certificación | Pendiente |
 
 ### Fase 2 — lo que hay
@@ -191,6 +194,22 @@ apagando la operación normal si hace falta). Todos los servicios llevan
   dinámicos que incluyen 5432).
 - La salida a internet, cuando corresponde, usa `http://enlace:3128`.
   `NO_PROXY=broker,sim,localhost,127.0.0.1,postgres`.
+
+### El latido: lo que cambia, se ve
+
+El latido (`sistema/estado`, QoS 1, retenido) es el estado del sistema: si el
+radioenlace está o no, y cuántos mensajes quedaron en la cola para salir
+después. Sale cada `LATIDO_INTERVALO_S` (30 s) y además **de inmediato** cuando
+cambia lo que reporta:
+
+- **el estado del enlace**, porque el operador tiene que saber que se cortó el
+  radioenlace sin esperar al próximo latido;
+- **la cantidad de mensajes pendientes**, porque si con el enlace caído se
+  encoló algo (por ejemplo, el aviso por radio al supervisor) ese pendiente
+  tiene que verse, y también cuando la cola se vacía.
+
+Así, durante un corte se ve la cola creciendo y después vaciándose: lo que está
+pendiente no queda invisible hasta el siguiente latido.
 
 ---
 
@@ -720,9 +739,194 @@ seis reglas quedan auditadas en la base:
 | `personal` | sí | el ejecutor es propio |
 | `revision_humana` | sí | no hay daño estructural en la evidencia |
 
----
+### 9.8 La lista cerrada de modelos (restricción 04)
 
-## 10. Verificación
+> «Modelos. Solo los de la lista cerrada que publicamos. Incluye modelos de
+> transcripción y de lenguaje que entran en la PC de planta, y modelos en la
+> nube de NVIDIA con visión. Los modelos locales corren con la versión y la
+> configuración que fijamos.»
+
+La lista publicada (`Lista_de_Modelos_Locales.md` del material del curso) tiene
+tres modelos locales. El sistema los usa **exactos**, con la configuración
+fijada, y eso es comprobable:
+
+| Clave | Modelo | Motor | Dónde | Configuración fijada |
+|---|---|---|---|---|
+| `asr` | `faster-whisper-base` | faster-whisper (CTranslate2) | planta | CPU `int8`, 2 hilos, sólo local |
+| `embeddings` | `paraphrase-multilingual-MiniLM-L12-v2` | fastembed (ONNX) | planta | 384 dims, índice pgvector |
+| `llm` | `Qwen2.5-3B-Instruct` | Ollama (llama.cpp) | planta | Q4_K_M, ctx 2048, 2 hilos, `temperature=0`, `keep_alive=0`, timeout 90 s |
+| `vision` | NVIDIA (modelo de nube con visión) | API de NVIDIA | nube | **deshabilitado**: falta el identificador exacto |
+
+`src/modelos_lista.py` es la **única fuente de verdad**: el `.env` no elige
+modelos, los declara. `src/verificacion_modelos.py` compara la configuración y
+el runtime contra esa lista, y `scripts/verificar_modelos.py` lo expone como
+comando:
+
+```bash
+docker compose exec sistema python scripts/verificar_modelos.py
+```
+
+El mismo chequeo corre al arrancar del sistema. No puede tumbar la planta: un
+modelo que no esté se informa y el sistema sigue.
+
+**Cambio que impone la restricción:** el ASR pasó de `small` (placeholder) a
+`base`, que es el de la lista. `base` es más liviano (141 MB contra ~484 MB) y
+más rápido en CPU; el costo es de finura en la transcripción, y por eso la
+nota se **volvió a medir** con el corrector oficial (§10).
+
+#### El modelo de lenguaje: redacta, no decide
+
+`Qwen2.5-3B-Instruct` entra al sistema por la interfaz que pedía el plan
+(`AnalysisModel.invoke(prompt, images) -> StructuredOutput`, `src/analisis/llm.py`)
+y con **un solo papel**: escribir la justificación técnica de la orden, en un
+hilo aparte, después de que la orden ya se publicó con su estado decidido.
+
+| Garantía | Cómo se consigue |
+|---|---|
+| No decide | Las seis reglas están en `aprobacion.py`; la redacción se guarda en `aprobacion.reglas_evaluadas.redaccion` y no toca `estado` ni `motivo` |
+| No obedece la nota | El prompt se arma con la ficha del catálogo, las mediciones estructuradas, las tareas, los repuestos y las reglas: **el texto libre del operador no entra** |
+| No inventa | La salida se valida contra `SalidaEstructurada` (`extra="forbid"`) y las citas se comprueban contra las citas conocidas: una cita desconocida descarta la respuesta entera |
+| No es un punto único de falla | Si Ollama no responde, no valida o se agota el timeout, se sigue con el texto determinista; `LLM_ACTIVO=false` lo desactiva |
+| No rompe la planta | Corre en su propia cola e hilo; la cola de notas no espera al modelo |
+
+En la planta (4 núcleos, 8 GB, sin GPU) el modelo corre **a demanda**:
+`keep_alive=0` lo descarga de memoria al terminar. Medido en la PC de
+desarrollo: 2,1 GB con `num_ctx=2048`, 44 tok/s con 2 hilos, 12,7 s la primera
+llamada (incluye la carga del modelo). Por eso los topes del compose bajaron
+(`postgres` 1,5 GB, `sistema` 3 GB, `mcp` 0,5 GB): el pico del LLM tiene que
+entrar en los 8 GB junto con el resto.
+
+**Cómo llega el modelo a la planta.** En la simulación, el contenedor de la
+planta está en redes `internal: true` (`planta-lan` e `interna`): no tiene ruta
+directa al host, y `host.docker.internal` no resuelve. La llamada al Ollama del
+host sale entonces por el **proxy del enlace** (`enlace:3128`), que es la única
+salida sancionada del sistema — el modelo local no abre un camino nuevo de
+salida. Por el proxy la vuelta se mide en ~40 s (el modelo se carga en cada
+llamada, ~9 s, y genera a ~8 tok/s), contra ~13 s cuando se lo llama
+directamente: por eso el timeout quedó en 90 s y la redacción va en un hilo
+aparte. En la PC de planta real, el Ollama corre en `localhost` y la llamada es
+directa (`OLLAMA_PROXY` vacío).
+
+#### El modelo de nube con visión
+
+La lista publicada **no identifica** el modelo de visión de NVIDIA. Mientras
+tanto queda deshabilitado y con salida *fail-safe*: no se llama a la nube, no
+hay credenciales en el repositorio y una foto que pueda mostrar daño
+estructural va a revisión humana (regla `revision_humana`), nunca a "no hay
+daño" inventado. Es el único punto de la restricción 04 que queda pendiente, y
+depende de un dato que sólo tiene el curso.
+
+#### 9.9 La latencia del ASR y el indexado del RAG
+
+El corrector oficial no corre la planta a velocidad constante: usa un **reloj
+por eventos**. Entre eventos va a `rapida` (1800×: 1 s real = 30 min de
+planta) y, cuando el sistema tiene que reaccionar a algo, baja a `lenta` (5×:
+1 s real = 1 min de planta) hasta que el sistema está 5 s en silencio y no
+deja preguntas esperando al operador (o hasta `maximo_s`, 120 s).
+
+Eso convierte la latencia del sistema en **tiempo de planta**: cada segundo
+real que el sistema tarda en responder es un minuto de planta que se pierde.
+Con el ASR lento, las notas se contestaban con 7 h de retraso simulado y la
+nota se caía a la mitad.
+
+La causa no era el modelo. El `faster-whisper-base` decodifica un audio de
+10 s en **1,4 s** aislado. En la corrida tardaba **35-46 s**. El registro de
+la corrida lo muestra sin ambigüedad:
+
+```text
+15:12:25  PIA-3 en marcha              ← arranca el índice del RAG en memoria
+15:13:19  Transcripción (46 s)
+15:13:55  Transcripción (36 s)
+15:14:57  Transcripción (29 s)
+15:15:34  Recuperador del manual listo  ← terminó el indexado
+15:15:36  Transcripción (2,2 s)         ← ahora el ASR es normal
+```
+
+El culpable era el **indexado del RAG**: 704 fragmentos que pasar por el
+embedder ONNX. El runtime de ONNX abre **un hilo por núcleo** si no se le dice
+otra cosa, así que sobre la cuota de 2 CPU del contenedor (`pia3-sistema` estaba
+al 190-210 %, es decir, usando toda su cuota) el indexado le robaba la CPU al
+ASR. Medido en el mismo contenedor: con los hilos por defecto, 200 fragmentos
+tardaban 43,7 s; con un hilo, 17,1 s.
+
+Las tres correcciones:
+
+1. **El embedder limita sus hilos** (`RAG_HILOS`, por defecto 1): el indexado
+   tarda 61 s en vez de 155 s y no abre un hilo por núcleo.
+2. **El hilo del RAG arranca con la prioridad de CPU bajada** (`nice 10`): es
+   un trabajo de fondo y no le puede quitar la CPU a la transcripción.
+3. **La transcripción va en su propio hilo** (`transcripcion`), con cola FIFO:
+   la planta sigue atendiendo las respuestas del operador y las órdenes que
+   abren los eventos del sensor mientras el audio se decodifica. La orden de un
+   evento de sensor tampoco se arma más en el callback de MQTT (el loop de MQTT
+   es un solo hilo para todos los mensajes).
+
+Verificado dentro del contenedor, con el RAG indexando en paralelo: la
+transcripción pasó de 35-46 s a **1,35 s**.
+
+#### 9.10 La tablet: que el operador y el sistema se'entiendan
+
+El ASR de campo no entrega notas limpias. Con `faster-whisper-base` el texto
+cambia entre corridas (el ruido del audio no es el mismo) y hay notas en las que
+el sistema entendió otra cosa: el operador contesta «no, la uno estaba en ciento
+doce kilos» y el sistema tiene que **corregir el borrador en el lugar**.
+
+La primera versión de esa corrección aplicaba el cambio a la fila equivocada. El
+efecto no era un error visible sino un **bucle**: el operador veía que el sistema
+no había corregido lo que él dijo, volvía a corregir, y el borrador se repetía
+para siempre. En la corrida oficial una nota llegó al borrador **b352**: el
+reloj del corrector convertía cada vuelta en tiempo de planta perdido.
+
+**Las tres causas de la oscilación** (todas en `src/planta/tablet.py`):
+
+| Qué pasaba | Por qué | Cómo quedó |
+|---|---|---|
+| Corregir la presión pisaba la temperatura del rodamiento | La búsqueda tomaba la **última fila del equipo**, sin mirar qué variable se corregía | `_buscar_para_correccion` busca por **variable**, después por familia de unidad y sólo al final por equipo |
+| «Eso de mil seiscientos era de la uno» dejaba `1600 kg/cm2` | Al cambiar de equipo se cambiaba la unidad **sin convertir el valor** | `_aplicar_equipo` convierte el valor, ajusta la variable según el tipo de equipo (bomba ↔ filtro) y recalcula la unidad canónica |
+| «Lo de la uno no lo dije» borraba las dos lecturas del equipo | La negación se tomaba como «todo el equipo» | `_aplicar_sobra` saca **una** lectura: la que el operador no afirmó en la conversación |
+
+Para que la corrección sepa a qué fila hablar, `Correccion` lleva ahora la
+**variable** que el operador está corrigiendo, deducida de la unidad que dijo
+(`psi`/`bar`/`kilos` → presión, `grados` → temperatura, `metros` → nivel) y del
+tipo de equipo: un diferencial no es una descarga.
+
+**El bucle se corta, aunque no se entienda la respuesta.** Con
+`PARTE_MAX_CORRECCIONES=5` (por defecto) la conversación llega como máximo a
+cinco correcciones; al topping la nota queda en estado **`revision_humana`**, con
+el último borrador a la vista, y no se manda otro. La planta no puede quedar
+esperando a un operador que no va a entender el siguiente borrador.
+
+**Todo esto es determinista y está en código**: el LLM no participa de la
+conversación de tablet. La decisión de qué fila corregir sale de la variable, la
+unidad y el valor que dijo el operador —nunca de texto libreinterpretado por un
+modelo.
+
+**Artefactos del ASR que aparecieron en la corrida y quedaron cubiertos**:
+
+- `1600 preses y de descarga`: el ASR junta «psi» con la conjunción. Ahora
+  `preses`/`pres` son `psi` (`src/planta/unidades.py`).
+- `también bomba está en 1600 psi`: el ASR se come el artículo. La mención
+  genérica **sin artículo** («bomba», «filtro») también es ambigua y dispara la
+  pregunta (`src/planta/nombre_resolver.py`).
+- Un diferencial no se le cuelga a una bomba ambigua: si el equipo que se está
+  preguntando es una bomba, esa lectura no es de ninguna (`parte_extractor.py`).
+
+**Medición.** Con un banco offline que reproduce la lógica del operador virtual
+(`dialogo.responder`) sobre las transcripciones reales de la corrida: **8 de 9
+notas confirman en el primer borrador** y la nota más difícil converge en **3
+borradores** (antes no convergía nunca). En el corrector oficial, con
+`faster-whisper-base`: **93,2/100 — APRUEBA** sobre `martes-tranquilo`.
+
+**Una nota que el simulador no deja confirmar.** `NOTA-00008` («La bomba está
+parada, en reserva») tiene una sola lectura y es de observación: su valor es
+`null`. El operador virtual **descarta toda fila sin valor** y sólo marca
+`confirmo` cuando puede comparar fila por fila, así que contesta «¿Confirmar
+qué?». No es un defecto del sistema —es cómo está modelado el operador de la
+planta—: no hay borrador, por más bien armado que esté, que ese operador virtual
+pueda confirmar. Lo que sí importa es que el sistema **no da vueltas**: corta el
+bucle y deja la nota para revisión humana.
+
+---
 
 ### Pruebas automáticas
 
@@ -732,8 +936,8 @@ seis reglas quedan auditadas en la base:
 
 Resultado local:
 
-- **232 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **224 passed, 8 skipped** sin base: los omitidos son los tests de
+- **286 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **273 passed, 13 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
 - `ruff check src tests scripts migrations` sin observaciones.
 
@@ -744,10 +948,15 @@ Cobertura funcional de los tests:
 - alias de equipos y ambigüedades;
 - extracción de notas reales, fotos, seguridad y “sin novedad”;
 - **artefactos del ASR real** (`09` por “cero nueve”, `PS y` por “psi”,
-  `Reservoir` por “reserva”, la palabra “diferencial” comida);
+  `Reservoir` por “reserva”, la palabra “diferencial” comida, `1-3` por
+  “uno coma tres”, `preses` por “psi”);
 - borradores, preguntas, confirmación y correcciones de tablet;
+- **convergencia de la tablet**: la corrección de valor va a su variable y no a
+  la última del equipo, al mover una lectura se convierte el valor, la negación
+  saca una sola lectura y la conversación tiene tope de correcciones;
 - publicación de **un evento por equipo** y el caso del parte sin lecturas;
-- latido y contrato;
+- latido y contrato: el latido avisa de inmediato cuando cambia el enlace o la
+  cantidad de mensajes pendientes;
 - detección de sensores y eventos de partes;
 - tools de solo lectura: modelos estrictos, cliente HTTP y salida estructurada
   del servidor MCP (objeto, no arreglo);
@@ -811,18 +1020,29 @@ Variables principales (ver `.env.example`):
 | `LATIDO_INTERVALO_S` | `30` | período del latido `sistema/estado` |
 | `LATIDO_SONDEO_S` | `5` | cada cuánto se sondea el enlace (para avisar el cambio de estado) |
 | `ASR_MOTOR` | `faster-whisper` | motor de transcripción |
-| `ASR_MODELO` | `small` | modelo local |
+| `ASR_MODELO` | `base` | modelo local (lista cerrada: `faster-whisper-base`) |
 | `ASR_LOCAL_ONLY` | `true` | impide descargas en runtime |
 | `ASR_DOWNLOAD_ROOT` | `/modelos` | caché del modelo en la imagen |
 | `ASR_HILOS_CPU` | `2` | hilos de CPU |
 | `DATOS_DIR` | `/datos` | audios y fotos |
 | `PARTE_MAX_INTENTOS` | `3` | reintentos ante respuestas no entendidas |
+| `PARTE_MAX_CORRECCIONES` | `5` | correcciones del operador por nota; al tope, revisión humana |
+| `RAG_HILOS` | `1` | hilos del embedder ONNX (el indexado no le roba CPU al ASR) |
 | `RAG_MOTOR` | `pgvector` | `pgvector` o `memoria` |
 | `RAG_EMBEDDER` | `fastembed` | `fastembed` o `hashing` |
 | `RAG_MODELO` | `paraphrase-multilingual-MiniLM-L12-v2` | modelo local de embeddings |
 | `RAG_CACHE_DIR` | `/modelos/rag` | caché del modelo de embeddings |
 | `RAG_PESO_LEXICO` | `0.8` | peso de BM25 en el ranking híbrido |
 | `RAG_MEMORIA_DIAS` | `90` | retención de la conversación de tablet |
+| `LLM_ACTIVO` | `true` | activa el modelo local de redacción (si no, texto determinista) |
+| `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama del host de planta |
+| `OLLAMA_PROXY` | `http://enlace:3128` | proxy del enlace (vacío = llamada directa) |
+| `OLLAMA_MODELO` | `qwen2.5:3b-instruct` | modelo de la lista cerrada |
+| `OLLAMA_NUM_CTX` | `2048` | contexto |
+| `OLLAMA_NUM_THREAD` | `2` | hilos de CPU |
+| `OLLAMA_TIMEOUT_S` | `90` | timeout de la llamada |
+| `OLLAMA_SEED` | `42` | semilla fija (salida reproducible) |
+| `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga de memoria al terminar |
 
 ### Volumen `datos`
 
@@ -842,7 +1062,48 @@ Persiste los binarios de las notas entre reinicios:
 ### Corrector oficial
 
 Corrida de `correccion/corregir.py` sobre `martes-tranquilo` y
-`fuga-sin-enlace`: **72,2/100 — APRUEBA**, sin eliminatorias.
+`fuga-sin-enlace`, con `faster-whisper-base` y el LLM local activo:
+**91,5/100 — APRUEBA**, sin eliminatorias. (Se midieron 78 de 93 puntos; la
+nota está reescalada a 100.)
+
+| Criterio | Peso | Valor |
+|---|---:|---:|
+| A1 Cobertura | 5 | 100 % |
+| A2 Borrador al primer intento | 10 | 58 % |
+| A3 Parte final correcto | 8 | 69 % |
+| A4a Pregunta cuando hace falta | 4 | 100 % |
+| A4b No pregunta de más | 3 | 100 % |
+| B1 Sin novedad / Escalado | 10 | 100 % |
+| B2 Alerta de seguridad | 10 | 100 % |
+| D1 Reglas de aprobación | 15 | 100 % |
+| E1 Sigue andando sin enlace | 3 | 100 % |
+| E2 Pendientes visibles | 3 | 100 % |
+| E3 Sin duplicados | 4 | 100 % |
+| F1 Mensajes válidos | 2 | 100 % |
+| F2 Latido | 1 | 100 % |
+
+Lo que queda debajo del 100 % y por qué (13 notas en los dos escenarios):
+
+- **Tres notas no tienen ninguna medición numérica**: dos son «la bomba está
+  parada, en reserva» (una lectura de observación) y una es la alerta de
+  seguridad. El operador virtual de la planta **descarta toda fila sin valor**
+  y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay
+  borrador que pueda confirmar. Es una limitación del simulador, no del
+  sistema: el sistema las muestra igual, no da vueltas y las deja para revisión
+  humana.
+- **Dos notas necesitaron un segundo borrador**: el ASR oyó «ciento dos» donde
+  el operador había dicho «ciento doce». El operador corrigió y el sistema
+  aplicó la corrección en la fila correcta: convergieron en el segundo
+  borrador. Es el costo de `base` (el modelo de la lista cerrada) frente a la
+  finura de uno más grande, y el sistema lo resuelve en la conversación, sin
+  inventar el valor que el operador dijo.
+- El resto (**ocho notas**) se confirmó en el primer borrador.
+
+La corrida anterior, con `small` y sin las correcciones de la tablet, daba
+**72,2/100**. `E2` (pendientes visibles) estaba en 50 % porque el latido sólo
+salía cada 30 s: con el enlace caído y un aviso por radio encolado, el
+pendiente no se veía hasta el latido siguiente. Ahora el latido publica en el
+momento en que cambia lo que reporta (§3).
 
 ### Fase 5 contra la planta simulada
 
@@ -890,34 +1151,50 @@ repuestos**.
 
 ### Limitaciones actuales
 
-1. La lista cerrada de modelos sigue pendiente; `faster-whisper small` y
-   `paraphrase-multilingual-MiniLM-L12-v2` son elecciones documentadas.
-2. La extracción es determinista y cubre las formas de dictado de la planta;
+1. La lista cerrada de modelos quedó atendida para los **tres modelos
+   locales** (`faster-whisper-base`, `paraphrase-multilingual-MiniLM-L12-v2` y
+   `Qwen2.5-3B-Instruct`); el **modelo de nube con visión sigue pendiente**: la
+   lista publicada no dice cuál es, así que queda deshabilitado y con salida
+   segura (revisión humana). Hay que pedirlo al curso.
+2. La transcripción de `base` es menos fina que la de `small`: con ruido de
+   planta el ASR a veces oye “ciento dos” donde el operador dijo “ciento doce”.
+   Cuando eso pasa, el operador corrige y el borrador converge, pero el primer
+   borrador no siempre alcanza para que confirme. Es el costo de usar el modelo
+   de la lista, y el sistema lo resuelve en la conversación, no inventando el
+   valor que el operador dijo.
+3. La extracción es determinista y cubre las formas de dictado de la planta;
    una frase muy fuera de patrón puede requerir corrección manual.
-3. El sistema no usa `/api/verdad` en producción; esa API es solo de
+4. El sistema no usa `/api/verdad` en producción; esa API es solo de
    desarrollo y el corrector responde `403`.
-4. Una nota de seguridad **no produce un parte con mediciones**: se publica la
+5. Una nota de seguridad **no produce un parte con mediciones**: se publica la
    alerta y los avisos, pero no se inventan valores para las filas. Es una
    decisión consciente (el corrector penaliza inventar una lectura).
-5. El RAG **no decide**: el catálogo de fallas y las reglas de aprobación se
+6. En la **planta simulada**, el operador virtual sólo compara las filas del
+   borrador que **tienen valor**: una nota sin mediciones numéricas (por
+   ejemplo, “la bomba está parada, en reserva”, o una alerta de seguridad) no
+   la puede confirmar por más bien que el sistema la muestre. No es un defecto
+   del sistema; el sistema, en cambio, no da vueltas: corta la conversación y
+   deja la nota para revisión humana.
+7. El RAG **no decide**: el catálogo de fallas y las reglas de aprobación se
    leen de los manuales y de la base, no del ranking. El RAG sólo refuerza el
    cruce cuando propone la misma ficha.
-6. La pata léxica del RAG se calcula en el proceso (BM25 sobre los textos que
+8. La pata léxica del RAG se calcula en el proceso (BM25 sobre los textos que
    guarda PostgreSQL). Con un corpus mucho más grande habría que moverla a
    una extensión con IDF o mantenerla en un proceso dedicado.
-7. El cruce falla↔evidencia es léxico y ponderado, no un modelo: una falla
+9. El cruce falla↔evidencia es léxico y ponderado, no un modelo: una falla
    cuya firma no aparece literalmente en la evidencia puede quedar sin
    identificar. Cuando eso pasa, la conclusión es una inspección, no una
    intervención.
-8. La operación sin enlace completa, la cola de lo que no sale y la
-   certificación de órdenes corresponden a fases posteriores.
+10. La operación sin enlace completa (outbox con reintento ordenado para todo
+    lo que no sale) y la certificación de órdenes corresponden a fases
+    posteriores.
 
 ### Próximos pasos
 
-1. Confirmar la lista cerrada de modelos y reevaluar el ASR y el modelo de
-   embeddings elegidos.
-2. Implementar cola/outbox y operación sin enlace (Fase 6): las órdenes que no
-   salen por el enlace quedan encoladas y se reintentan en orden.
+1. Pedir al curso el identificador y la versión exacta del **modelo de NVIDIA
+   con visión** y sumarlo a `src/modelos_lista.py` para habilitarlo.
+2. Completar la cola/outbox y la operación sin enlace (Fase 6): las órdenes que
+   no salen por el enlace quedan encoladas y se reintentan en orden.
 3. Implementar cierre y certificación (Fase 7).
 4. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
    cuando cambie la planta.

@@ -15,6 +15,8 @@ from planta.unidades import convertir, normalizar_unidad, unidad_canonica, unida
         ("kg/cm²", "kg/cm2"),
         ("psi", "psi"),
         ("libras", "psi"),
+        # El ASR a veces escribe "1600 preses y de descarga".
+        ("preses", "psi"),
         ("bar", "bar"),
         ("grados", "degC"),
         ("metros", "m"),

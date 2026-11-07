@@ -136,6 +136,7 @@ def interpretar(
     resolver: ResolutorNombres,
     *,
     es_pregunta: bool = False,
+    planta: dict[str, Any] | None = None,
 ) -> Interpretacion:
     """Interpreta una respuesta libre del operador."""
     norm = normalizar(texto)
@@ -150,7 +151,7 @@ def interpretar(
         return Interpretacion(confirmado=True, texto=texto)
 
     return Interpretacion(
-        correcciones=interpretar_correcciones(norm, resolver),
+        correcciones=interpretar_correcciones(norm, resolver, planta=planta),
         texto=texto,
     )
 
@@ -164,6 +165,8 @@ def _es_confirmacion(norm: str) -> bool:
 def interpretar_correcciones(
     texto: str,
     resolver: ResolutorNombres,
+    *,
+    planta: dict[str, Any] | None = None,
 ) -> list[Correccion]:
     """Lee las correcciones del operador, una por oración."""
     correcciones: list[Correccion] = []
@@ -171,18 +174,23 @@ def interpretar_correcciones(
         norm = normalizar(oracion)
         if not norm or _es_confirmacion(norm):
             continue
-        correccion = _leer_oracion(norm, resolver)
+        correccion = _leer_oracion(norm, resolver, planta)
         if correccion is not None:
             correcciones.append(correccion)
     return correcciones
 
 
-def _leer_oracion(norm: str, resolver: ResolutorNombres) -> Correccion | None:
+def _leer_oracion(
+    norm: str,
+    resolver: ResolutorNombres,
+    planta: dict[str, Any] | None = None,
+) -> Correccion | None:
     # "Te faltó la uno, que estaba en ciento quince kilos."
     if "te falto" in norm:
         tag = resolver.resolver_tag(norm.split("te falto", 1)[1])
         valor, unidad = _valor_y_unidad(norm, desde="estaba en")
-        return Correccion(tipo="falta", tag=tag, valor=valor, unidad=unidad)
+        correccion = Correccion(tipo="falta", tag=tag, valor=valor, unidad=unidad)
+        return _con_variable(correccion, planta)
 
     # "Lo de la uno no lo dije."
     if "no lo dije" in norm:
@@ -200,15 +208,51 @@ def _leer_oracion(norm: str, resolver: ResolutorNombres) -> Correccion | None:
     if "es en" in norm and "no en" in norm:
         tag = resolver.resolver_tag(norm.split("es en", 1)[0])
         unidad = _unidad_de_texto(norm.split("es en", 1)[1].split(", no en", 1)[0])
-        return Correccion(tipo="unidad", tag=tag, unidad=unidad)
+        # La unidad que mostramos (la que está después de "no en") es la que
+        # dice qué fila hay que corregir.
+        mostrada = _unidad_de_texto(norm.rsplit("no en", 1)[1])
+        correccion = Correccion(tipo="unidad", tag=tag, unidad=unidad)
+        correccion.variable = _variable_de_unidad(mostrada, planta, tag)
+        return correccion
 
     # "La dos estaba en mil seiscientos veinte psi, no en mil seiscientos diez."
     if "estaba en" in norm:
         tag = resolver.resolver_tag(norm.split("estaba en", 1)[0])
         valor, unidad = _valor_y_unidad(norm.split("estaba en", 1)[1].split(", no en", 1)[0])
-        return Correccion(tipo="valor", tag=tag, valor=valor, unidad=unidad)
+        correccion = Correccion(tipo="valor", tag=tag, valor=valor, unidad=unidad)
+        return _con_variable(correccion, planta)
 
     return None
+
+
+def _con_variable(
+    correccion: Correccion,
+    planta: dict[str, Any] | None,
+) -> Correccion:
+    """Le pone a la corrección la variable que el operador está corrigiendo."""
+    if correccion.tag is None:
+        return correccion
+    correccion.variable = _variable_de_unidad(correccion.unidad, planta, correccion.tag)
+    return correccion
+
+
+def _variable_de_unidad(
+    unidad: str | None,
+    planta: dict[str, Any] | None,
+    tag: str | None,
+) -> str:
+    """Variable que una unidad corresponde, para un equipo."""
+    if unidad in {"psi", "bar", "kg/cm2"}:
+        if planta is not None and tag and _tipo_de(planta, tag) == "filtro":
+            return "presion_diferencial"
+        return "presion_descarga_local"
+    if unidad == "degC":
+        return "temperatura_rodamiento_ir"
+    if unidad == "m":
+        return "nivel"
+    if planta is None or not tag:
+        return "presion_descarga_local"
+    return _inferir_variable(Correccion(tipo="valor", tag=tag, unidad=unidad), planta, tag)
 
 
 def _valor_y_unidad(texto: str, *, desde: str = "") -> tuple[float | None, str | None]:
@@ -242,19 +286,32 @@ def aplicar_correcciones(
     correcciones: list[Correccion],
     planta: dict[str, Any],
     resolver: ResolutorNombres,
-) -> None:
-    """Aplica las correcciones en el lugar, sin duplicar filas."""
+    *,
+    afirmados: set[tuple[str | None, str]] | None = None,
+) -> list[tuple[str | None, str]]:
+    """Aplica las correcciones en el lugar, sin duplicar filas.
+
+    Devuelve las lecturas que el operador confirmó o corrigió (equipo y
+    variable). Con esa lista se sabe a qué lectura se refiere una negación:
+    "lo de la uno no lo dije" niega una lectura, no todas las del equipo.
+    """
+    tocadas: list[tuple[str | None, str]] = []
     for correccion in correcciones:
         if correccion.tipo == "valor":
-            _aplicar_valor(filas, correccion, planta, resolver)
+            fila = _aplicar_valor(filas, correccion, planta, resolver)
         elif correccion.tipo == "unidad":
-            _aplicar_unidad(filas, correccion, planta, resolver)
+            fila = _aplicar_unidad(filas, correccion, planta, resolver)
         elif correccion.tipo == "equipo":
-            _aplicar_equipo(filas, correccion, planta, resolver)
+            fila = _aplicar_equipo(filas, correccion, planta, resolver)
         elif correccion.tipo == "falta":
-            _aplicar_falta(filas, correccion, planta, resolver)
+            fila = _aplicar_falta(filas, correccion, planta, resolver)
         elif correccion.tipo == "sobra" and correccion.tag:
-            filas[:] = [f for f in filas if f.tag != correccion.tag]
+            fila = _aplicar_sobra(filas, correccion, planta, afirmados or set())
+        else:
+            fila = None
+        if fila is not None:
+            tocadas.append((fila.tag, fila.variable))
+    return tocadas
 
 
 def _aplicar_valor(
@@ -262,24 +319,24 @@ def _aplicar_valor(
     correccion: Correccion,
     planta: dict[str, Any],
     resolver: ResolutorNombres,
-) -> None:
+) -> Hallazgo | None:
     if correccion.tag is None or correccion.valor is None:
-        return
-    fila = _buscar(filas, correccion.tag)
+        return None
+    fila = _buscar_para_correccion(filas, correccion)
     if fila is None:
         fila = Hallazgo(
             tag=correccion.tag,
-            variable="presion_descarga_local",
+            variable=correccion.variable or "presion_descarga_local",
             valor=None,
             unidad=None,
         )
         filas.append(fila)
     variable = fila.variable
-    unidad = correccion.unidad
-    canonica = unidad_canonica(variable, correccion.tag, planta) or unidad
-    valor = convertir(correccion.valor, unidad, canonica)
+    canonica = unidad_canonica(variable, correccion.tag, planta) or correccion.unidad
+    valor = convertir(correccion.valor, correccion.unidad, canonica)
     fila.valor = valor
     fila.unidad = canonica
+    return fila
 
 
 def _aplicar_unidad(
@@ -287,15 +344,16 @@ def _aplicar_unidad(
     correccion: Correccion,
     planta: dict[str, Any],
     resolver: ResolutorNombres,
-) -> None:
+) -> Hallazgo | None:
     if correccion.tag is None or correccion.unidad is None:
-        return
-    fila = _buscar(filas, correccion.tag)
+        return None
+    fila = _buscar_para_correccion(filas, correccion)
     if fila is None:
-        return
+        return None
     canonica = unidad_canonica(fila.variable, correccion.tag, planta) or correccion.unidad
     # El operador dice la unidad correcta; el número que ya mostramos es el suyo.
     fila.unidad = canonica
+    return fila
 
 
 def _aplicar_equipo(
@@ -303,24 +361,29 @@ def _aplicar_equipo(
     correccion: Correccion,
     planta: dict[str, Any],
     resolver: ResolutorNombres,
-) -> None:
+) -> Hallazgo | None:
     if correccion.tag is None:
-        return
-    origen = None
-    if correccion.tag_mostrado:
-        origen = next((f for f in reversed(filas) if f.tag == correccion.tag_mostrado), None)
-    if origen is None and correccion.valor is not None:
-        origen = next(
-            (f for f in filas if f.valor is not None and abs(f.valor - correccion.valor) <= 0.6),
-            None,
-        )
+        return None
+    origen = _buscar_para_mover(filas, correccion)
     if origen is None:
-        return
+        return None
+    # El equipo cambia: también cambian la variable que se está midiendo y la
+    # unidad con la que se guarda. Sin convertir el valor, "1600 psi" que
+    # pasa de la dos (psi) a la uno (kg/cm2) queda como "1600 kg/cm2", que no
+    # es lo mismo: el operador vuelve a corregir y el borrador nunca converge.
+    variable = _variable_del_equipo(origen.variable, correccion.tag, planta)
+    canonica = unidad_canonica(variable, correccion.tag, planta)
+    if canonica and origen.valor is not None and origen.unidad:
+        origen.valor = convertir(origen.valor, origen.unidad, canonica)
+    origen.variable = variable
     origen.tag = correccion.tag
-    canonica = unidad_canonica(origen.variable, correccion.tag, planta)
     if canonica:
         origen.unidad = canonica
     _fusionar_duplicadas(filas)
+    return next(
+        (f for f in filas if f.tag == correccion.tag and f.variable == variable),
+        origen,
+    )
 
 
 def _aplicar_falta(
@@ -328,9 +391,9 @@ def _aplicar_falta(
     correccion: Correccion,
     planta: dict[str, Any],
     resolver: ResolutorNombres,
-) -> None:
+) -> Hallazgo | None:
     if correccion.tag is None:
-        return
+        return None
     variable = _inferir_variable(correccion, planta, correccion.tag)
     canonica = unidad_canonica(variable, correccion.tag, planta) or correccion.unidad
     valor = (
@@ -338,19 +401,174 @@ def _aplicar_falta(
         if correccion.valor is not None
         else None
     )
-    filas.append(
-        Hallazgo(
-            tag=correccion.tag,
-            variable=variable,
-            valor=valor,
-            unidad=canonica,
-        )
+    fila = Hallazgo(
+        tag=correccion.tag,
+        variable=variable,
+        valor=valor,
+        unidad=canonica,
     )
+    filas.append(fila)
     _fusionar_duplicadas(filas)
+    return next((f for f in filas if f.tag == fila.tag and f.variable == fila.variable), fila)
 
 
-def _buscar(filas: list[Hallazgo], tag: str) -> Hallazgo | None:
-    return next((f for f in reversed(filas) if f.tag == tag), None)
+def _aplicar_sobra(
+    filas: list[Hallazgo],
+    correccion: Correccion,
+    planta: dict[str, Any],
+    afirmados: set[tuple[str | None, str]],
+) -> Hallazgo | None:
+    """Saca **una** lectura del equipo, no todas.
+
+    El operador niega una lectura ("Lo de la uno no lo dije"), no el equipo
+    entero. Si el equipo tiene varias lecturas, se saca la que el operador no
+    afirmó en la conversación; si todas están afirmadas, la última.
+    """
+    candidatas = [f for f in filas if f.tag == correccion.tag]
+    if not candidatas:
+        return None
+    if len(candidatas) == 1:
+        filas.remove(candidatas[0])
+        return candidatas[0]
+    no_afirmadas = [f for f in candidatas if (f.tag, f.variable) not in afirmados]
+    removida = (no_afirmadas or candidatas)[-1]
+    filas.remove(removida)
+    return removida
+
+
+def _buscar_para_correccion(
+    filas: list[Hallazgo],
+    correccion: Correccion,
+) -> Hallazgo | None:
+    """La fila que una corrección del operador está hablando.
+
+    Se busca primero por variable (la lectura exacta), después por unidad
+    (una lectura del mismo tipo) y sólo al final, si no se sabe qué variable
+    es, por equipo. Buscar sólo por equipo mezcla las lecturas: un equipo
+    puede tener la presión de descarga y la temperatura del rodamiento, y
+    corregir una no es corregir la otra.
+    """
+    if correccion.tag is None:
+        return None
+    candidatas = [f for f in filas if f.tag == correccion.tag]
+    if not candidatas:
+        return None
+    if correccion.variable:
+        exacta = next(
+            (f for f in reversed(candidatas) if f.variable == correccion.variable),
+            None,
+        )
+        if exacta is not None:
+            return exacta
+    if correccion.unidad:
+        misma = next((f for f in reversed(candidatas) if f.unidad == correccion.unidad), None)
+        if misma is not None:
+            return misma
+        familia = _familia_unidad(correccion.unidad)
+        if familia:
+            misma = next(
+                (f for f in reversed(candidatas) if _familia_unidad(f.unidad) == familia),
+                None,
+            )
+            if misma is not None:
+                return misma
+    if correccion.variable:
+        # Se sabe qué variable se corrige y ese equipo no la tiene: la
+        # lectura se crea, no se pisa la de otra variable.
+        return None
+    return candidatas[-1]
+
+
+def _buscar_para_mover(
+    filas: list[Hallazgo],
+    correccion: Correccion,
+) -> Hallazgo | None:
+    """La lectura que el operador dice que es de otro equipo."""
+    candidatas: list[Hallazgo] = []
+    if correccion.tag_mostrado:
+        candidatas = [f for f in filas if f.tag == correccion.tag_mostrado]
+    if correccion.valor is not None:
+        con_valor = next(
+            (
+                f
+                for f in candidatas
+                if _mismo_valor(f.valor, f.unidad, correccion.valor, correccion.unidad)
+            ),
+            None,
+        )
+        if con_valor is not None:
+            return con_valor
+        con_valor = next(
+            (
+                f
+                for f in filas
+                if _mismo_valor(f.valor, f.unidad, correccion.valor, correccion.unidad)
+            ),
+            None,
+        )
+        if con_valor is not None:
+            return con_valor
+    if candidatas:
+        return candidatas[-1]
+    if correccion.valor is not None:
+        return next(
+            (f for f in filas if f.valor is not None and abs(f.valor - correccion.valor) <= 0.6),
+            None,
+        )
+    return None
+
+
+def _familia_unidad(unidad: str | None) -> str | None:
+    """Familia de una unidad: presión, temperatura, longitud, caudal."""
+    if unidad in {"kg/cm2", "psi", "bar"}:
+        return "presion"
+    if unidad == "degC":
+        return "temperatura"
+    if unidad == "m":
+        return "longitud"
+    if unidad == "m3/d":
+        return "caudal"
+    if unidad == "gotas/min":
+        return "goteo"
+    if unidad == "mm/s":
+        return "vibracion"
+    return None
+
+
+def _mismo_valor(
+    valor_a: float | None,
+    unidad_a: str | None,
+    valor_b: float | None,
+    unidad_b: str | None,
+) -> bool:
+    """¿Son la misma lectura, aunque estén en unidades distintas?
+
+    Es la misma tolerancia que usa el operador de la planta: 2 % para las
+    presiones (1600 psi y 112 kg/cm² son lo mismo) y 1,5 % para el resto.
+    """
+    if valor_a is None or valor_b is None:
+        return False
+    if _familia_unidad(unidad_a) == "presion" and _familia_unidad(unidad_b) == "presion":
+        a = valor_a * convertir(1.0, unidad_a, "kg/cm2")
+        b = valor_b * convertir(1.0, unidad_b, "kg/cm2")
+        return abs(a - b) <= max(0.6, abs(b) * 0.02)
+    if unidad_a and unidad_b and unidad_a != unidad_b:
+        return False
+    return abs(valor_a - valor_b) <= max(0.051, abs(valor_b) * 0.015)
+
+
+def _variable_del_equipo(
+    variable: str,
+    tag: str,
+    planta: dict[str, Any],
+) -> str:
+    """La variable que se mide, vista desde el equipo al que se mueve."""
+    tipo = _tipo_de(planta, tag)
+    if variable == "presion_descarga_local" and tipo == "filtro":
+        return "presion_diferencial"
+    if variable == "presion_diferencial" and tipo == "bomba":
+        return "presion_descarga_local"
+    return variable
 
 
 def _inferir_variable(

@@ -44,7 +44,7 @@ pia3-latido = "planta.heartbeat:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-py-modules = ["config"]
+py-modules = ["config", "modelos_lista", "verificacion_modelos"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

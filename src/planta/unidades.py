@@ -25,6 +25,9 @@ SINONIMOS = {
     "pe ese i": "psi",
     # El ASR a veces separa las letras: "1600 PS y de descarga".
     "ps": "psi",
+    # Y a veces las junta mal: "1600 preses y de descarga".
+    "preses": "psi",
+    "pres": "psi",
     "libras": "psi",
     "libra": "psi",
     "bar": "bar",

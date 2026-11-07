@@ -417,7 +417,9 @@ class ExtractorParte:
         observacion: str | None,
         fuente: str,
     ) -> Hallazgo | None:
-        if tag is None and self._pendiente is None:
+        if tag is None and (
+            self._pendiente is None or not self._pendiente_admite(variable)
+        ):
             return None
         for fila in self.filas:
             if fila.tag == tag and fila.variable == variable:
@@ -451,9 +453,29 @@ class ExtractorParte:
         """
         if self._pendiente is None or fila.tag is not None:
             return
+        if not self._pendiente_admite(fila.variable):
+            return
         indice = self.filas.index(fila)
         if indice not in self._pendiente.filas:
             self._pendiente.filas.append(indice)
+
+    def _pendiente_admite(self, variable: str) -> bool:
+        """¿La lectura puede ser de los equipos que se están preguntando?
+
+        Si el operador dijo "la bomba" y el ASR también se comió el nombre
+        de un filtro, un diferencial no es de ninguna de las bombas: esa
+        lectura se descarta en vez de adjudicarse al equipo equivocado.
+        """
+        if self._pendiente is None:
+            return False
+        tipos = {self._tipo_de(tag) for tag in (self._pendiente.tags or [])}
+        if not tipos:
+            return True
+        if variable == "presion_diferencial" and tipos == {"bomba"}:
+            return False
+        if variable == "presion_descarga_local" and tipos == {"filtro"}:
+            return False
+        return True
 
     def _agregar_observacion(self, resto: str) -> None:
         # Se pega a la última fila del equipo actual: "está parada, en reserva".
@@ -553,6 +575,8 @@ def _unidad_dicha(norm: str) -> str | None:
         "psi",
         # El ASR a veces separa la unidad: "1600 PS y de descarga".
         "ps",
+        # Y a veces la junta mal: "1600 preses y de descarga".
+        "preses",
         "libras",
         "libra",
         "bar",

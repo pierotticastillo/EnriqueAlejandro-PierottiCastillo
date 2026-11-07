@@ -75,6 +75,20 @@ class ServicioParteVoz:
         self._enlace_ok = enlace_ok_fn or (lambda: comprobar_enlace(settings))
         self._cola: queue.Queue[tuple[str, object] | None] = queue.Queue()
         self._hilo: threading.Thread | None = None
+        # Cola aparte para la transcripción: el ASR es la parte lenta de la
+        # nota (decodifica el audio en CPU). Si se hiciera en el hilo de las
+        # notas, la planta no respondería ni las respuestas del operador ni
+        # los eventos del sensor mientras decodifica.
+        self._cola_asr: queue.Queue[object | None] = queue.Queue()
+        self._hilo_asr: threading.Thread | None = None
+        # Notas que ya están en transcripción: la misma nota puede volver a
+        # llegar por MQTT y no se transcribe dos veces.
+        self._notas_en_curso: set[str] = set()
+        self._candado_notas = threading.Lock()
+        # Cola aparte para la redacción con el modelo local: la cola de notas
+        # no puede esperar a que un modelo de 3B termine de responder.
+        self._cola_redaccion: queue.Queue[tuple[object, object] | None] = queue.Queue()
+        self._hilo_redaccion: threading.Thread | None = None
         self._parar = threading.Event()
 
     # ------------------------------------------------------------------ ciclo
@@ -82,13 +96,27 @@ class ServicioParteVoz:
     def iniciar(self) -> None:
         self._hilo = threading.Thread(target=self._trabajar, name="parte-voz", daemon=True)
         self._hilo.start()
+        self._hilo_asr = threading.Thread(
+            target=self._trabajar_asr, name="transcripcion", daemon=True
+        )
+        self._hilo_asr.start()
+        self._hilo_redaccion = threading.Thread(
+            target=self._trabajar_redaccion, name="redaccion-llm", daemon=True
+        )
+        self._hilo_redaccion.start()
         logger.info("Servicio de parte por voz iniciado")
 
     def detener(self) -> None:
         self._parar.set()
         self._cola.put(None)
+        self._cola_asr.put(None)
+        self._cola_redaccion.put(None)
         if self._hilo is not None:
             self._hilo.join(timeout=10)
+        if self._hilo_asr is not None:
+            self._hilo_asr.join(timeout=10)
+        if self._hilo_redaccion is not None:
+            self._hilo_redaccion.join(timeout=10)
         logger.info("Servicio de parte por voz detenido")
 
     def encolar_nota(self, nota: NotaRecorrida) -> None:
@@ -96,6 +124,15 @@ class ServicioParteVoz:
 
     def encolar_respuesta(self, respuesta: RespuestaOperador) -> None:
         self._cola.put(("respuesta", respuesta))
+
+    def encolar_orden_por_evento(self, evento) -> None:
+        """Encola la orden que abre un evento de sensor.
+
+        Va por la cola y no por el callback de MQTT: el loop de MQTT es un
+        solo hilo para todos los mensajes y no puede quedar esperando un
+        análisis mientras la planta manda notas de voz.
+        """
+        self._cola.put(("orden", evento))
 
     def _trabajar(self) -> None:
         while not self._parar.is_set():
@@ -105,25 +142,111 @@ class ServicioParteVoz:
             tipo, carga = item
             try:
                 if tipo == "nota":
-                    self.procesar_nota(carga)  # type: ignore[arg-type]
+                    self._preparar_nota(carga)  # type: ignore[arg-type]
                 elif tipo == "respuesta":
                     self.procesar_respuesta(carga)  # type: ignore[arg-type]
+                elif tipo == "nota-lista":
+                    nota, texto, fotos_locales = carga  # type: ignore[misc]
+                    self._completar_nota(nota, texto, fotos_locales)  # type: ignore[arg-type]
+                elif tipo == "orden":
+                    self.generar_orden(carga)  # type: ignore[arg-type]
             except Exception:  # noqa: BLE001 - una nota mala no frena la cola
                 logger.exception("Error procesando %s", tipo)
 
+    # ------------------------------------------------------------- transcripción
+
+    def _trabajar_asr(self) -> None:
+        """Transcribe las notas en su propio hilo.
+
+        La cola es FIFO y hay un solo hilo: el ASR no se paraliza y el orden de
+        las notas se mantiene. Lo que se gana es que el hilo de la planta
+        sigue atendiendo las respuestas del operador y los eventos del sensor
+        mientras el audio se decodifica.
+        """
+        while not self._parar.is_set():
+            nota = self._cola_asr.get()
+            if nota is None:
+                break
+            try:
+                texto, fotos_locales = self._transcribir(nota)  # type: ignore[arg-type]
+            except Exception:  # noqa: BLE001 - una nota mala no frena la cola
+                logger.exception("Falló la transcripción de %s", nota.id)  # type: ignore[attr-defined]
+                texto, fotos_locales = "", []
+            self._cola.put(("nota-lista", (nota, texto, fotos_locales)))
+
+    # ------------------------------------------------------------------ redacción
+
+    def _trabajar_redaccion(self) -> None:
+        """Redacta la justificación de las órdenes ya publicadas.
+
+        Va en su propio hilo: la orden ya salió con su estado y su motivo
+        (decididos por las reglas, en código). La redacción es un agregado
+        posterior y no puede frenar la cola de notas ni la publicación.
+        """
+        while not self._parar.is_set():
+            item = self._cola_redaccion.get()
+            if item is None:
+                break
+            analisis, orden = item
+            try:
+                self._redactar_orden(analisis, orden)
+            except Exception:  # noqa: BLE001 - la redacción no frena la planta
+                logger.exception("Falló la redacción de la orden %s", orden.id)
+
+    def _redactar_orden(self, analisis, orden) -> None:
+        if self._analisis is None:
+            return
+        texto = self._analisis.redactar(analisis)
+        if not texto:
+            return
+        self._repo.guardar_redaccion_orden(
+            orden.id,
+            texto,
+            modelo=self._analisis.nombre_modelo,
+        )
+        # La orden se vuelve a publicar con el mismo id y el mismo estado: la
+        # planta no ve una orden nueva y el id sigue siendo idempotente.
+        self._cliente.publicar_orden(orden)
+        logger.info("Orden %s con justificación técnica redactada", orden.id)
+
     # ------------------------------------------------------------------ notas
 
-    def procesar_nota(self, nota: NotaRecorrida) -> None:
+    def _chequear_nota(self, nota: NotaRecorrida) -> bool:
+        """¿La nota hay que procesarla? Devuelve False si ya está en curso.
+
+        La misma nota puede volver a llegar por MQTT (o el sistema puede
+        reiniciar): el id de la nota es el que manda y no se abre una segunda
+        conversación para la misma nota.
+        """
+        with self._candado_notas:
+            if nota.id in self._notas_en_curso:
+                logger.info("Nota %s ya está en transcripción; se espera", nota.id)
+                return False
         existente = self._repo.obtener_conversacion_por_nota(nota.id)
         if existente is not None:
             if existente["estado"] == "confirmada":
                 logger.info("Nota %s ya confirmada; se ignora", nota.id)
-                return
+                return False
             logger.info("Nota %s ya estaba en curso; se reenvía el último mensaje", nota.id)
             self._reenviar(existente)
-            return
+            return False
+        with self._candado_notas:
+            self._notas_en_curso.add(nota.id)
+        return True
 
+    def _preparar_nota(self, nota: NotaRecorrida) -> None:
+        """Mete la nota en la cola de transcripción."""
+        if not self._chequear_nota(nota):
+            return
         logger.info("Procesando nota %s de %s", nota.id, nota.operador)
+        self._cola_asr.put(nota)
+
+    def _transcribir(self, nota: NotaRecorrida) -> tuple[str, list[Path | None]]:
+        """Descarga el audio y las fotos y transcribe la nota.
+
+        Va en el hilo de transcripción: la descarga y la decodificación son
+        las partes lentas y no pueden frenar al hilo de la planta.
+        """
         audio = self._almacen.guardar_audio(nota.id, nota.audio_url)
         fotos_locales = self._almacen.guardar_fotos(nota.id, nota.fotos)
 
@@ -136,7 +259,17 @@ class ServicioParteVoz:
 
         if not texto and nota.audio_url:
             logger.warning("Nota %s sin transcripción; se muestra un borrador vacío", nota.id)
+        return texto, fotos_locales
 
+    def _completar_nota(
+        self,
+        nota: NotaRecorrida,
+        texto: str,
+        fotos_locales: list[Path | None],
+    ) -> None:
+        """Con la transcripción lista, arma el parte y lo publica."""
+        with self._candado_notas:
+            self._notas_en_curso.discard(nota.id)
         extraccion = self._extractor.extraer(texto, nota.fotos)
         nota_id = self._repo.guardar_nota(
             nota,
@@ -148,6 +281,19 @@ class ServicioParteVoz:
             self._publicar_alerta_seguridad(nota_id, nota, extraccion, texto)
             return
         self._iniciar_conversacion(nota_id, nota, extraccion, fotos_locales)
+
+    def procesar_nota(self, nota: NotaRecorrida) -> None:
+        """Procesa la nota de punta a punta, sin pasar por las colas.
+
+        Es el camino síncrono: lo usan los tests y el arranque manual. El
+        servicio usa las colas, que es lo que permite que la planta siga
+        respondiendo mientras el audio se decodifica.
+        """
+        if not self._chequear_nota(nota):
+            return
+        logger.info("Procesando nota %s de %s", nota.id, nota.operador)
+        texto, fotos_locales = self._transcribir(nota)
+        self._completar_nota(nota, texto, fotos_locales)
 
     def _publicar_alerta_seguridad(
         self,
@@ -458,6 +604,9 @@ class ServicioParteVoz:
             orden.estado.value,
             analisis.falla.codigo if analisis.falla else "sin falla identificada",
         )
+        # La justificación técnica se redacta después, en su propio hilo: la
+        # orden ya está publicada y su estado no depende del modelo.
+        self._cola_redaccion.put((analisis, orden))
 
     def procesar_respuesta(self, respuesta: RespuestaOperador) -> None:
         conversacion = self._repo.obtener_conversacion(respuesta.mensaje_id)
@@ -567,7 +716,7 @@ class ServicioParteVoz:
         preguntas: list[Pregunta],
         intento: int,
     ) -> None:
-        interpretacion = interpretar(respuesta.texto, self._resolver)
+        interpretacion = interpretar(respuesta.texto, self._resolver, planta=self._planta)
         if interpretacion.confirmado:
             parte_id = self._repo.confirmar_parte(conversacion["nota_id"], respuesta.ts)
             fotos = len(datos.get("fotos_locales") or [])
@@ -589,7 +738,44 @@ class ServicioParteVoz:
             return
 
         if interpretacion.correcciones:
-            aplicar_correcciones(filas, interpretacion.correcciones, self._planta, self._resolver)
+            aplicadas = int(datos.get("correcciones") or 0)
+            if aplicadas >= self._settings.parte_max_correcciones:
+                # La nota no converge: se deja el último borrador para que lo
+                # revise una persona. Seguir mandando borradores consume
+                # tiempo de planta sin chances de cerrar la nota.
+                logger.warning(
+                    "La nota %s llega al tope de %s correcciones; el borrador "
+                    "queda para revisión humana",
+                    nota.id,
+                    self._settings.parte_max_correcciones,
+                )
+                mensaje = construir_borrador(nota.id, nota.ts, filas, intento)
+                datos = dict(datos)
+                datos["revision_humana"] = True
+                self._repo.guardar_conversacion(
+                    conversacion["nota_id"],
+                    mensaje,
+                    filas,
+                    intento=intento,
+                    estado="revision_humana",
+                    datos=datos,
+                )
+                return
+            afirmados = {
+                (str(item[0]), str(item[1]))
+                for item in (datos.get("afirmados") or [])
+                if isinstance(item, (list, tuple)) and len(item) == 2
+            }
+            tocadas = aplicar_correcciones(
+                filas,
+                interpretacion.correcciones,
+                self._planta,
+                self._resolver,
+                afirmados=afirmados,
+            )
+            datos = dict(datos)
+            datos["correcciones"] = aplicadas + 1
+            datos["afirmados"] = sorted([list(item) for item in (afirmados | set(tocadas))])
             self._enviar_borrador(
                 conversacion["nota_id"],
                 nota,
@@ -636,6 +822,8 @@ def _datos_base(
         "preguntas": [asdict(pregunta) for pregunta in preguntas],
         "indice_pregunta": 0,
         "reintentos_sin_entender": 0,
+        "correcciones": 0,
+        "afirmados": [],
         "fotos_locales": [str(p) if p else None for p in fotos_locales],
     }
 

@@ -29,8 +29,10 @@ from analisis.causas import causalizar
 from analisis.estado import EstadoBombas
 from analisis.evidencia import Evidencia, reunir_parte, reunir_texto
 from analisis.historial import es_reincidencia
-from analisis.modelos import Analisis, FallaCatalogo
+from analisis.llm import AnalysisModel
+from analisis.modelos import Analisis, FallaCatalogo, Medicion
 from analisis.orden import TAREA_NO_ESTANDAR, armar_borrador, descripcion_de_reincidencia
+from analisis.redaccion import redactar
 from tools.cliente import ClientePlanta, ErrorHerramienta
 from tools.modelos import ConsultaManuales
 
@@ -77,12 +79,16 @@ class ServicioAnalisis:
         cliente: ClientePlanta | None = None,
         recuperador: Any = None,
         planta: dict[str, Any] | None = None,
+        modelo: AnalysisModel | None = None,
     ) -> None:
         self._catalogo = catalogo
         self._estado = estado
         self._cliente = cliente
         self._recuperador = recuperador
         self._planta = planta or {}
+        # El modelo de lenguaje es un auxiliar de redacción. Si no hay, el
+        # sistema funciona igual: las reglas están en código.
+        self._modelo = modelo
 
     # ------------------------------------------------------------------ análisis
 
@@ -205,6 +211,7 @@ class ServicioAnalisis:
             ts=evento.ts,
             reincidencia=reincidencia,
             notas=tuple(notas),
+            mediciones=_mediciones(evidencia),
         )
 
     # -------------------------------------------------------------------- orden
@@ -275,6 +282,41 @@ class ServicioAnalisis:
                 for repuesto in borrador.repuestos
             ],
         }
+
+    # ------------------------------------------------------------------ redacción
+
+    @property
+    def nombre_modelo(self) -> str | None:
+        """El nombre del modelo de redacción, si hay uno."""
+        return getattr(self._modelo, "nombre", None)
+
+    def redactar(self, analisis: Analisis) -> str | None:
+        """La justificación técnica de la orden, escrita por el modelo local.
+
+        Devuelve ``None`` si no hay modelo, si no responde o si lo que devuelve
+        no valida: en los tres casos la orden queda como está, con su texto
+        determinista. Esta redacción **no** cambia el estado de la orden ni el
+        motivo: las reglas ya se evaluaron en código.
+        """
+        if self._modelo is None:
+            return None
+        tareas = self._nombres_de_tareas(analisis.borrador.tareas, analisis.borrador.equipo)
+        return redactar(self._modelo, analisis, tareas=tareas)
+
+    def _nombres_de_tareas(self, tareas: tuple[str, ...], equipo: str) -> dict[str, str]:
+        """El nombre y el procedimiento de cada tarea, del catálogo del plan."""
+        salida: dict[str, str] = {}
+        for codigo in tareas:
+            tarea = self._catalogo.tarea_por_codigo(codigo, equipo)
+            if tarea is None:
+                if codigo == TAREA_NO_ESTANDAR:
+                    salida[codigo] = "Tarea no prevista en el plan de mantenimiento"
+                continue
+            detalle = tarea.nombre
+            if tarea.procedimiento:
+                detalle = f"{detalle} ({tarea.procedimiento})"
+            salida[codigo] = detalle
+        return salida
 
     # ------------------------------------------------------------------ internos
 
@@ -347,3 +389,21 @@ class ServicioAnalisis:
         if not isinstance(datos, list):
             return []
         return [orden for orden in datos if isinstance(orden, dict)]
+
+
+def _mediciones(evidencia: Evidencia) -> tuple[Medicion, ...]:
+    """Las mediciones estructuradas de la evidencia.
+
+    Se descarta todo fragmento que venga del texto del operador: lo que dice
+    una nota no es una medición, y no se le muestra a ningún modelo.
+    """
+    return tuple(
+        Medicion(
+            variable=fragmento.variable,
+            valor=fragmento.valor,
+            unidad=fragmento.unidad,
+            direccion=evidencia.direcciones.get(fragmento.variable),
+        )
+        for fragmento in evidencia.fragmentos
+        if fragmento.origen != "texto"
+    )

@@ -43,16 +43,22 @@ class Settings(BaseSettings):
     # Almacenamiento local de audios y fotos (volumen Docker).
     datos_dir: str = "/datos"
 
-    # Transcripción local. La lista cerrada de modelos sigue pendiente; el
-    # motor y el modelo se cambian por entorno sin tocar el código.
+    # Transcripción local. El motor y el modelo se cambian por entorno sin
+    # tocar el código, pero el modelo tiene que ser el de la lista cerrada
+    # (`faster-whisper-base`); el verificador lo comprueba al arrancar.
     asr_motor: str = "faster-whisper"
-    asr_modelo: str = "small"
-    asr_local_only: bool = False
+    asr_modelo: str = "base"
+    asr_local_only: bool = True
     asr_download_root: str | None = None
     asr_hilos_cpu: int = 2
 
     # Conversación de tablet.
     parte_max_intentos: int = 3
+    # Cuántas correcciones del operador se aceptan para una misma nota. Con
+    # el tope, una nota que no converge (el operador y el sistema no se
+    # ponen de acuerdo) se deja para revisión humana en vez de seguir
+    # consumiendo tiempo de planta en un bucle.
+    parte_max_correcciones: int = 5
 
     # RAG (Fase 4). El embedder por defecto es determinista para que los tests
     # no descarguen un modelo; Docker usa `fastembed` y el modelo local.
@@ -63,5 +69,35 @@ class Settings(BaseSettings):
     rag_cache_dir: str | None = None
     rag_peso_lexico: float = 0.8
     rag_memoria_dias: int = 90
+    # Hilos del embedder ONNX. El runtime de ONNX crea un hilo por núcleo si
+    # no se le dice otra cosa: en una planta de 2 CPU eso deja al ASR sin
+    # cuota y cada transcripción pasa de 1,5 s a más de 30 s. Con un hilo el
+    # indexado del manual tarda lo mismo (es de fondo) y no frena la planta.
+    rag_hilos: int = 1
+
+    # LLM local (Ollama). Es un auxiliar de redacción: redacta la justificación
+    # técnica de la orden, no decide. Si Ollama no está o no responde, el
+    # sistema sigue con el texto determinista, así que el sistema no depende
+    # de que este modelo esté disponible.
+    llm_activo: bool = False
+    ollama_url: str = "http://host.docker.internal:11434"
+    # Proxy para la llamada al modelo local. En la simulación, el contenedor de
+    # la planta está en redes internas y no tiene ruta directa al host: la
+    # única salida sancionada es el proxy del enlace (`enlace:3128`). En la PC
+    # de planta real el Ollama corre en localhost y el proxy va vacío.
+    ollama_proxy: str | None = None
+    ollama_modelo: str = "qwen2.5:3b-instruct"
+    ollama_num_ctx: int = 2048
+    ollama_num_thread: int = 2
+    # Timeout de la llamada. Medido en la simulación (el Ollama del host se
+    # alcanza por el proxy del enlace): ~40 s por vuelta con `keep_alive=0`,
+    # porque el modelo se carga en cada llamada (~9 s) y genera a ~8 tok/s.
+    # En la PC de planta real (Ollama en localhost) la vuelta es mucho más
+    # corta. La redacción va en un hilo aparte, así que no frena la planta.
+    ollama_timeout_s: float = 90.0
+    ollama_seed: int = 42
+    # 0 = el modelo se descarga de memoria en cuanto termina de responder.
+    # Con 8 GB de RAM en la planta no puede quedar residente.
+    ollama_keep_alive: int = 0
 
     log_level: str = "INFO"

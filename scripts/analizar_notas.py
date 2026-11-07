@@ -141,16 +141,37 @@ def _esperados(nota: dict) -> dict[str, str]:
     return {tag: ("Escalado" if anomalo else "SinNovedad") for tag, anomalo in salida.items()}
 
 
+def _entradas(log: Path) -> list[str]:
+    """Entradas del log, sin partir las líneas largas.
+
+    Docker parte las líneas largas en varias: una entrada empieza con la
+    marca de tiempo y las que siguen son su continuación. Sin juntarlas, la
+    transcripción se lee truncada.
+    """
+    entradas: list[str] = []
+    actual = ""
+    for linea in log.read_text(encoding="utf-8", errors="replace").splitlines():
+        if re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} ", linea):
+            if actual:
+                entradas.append(actual)
+            actual = linea
+        else:
+            actual = f"{actual} {linea.strip()}"
+    if actual:
+        entradas.append(actual)
+    return entradas
+
+
 def _transcripciones(log: Path) -> dict[str, str]:
     salida: dict[str, str] = {}
     nota = None
-    for linea in log.read_text(encoding="utf-8", errors="replace").splitlines():
-        coincidencia = re.search(r"Procesando nota (NOTA-\d+)", linea)
+    for entrada in _entradas(log):
+        coincidencia = re.search(r"Procesando nota (NOTA-\d+)", entrada)
         if coincidencia:
             nota = coincidencia.group(1)
             continue
-        if nota and "Transcripci" in linea and "audio.wav:" in linea:
-            salida[nota] = linea.split("audio.wav:", 1)[1].strip()
+        if nota and "Transcripci" in entrada and "audio.wav:" in entrada:
+            salida[nota] = entrada.split("audio.wav:", 1)[1].strip()
             nota = None
     return salida
 

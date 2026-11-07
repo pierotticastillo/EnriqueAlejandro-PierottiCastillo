@@ -15,11 +15,14 @@
 #   docker compose --profile rag run --rm rag-indexar  # (re)indexar manuales
 #
 # Presupuesto agregado de planta: 4 CPU / 8 GB.
-#   postgres:    1.0 CPU / 2.0 GB
+#   postgres:    1.0 CPU / 1.5 GB
 #   migraciones: 0.5 CPU / 0.5 GB (efímero)
-#   sistema:     2.0 CPU / 4.0 GB
-#   mcp:         0.5 CPU / 1.0 GB
-#   reserva:     0.0 CPU / 0.5 GB
+#   sistema:     2.0 CPU / 3.0 GB
+#   mcp:         0.5 CPU / 0.5 GB
+#   reserva:     0.0 CPU / 2.0 GB
+# Los topes están bajados para que entre el pico del LLM local (Qwen2.5-3B
+# Q4_K_M: ~2,1 GB con ctx 2048), que corre a demanda en el host y se descarga
+# de memoria al terminar (keep_alive=0).
 # rag-indexar (perfil `rag`) es efímero: 1.5 CPU / 2.0 GB. Indexar 704
 # fragmentos con el modelo local lleva unos minutos; con 0,5 CPU eran ~7 min.
 # ============================================================
@@ -77,7 +80,7 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 2G
+          memory: 1536M
 
   # ----------------------------------------------------------
   # Migraciones: aplica el esquema antes de arrancar el sistema
@@ -87,6 +90,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Todos los servicios que construyen usan la misma imagen: el esquema, el
+    # código y los modelos local siempre son los mismos.
+    image: pia3-sistema:latest
     container_name: pia3-migraciones
     command: ["alembic", "upgrade", "head"]
     restart: "no"
@@ -119,6 +125,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: pia3-sistema:latest
     container_name: pia3-rag-indexar
     command: ["python", "-m", "rag.cli", "indexar", "--embedder", "fastembed"]
     profiles: ["rag"]
@@ -152,6 +159,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: pia3-sistema:latest
     container_name: pia3-sistema
     environment:
       <<: *entorno
@@ -165,11 +173,30 @@ services:
       ENLACE_CHECK_URL: ${ENLACE_CHECK_URL:-http://enlace:8081/estado}
       ENLACE_TIMEOUT_S: ${ENLACE_TIMEOUT_S:-3}
       # Configuración de transcripción local (faster-whisper, CPU, int8).
+      # El modelo es el de la lista cerrada del curso: `faster-whisper-base`.
       ASR_MOTOR: ${ASR_MOTOR:-faster-whisper}
-      ASR_MODELO: ${ASR_MODELO:-small}
+      ASR_MODELO: ${ASR_MODELO:-base}
       ASR_LOCAL_ONLY: ${ASR_LOCAL_ONLY:-true}
       ASR_DOWNLOAD_ROOT: ${ASR_DOWNLOAD_ROOT:-/modelos}
       ASR_HILOS_CPU: ${ASR_HILOS_CPU:-2}
+      # Hilos del embedder ONNX del RAG. Con más de uno, el runtime de ONNX
+      # abre un hilo por núcleo y el indexado del manual le roba la CPU al
+      # ASR: cada transcripción pasa de 1,5 s a más de 30 s y la planta
+      # pierde horas de tiempo simulado. El indexado va en segundo plano y
+      # con un hilo no frena nada.
+      RAG_HILOS: ${RAG_HILOS:-1}
+      # LLM local (Ollama, en el host de planta): auxiliar de redacción.
+      # El modelo es Qwen2.5-3B-Instruct Q4_K_M, con la configuración que
+      # fija la lista cerrada. Si no responde, el sistema sigue igual.
+      LLM_ACTIVO: ${LLM_ACTIVO:-true}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_PROXY: ${OLLAMA_PROXY:-http://enlace:3128}
+      OLLAMA_MODELO: ${OLLAMA_MODELO:-qwen2.5:3b-instruct}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-2048}
+      OLLAMA_NUM_THREAD: ${OLLAMA_NUM_THREAD:-2}
+      OLLAMA_TIMEOUT_S: ${OLLAMA_TIMEOUT_S:-90}
+      OLLAMA_SEED: ${OLLAMA_SEED:-42}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-0}
       # Directorio de datos para audios y fotos (volumen Docker).
       DATOS_DIR: ${DATOS_DIR:-/datos}
     depends_on:
@@ -184,7 +211,7 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: 4G
+          memory: 3G
     volumes:
       - datos:/datos
 
@@ -199,6 +226,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: pia3-sistema:latest
     container_name: pia3-mcp
     command: ["python", "-m", "mcp_server.server"]
     environment:
@@ -216,6 +244,7 @@ services:
       RAG_MODELO: ${RAG_MODELO:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
       RAG_CACHE_DIR: ${RAG_CACHE_DIR:-/modelos/rag}
       RAG_PESO_LEXICO: ${RAG_PESO_LEXICO:-0.8}
+      RAG_HILOS: ${RAG_HILOS:-1}
     networks:
       - planta-lan
       # `planta-lan` es una red interna (sin salida al host), así que el puerto
@@ -241,7 +270,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 1G
+          memory: 512M
 
 networks:
   # Red compartida con la planta simulada (API :8100, MQTT :1883)

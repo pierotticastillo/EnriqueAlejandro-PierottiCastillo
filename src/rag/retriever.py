@@ -242,6 +242,7 @@ def crear_recuperador(
         modelo=settings.rag_modelo,
         dimension=settings.rag_dimension,
         cache_dir=settings.rag_cache_dir,
+        hilos=settings.rag_hilos,
     )
     if motor == "pgvector":
         try:

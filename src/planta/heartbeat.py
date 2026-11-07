@@ -100,6 +100,7 @@ class Heartbeat:
         self._vaciar_cola = vaciar_cola_fn or (lambda: 0)
         self._aviso_cola = False
         self._ultimo_enlace: bool | None = None
+        self._ultimo_pendientes: int | None = None
         self._ultimo_latido = 0.0
 
     def construir(self) -> Latido:
@@ -146,13 +147,26 @@ class Heartbeat:
         """Una vuelta del bucle: arma el latido y lo publica si corresponde.
 
         El latido sale cada ``latido_intervalo_s`` y además **de inmediato**
-        cuando cambia el estado del enlace: el operador tiene que saber que se
-        cortó el radioenlace sin esperar al próximo latido.
+        cuando cambia lo que reporta:
+
+        * el estado del enlace, porque el operador tiene que saber que se cortó
+          el radioenlace sin esperar al próximo latido;
+        * la cantidad de mensajes pendientes, porque si se encoló algo con el
+          enlace caído, ese pendiente tiene que verse (y cuando la cola se
+          vacía, también).
         """
         latido = self.construir()
         ahora = time.monotonic()
-        cambio = self._ultimo_enlace is not None and latido.enlace_ok != self._ultimo_enlace
-        if ahora - self._ultimo_latido >= self._settings.latido_intervalo_s or cambio:
+        cambio_enlace = self._ultimo_enlace is not None and latido.enlace_ok != self._ultimo_enlace
+        cambio_pendientes = (
+            self._ultimo_pendientes is not None
+            and latido.pendientes_sincronizar != self._ultimo_pendientes
+        )
+        if (
+            ahora - self._ultimo_latido >= self._settings.latido_intervalo_s
+            or cambio_enlace
+            or cambio_pendientes
+        ):
             self.publicar(latido)
             self._ultimo_latido = ahora
             if latido.enlace_ok:
@@ -160,6 +174,7 @@ class Heartbeat:
                 # en la cola (por ejemplo, los avisos por radio).
                 self._vaciar_cola()
         self._ultimo_enlace = latido.enlace_ok
+        self._ultimo_pendientes = latido.pendientes_sincronizar
 
     def ejecutar(self, parar: threading.Event | None = None) -> None:
         """Bucle principal: publica de inmediato y luego cada intervalo."""

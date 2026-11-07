@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import threading
 import time
@@ -14,11 +15,13 @@ from sqlalchemy.engine import Engine
 
 from analisis.catalogo import CatalogoManuales
 from analisis.estado import EstadoBombas
+from analisis.llm import crear_modelo
 from analisis.servicio import RecuperadorDiferido, ServicioAnalisis
 from config import Settings
 from db.repositorio import Repositorio
 from db.session import crear_engine
 from deteccion.sensores import DetectorSensores
+from modelos_lista import LISTA_CERRADA
 from planta.almacenamiento import Almacenamiento
 from planta.cola import publicar_pendientes
 from planta.heartbeat import Heartbeat
@@ -29,6 +32,7 @@ from planta.servicio import ServicioParteVoz
 from planta.transcriber import crear_transcriptor
 from rag.corpus import CorpusPlanta
 from tools.cliente import ClientePlanta as ClienteApi
+from verificacion_modelos import verificar as verificar_modelos
 
 logger = logging.getLogger("planta.main")
 
@@ -76,6 +80,24 @@ def cargar_catalogo(cliente: ClienteApi, planta: dict[str, Any]) -> CatalogoManu
     return catalogo
 
 
+def _bajar_prioridad_cpu() -> int:
+    """Baja la prioridad de CPU del hilo actual (solo en Unix).
+
+    El índice del manual se arma en segundo plano: son 700 fragmentos que
+    pasar por el embedder y puede tardar un minuto. Con la misma prioridad que
+    la transcripción, el indexado le roba la CPU al ASR y cada nota se
+    transcribe veinte veces más lento. Es un trabajo de fondo: la planta
+    primero.
+    """
+    ajustar = getattr(os, "nice", None)
+    if ajustar is None:  # pragma: no cover - Windows
+        return 0
+    try:
+        return int(ajustar(10))
+    except OSError:  # pragma: no cover - sin permisos para bajar prioridad
+        return 0
+
+
 def _cargar_recuperador(
     recuperador: RecuperadorDiferido,
     cliente: ClienteApi,
@@ -90,6 +112,8 @@ def _cargar_recuperador(
     try:
         from rag.retriever import crear_recuperador
 
+        prioridad = _bajar_prioridad_cpu()
+        logger.info("Indexando el manual en segundo plano (prioridad CPU %s)", prioridad)
         recuperador.definir(
             crear_recuperador(cliente, settings=settings, engine=engine)
         )
@@ -146,12 +170,44 @@ def _orden_recuperada(
     )
 
 
+def _verificar_lista_cerrada(settings: Settings) -> None:
+    """Deja escrito, al arrancar, qué modelos se están usando.
+
+    La restricción 04 pide que los modelos sean los de la lista cerrada, con
+    la versión y la configuración fijadas. Esto no puede tumbar el sistema:
+    si algo no está, la planta sigue funcionando y el incumplimiento queda
+    en el log.
+    """
+    try:
+        resultados = verificar_modelos(settings)
+    except Exception:  # noqa: BLE001 - la verificación no puede impedir el arranque
+        logger.warning("No se pudo verificar la lista cerrada de modelos", exc_info=True)
+        return
+    fuera = [resultado for resultado in resultados if resultado.estado == "fuera-de-lista"]
+    if fuera:
+        logger.error(
+            "Hay %s modelo(s) fuera de la lista cerrada: %s",
+            len(fuera),
+            ", ".join(f"{r.clave}={r.detalle}" for r in fuera),
+        )
+    logger.info(
+        "Modelos en uso (lista cerrada de %s modelos):\n%s",
+        len(LISTA_CERRADA),
+        "\n".join(
+            f"  {modelo.clave}: {modelo.nombre} ({modelo.motor})"
+            for modelo in LISTA_CERRADA
+        ),
+    )
+
+
 def main() -> None:
     settings = Settings()
     logging.basicConfig(
         level=settings.log_level.upper(),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+
+    _verificar_lista_cerrada(settings)
 
     planta = cargar_planta(settings)
 
@@ -182,13 +238,19 @@ def main() -> None:
         catalogo = CatalogoManuales.desde_documentos([])
     estado_bombas = EstadoBombas(settings.planta_api_url)
     recuperador = RecuperadorDiferido()
+    # El modelo de lenguaje local es un auxiliar de redacción. Si no está
+    # activo o no responde, el sistema sigue con el texto determinista.
+    modelo = crear_modelo(settings)
     analisis = ServicioAnalisis(
         catalogo,
         estado=estado_bombas,
         cliente=cliente_api,
         recuperador=recuperador,
         planta=planta,
+        modelo=modelo,
     )
+    if modelo is not None:
+        logger.info("Modelo local de redacción activo: %s", modelo.nombre)
     hilo_rag = threading.Thread(
         target=_cargar_recuperador,
         args=(recuperador, cliente_api, settings, engine),
@@ -221,8 +283,11 @@ def main() -> None:
             cliente_ref["cliente"].publicar_evento(evento)
             logger.warning("Evento de sensor publicado: %s", evento.id)
             # Una alarma de sensor también abre una orden: el manual dice qué
-            # hacer con esa desviación.
-            referencia["servicio"].generar_orden(evento)
+            # hacer con esa desviación. La orden se arma en la cola del
+            # servicio, no en el callback: el loop de MQTT es uno solo y no
+            # puede quedarse esperando un análisis mientras la planta le
+            # manda notas de voz.
+            referencia["servicio"].encolar_orden_por_evento(evento)
 
     def al_conectar() -> None:
         """Al conectar (o al volver de un corte) se recupera lo pendiente.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -159,3 +160,70 @@ def test_la_cola_se_vacia_cuando_el_enlace_vuelve() -> None:
     heartbeat._vuelta()
 
     assert vaciadas == [1]
+
+
+class _MqttFalso:
+    """Cliente MQTT mínimo: guarda lo que se publica."""
+
+    def __init__(self) -> None:
+        self.publicados: list[dict] = []
+
+    def publish(self, topico: str, payload: str, qos: int = 0, retain: bool = False):
+        self.publicados.append(json.loads(payload))
+        return SimpleNamespace(rc=0)
+
+
+def test_el_latido_avisa_cuando_cambian_los_pendientes() -> None:
+    """Si se encola algo con el enlace caído, el pendiente tiene que verse.
+
+    El latido sale cada 30 s, pero lo que reporta puede cambiar en cualquier
+    momento: un aviso por radio que queda en cola con el enlace caído es
+    información que el supervisor necesita ya, no en el próximo latido.
+    """
+    mqtt_falso = _MqttFalso()
+    pendientes = {"valor": 0}
+
+    heartbeat = Heartbeat(
+        _settings(latido_intervalo_s=300),
+        engine=object(),
+        mqtt_client=mqtt_falso,
+        comprobar_enlace_fn=lambda: False,
+        contar_pendientes_fn=lambda _engine: pendientes["valor"],
+    )
+
+    heartbeat._vuelta()
+    assert len(mqtt_falso.publicados) == 1
+
+    # Nada cambió: no se publica otro latido (aun con el intervalo largo).
+    heartbeat._vuelta()
+    assert len(mqtt_falso.publicados) == 1
+
+    # Se encola un aviso por radio: el pendiente se ve enseguida.
+    pendientes["valor"] = 1
+    heartbeat._vuelta()
+
+    assert len(mqtt_falso.publicados) == 2
+    assert mqtt_falso.publicados[-1]["pendientes_sincronizar"] == 1
+    assert mqtt_falso.publicados[-1]["enlace_ok"] is False
+
+
+def test_el_latido_avisa_cuando_se_vacia_la_cola() -> None:
+    """Cuando la cola se vacía, el latido lo dice."""
+    mqtt_falso = _MqttFalso()
+    pendientes = {"valor": 1}
+
+    heartbeat = Heartbeat(
+        _settings(latido_intervalo_s=300),
+        engine=object(),
+        mqtt_client=mqtt_falso,
+        comprobar_enlace_fn=lambda: True,
+        contar_pendientes_fn=lambda _engine: pendientes["valor"],
+        vaciar_cola_fn=lambda: pendientes.__setitem__("valor", 0) or 1,
+    )
+
+    heartbeat._vuelta()
+    assert mqtt_falso.publicados[-1]["pendientes_sincronizar"] == 1
+
+    heartbeat._vuelta()
+    assert len(mqtt_falso.publicados) == 2
+    assert mqtt_falso.publicados[-1]["pendientes_sincronizar"] == 0

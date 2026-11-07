@@ -125,15 +125,28 @@ planta/recorridas
 
 ### Transcripción
 
-- Motor: `faster-whisper`, modelo `small` como **placeholder** hasta confirmar
-  la lista cerrada de modelos del curso.
+- Motor: `faster-whisper`, modelo `base` — el de la **lista cerrada de modelos**
+  del curso (`faster-whisper-base`), con la configuración fijada: CPU, `int8`,
+  2 hilos y sólo local.
 - El motor está detrás de un protocolo (`Transcriber`), configurable por
-  `ASR_MOTOR` y `ASR_MODELO`.
+  `ASR_MOTOR` y `ASR_MODELO`, pero el modelo tiene que ser el de la lista: el
+  verificador lo comprueba al arrancar.
 - El `Dockerfile` descarga el modelo en `/modelos` durante la build.
 - Se fija `av>=11,<16` porque `faster-whisper` 1.2.x usa
   `av.open(metadata_errors=...)`, eliminado en `av` 16.
 - La salida del ASR trae números en dígitos y sin puntuación; el extractor
   separa mediciones pegadas (`... de descarga la uno ...`).
+- **La transcripción va en su propio hilo** (`transcripcion`). Decodificar el
+  audio es la parte lenta de la nota: si se hiciera en el hilo de la planta,
+  el sistema dejaría de atender las respuestas del operador y los eventos del
+  sensor mientras decodifica. La cola del ASR es FIFO y hay un solo hilo, así
+  que el orden de las notas no cambia.
+- **El indexado del RAG no puede competir con el ASR.** El runtime de ONNX abre
+  un hilo por núcleo si no se le dice otra cosa y, sobre la cuota de 2 CPU de
+  la planta, el indexado de los 704 fragmentos del manual le robaba la CPU al
+  ASR: cada transcripción pasaba de 1,5 s a 35-46 s y la planta perdía horas
+  de tiempo simulado. Por eso el embedder se crea con `RAG_HILOS=1` y el hilo
+  del RAG arranca con la prioridad de CPU bajada.
 
 ### Extracción y unidades
 
@@ -146,10 +159,21 @@ planta/recorridas
 
 ### Ambigüedades y tablet
 
-- “la bomba” o “el filtro” sin número generan una pregunta con opciones.
+- "la bomba" o "el filtro" sin número generan una pregunta con opciones. La
+  mención genérica **sin artículo** ("también bomba está en 1600 psi") también
+  es ambigua: el ASR a veces se come el artículo.
 - Si hay ambigüedad, el borrador se envía después de la respuesta.
-- La tablet interpreta “confirmo”, correcciones de valor, unidad o equipo, y
+- La tablet interpreta "confirmo", correcciones de valor, unidad o equipo, y
   correcciones por falta o sobra.
+- **La corrección se aplica a la lectura que el operador está corrigiendo**, no
+  a la última del equipo: se busca por variable, después por unidad. Al mover
+  una lectura a otro equipo, el valor se convierte a la unidad con la que se
+  guarda en ese equipo (1600 psi que pasa a una bomba en kg/cm² son 112,5
+  kg/cm², no "1600 kg/cm²").
+- "Lo de la uno no lo dije" saca **una** lectura, no todas las del equipo.
+- La conversación **no es infinita**: con `PARTE_MAX_CORRECCIONES=5` (por
+  defecto) la nota que no converge queda en estado `revision_humana`, con el
+  último borrador a la vista, y no se manda otro.
 - Los estados de la conversación se persisten en PostgreSQL
   (`pregunta → borrador → confirmada`).
 
@@ -199,6 +223,10 @@ retain) un mensaje validado con Pydantic:
   reporta `true` y se registra una advertencia.
 - `pendientes_sincronizar` cuenta `outbox_cola` con estado `pendiente`; si la
   tabla todavía no existe (antes de las migraciones) se reporta `0`.
+- El latido sale cada 30 s **y además de inmediato cuando cambia lo que
+  reporta**: el estado del enlace (el operador tiene que saber que se cortó el
+  radioenlace sin esperar) o la cantidad de pendientes (si con el enlace caído
+  se encoló un aviso por radio, ese pendiente tiene que verse).
 
 ## Detección de sensores y seguridad
 
@@ -345,10 +373,18 @@ Las principales están documentadas en `.env.example`:
 | `MQTT_HOST` / `MQTT_PORT` | `broker` / `1883` | planta |
 | `PLANTA_API_URL` | `http://sim:8100` | API de la planta |
 | `ASR_MOTOR` | `faster-whisper` | motor de transcripción |
-| `ASR_MODELO` | `small` | modelo local |
+| `ASR_MODELO` | `base` | modelo local (lista cerrada: `faster-whisper-base`) |
 | `ASR_LOCAL_ONLY` | `true` | sin descargas en runtime |
 | `ASR_DOWNLOAD_ROOT` | `/modelos` | caché del modelo |
 | `ASR_HILOS_CPU` | `2` | hilos de CPU |
+| `LLM_ACTIVO` | `true` | activa el modelo local de redacción |
+| `OLLAMA_URL` | `http://host.docker.internal:11434` | servidor Ollama en el host de planta |
+| `OLLAMA_PROXY` | `http://enlace:3128` | proxy de la llamada (vacío = directo) |
+| `OLLAMA_MODELO` | `qwen2.5:3b-instruct` | modelo local (lista cerrada) |
+| `OLLAMA_NUM_CTX` | `2048` | contexto (con 8 GB no entra más) |
+| `OLLAMA_NUM_THREAD` | `2` | hilos de CPU |
+| `OLLAMA_TIMEOUT_S` | `90` | timeout de la llamada |
+| `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga al terminar |
 | `DATOS_DIR` | `/datos` | audios y fotos |
 | `PARTE_MAX_INTENTOS` | `3` | reintentos de tablet |
 | `MCP_TRANSPORTE` | `streamable-http` | transporte del servidor MCP |
@@ -359,6 +395,7 @@ Las principales están documentadas en `.env.example`:
 | `RAG_MODELO` | `paraphrase-multilingual-MiniLM-L12-v2` | modelo local de embeddings |
 | `RAG_CACHE_DIR` | `/modelos/rag` | caché del modelo de embeddings |
 | `RAG_PESO_LEXICO` | `0.8` | peso de BM25 en el ranking híbrido |
+| `RAG_HILOS` | `1` | hilos del embedder ONNX (no abrir un hilo por núcleo) |
 | `RAG_MEMORIA_DIAS` | `90` | retención de la conversación de tablet |
 
 ## Estructura
@@ -383,8 +420,12 @@ Las principales están documentadas en `.env.example`:
 │       ├── 0002_nota_externa.py
 │       ├── 0003_cola_outbox.py
 │       └── 0004_rag_pgvector.py
+├── scripts/
+│   └── verificar_modelos.py
 ├── src/
 │   ├── config.py
+│   ├── modelos_lista.py
+│   ├── verificacion_modelos.py
 │   ├── analisis/
 │   │   ├── aprobacion.py
 │   │   ├── catalogo.py
@@ -392,8 +433,10 @@ Las principales están documentadas en `.env.example`:
 │   │   ├── evidencia.py
 │   │   ├── fallas.py
 │   │   ├── historial.py
+│   │   ├── llm.py
 │   │   ├── modelos.py
 │   │   ├── orden.py
+│   │   ├── redaccion.py
 │   │   ├── servicio.py
 │   │   └── sintomas.py
 │   ├── db/
@@ -453,8 +496,8 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **232 passed** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose. Sin base quedan **224 passed, 8 skipped** (los de
+Resultado actual: **286 passed** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose. Sin base quedan **273 passed, 13 skipped** (los de
 idempotencia/constraints y los del índice RAG), porque necesitan la base
 levantada.
 
@@ -476,4 +519,71 @@ Endpoints probados desde el contenedor `pia3-sistema`:
 `/api/verdad` es solo de desarrollo: producción nunca debe depender de ella (el
 corrector responde `403`).
 
-Pendiente del material del curso: la **lista cerrada de modelos**.
+## Modelos: la lista cerrada (restricción 04)
+
+> «Modelos. Solo los de la lista cerrada que publicamos. Incluye modelos de
+> transcripción y de lenguaje que entran en la PC de planta, y modelos en la
+> nube de NVIDIA con visión. Los modelos locales corren con la versión y la
+> configuración que fijamos.»
+
+La lista vive en un solo lugar: [`src/modelos_lista.py`](src/modelos_lista.py).
+Ni el `.env` ni el código eligen modelos: los comparan contra esa lista.
+
+| Clave | Modelo | Motor | Dónde | Configuración fijada |
+|---|---|---|---|---|
+| `asr` | `faster-whisper-base` | faster-whisper (CTranslate2) | planta | CPU `int8`, 2 hilos, sólo local |
+| `embeddings` | `paraphrase-multilingual-MiniLM-L12-v2` | fastembed (ONNX) | planta | 384 dims, índice pgvector |
+| `llm` | `Qwen2.5-3B-Instruct` | Ollama (llama.cpp) | planta | Q4_K_M, ctx 2048, 2 hilos, `temperature=0`, `keep_alive=0`, timeout 90 s |
+| `vision` | NVIDIA (modelo de nube con visión) | API de NVIDIA | nube | **deshabilitado**: falta el identificador exacto |
+
+### Cómo se comprueba
+
+```bash
+# dentro del contenedor: lista + comprobación del entorno
+docker compose exec sistema python scripts/verificar_modelos.py
+
+# sólo la lista
+docker compose exec sistema python scripts/verificar_modelos.py --tabla
+```
+
+El mismo chequeo corre **al arrancar** del sistema y queda en el log. No puede
+tumbar la planta: si un modelo no está, se informa y el sistema sigue.
+
+### Qué hace el modelo de lenguaje (y qué no)
+
+`Qwen2.5-3B-Instruct` es un **auxiliar de redacción**: escribe la
+justificación técnica de la orden (por qué esas causas, qué evidencia hay) en
+un hilo aparte, después de que la orden ya se publicó. Eso es todo.
+
+- **Las seis reglas de aprobación siguen en código** (`src/analisis/aprobacion.py`).
+  El modelo no aprueba, no rechaza, no elige tareas ni repuestos, no escribe el
+  motivo y no cambia el estado de la orden.
+- **El prompt no lleva el texto libre del operador**: sólo la ficha de la falla
+  del catálogo, las mediciones estructuradas (variable, valor, unidad y
+  sentido del desvío), las tareas del plan, los repuestos y el resultado de las
+  reglas. Por construcción el modelo no puede obedecer lo que dice una nota.
+- **La salida se valida** contra un esquema (`SalidaEstructurada`) y las citas
+  se comprueban contra las citas conocidas: si inventa una, se descarta su
+  respuesta entera.
+- **Si Ollama no está o no responde**, el sistema sigue con el texto
+  determinista. `LLM_ACTIVO=false` lo desactiva por completo.
+- **La llamada sale por el proxy del enlace** (`OLLAMA_PROXY`): en la simulación
+  el contenedor de planta está en redes internas y no tiene ruta directa al
+  host, así que el modelo local no abre un camino nuevo de salida. En la PC de
+  planta real el Ollama corre en `localhost` y el proxy va vacío.
+
+### El modelo de nube con visión
+
+La lista publicada no dice qué modelo de visión es. Mientras tanto queda
+**deshabilitado** y con salida *fail-safe*: el sistema no llama a la nube, no
+hay credenciales en el repositorio y una foto que pueda mostrar daño estructural
+va a **revisión humana** (regla `revision_humana`), nunca a "no hay daño". Cuando
+el curso dé el identificador exacto, se suma a `src/modelos_lista.py` y se
+habilita.
+
+### Memoria de la planta
+
+La planta no tiene GPU: 4 núcleos y 8 GB. Los topes del compose se bajaron
+(`postgres` 1,5 GB, `sistema` 3 GB, `mcp` 0,5 GB) para que entre el pico del
+modelo local (~2,1 GB con ctx 2048), que corre **a demanda**: `keep_alive=0`
+hace que se descargue de memoria en cuanto termina de responder.

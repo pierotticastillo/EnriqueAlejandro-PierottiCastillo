@@ -582,6 +582,77 @@ class Repositorio:
             )
         return True
 
+    def guardar_redaccion_orden(
+        self,
+        orden_id: str,
+        redaccion: str,
+        *,
+        modelo: str | None = None,
+    ) -> bool:
+        """Guarda la justificación técnica escrita por el modelo local.
+
+        Va en la bitácora de la aprobación (``aprobacion.reglas_evaluadas``),
+        junto con las reglas que se evaluaron: es el lugar donde ya se guarda
+        por qué se decidió así. **No** cambia el estado de la orden ni el
+        motivo: la redacción es un agregado, la decisión ya estaba tomada.
+        """
+        if not redaccion.strip():
+            return False
+        with self._engine.begin() as conexion:
+            resultado = conexion.execute(
+                text(
+                    """
+                    UPDATE aprobacion
+                    SET reglas_evaluadas = jsonb_set(
+                        reglas_evaluadas,
+                        '{redaccion}',
+                        jsonb_build_object(
+                            'texto', CAST(:texto AS text),
+                            'modelo', CAST(:modelo AS text),
+                            'redactado_en', now()
+                        ),
+                        true
+                    )
+                    WHERE id = (
+                        SELECT id FROM aprobacion
+                        WHERE orden_id = :orden
+                        ORDER BY creada_en DESC, id DESC
+                        LIMIT 1
+                    )
+                    """
+                ),
+                {
+                    "orden": orden_id,
+                    "texto": redaccion,
+                    "modelo": modelo or "",
+                },
+            )
+        return bool(resultado.rowcount)
+
+    def obtener_redaccion_orden(self, orden_id: str) -> dict[str, Any] | None:
+        """La justificación técnica de la orden, si se redactó."""
+        with self._engine.connect() as conexion:
+            fila = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT reglas_evaluadas -> 'redaccion' AS redaccion
+                        FROM aprobacion
+                        WHERE orden_id = :orden
+                        ORDER BY creada_en DESC, id DESC
+                        LIMIT 1
+                        """
+                    ),
+                    {"orden": orden_id},
+                )
+                .mappings()
+                .first()
+            )
+        if not fila:
+            return None
+        redaccion = fila["redaccion"]
+        return dict(redaccion) if isinstance(redaccion, dict) else None
+
     def obtener_orden(self, orden_id: str) -> dict[str, Any] | None:
         with self._engine.connect() as conexion:
             fila = (

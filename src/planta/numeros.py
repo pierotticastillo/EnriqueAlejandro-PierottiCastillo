@@ -88,6 +88,11 @@ DIGITOS = {
 MARCADORES_DECIMALES = {"coma", "con", "punto"}
 TOKEN = re.compile(r"\d+(?:[.,]\d+)?|[a-z]+")
 
+# El ASR a veces escribe el decimal con un guion: "1-3 de diferencial" por
+# "uno coma tres". Sólo se toma un dígito de cada lado: "1600-1620" es un
+# rango, no un decimal.
+_DECIMAL_CON_GUION = re.compile(r"(?<!\d)(\d)-(\d)(?!\d)")
+
 
 @dataclass(frozen=True)
 class NumeroDicho:
@@ -147,7 +152,7 @@ def _fraccion(tokens: list[str], inicio: int) -> tuple[float | None, int]:
 
 def parsear_numero(texto: str) -> NumeroDicho | None:
     """Devuelve el primer número dicho en ``texto``, o ``None``."""
-    tokens = TOKEN.findall(normalizar(texto))
+    tokens = TOKEN.findall(_DECIMAL_CON_GUION.sub(r"\1,\2", normalizar(texto)))
 
     for i, token in enumerate(tokens):
         if re.fullmatch(r"\d+(?:[.,]\d+)?", token):

@@ -187,6 +187,30 @@ def test_equipo_ambiguo_pregunta_y_deja_fila_pendiente(planta: dict) -> None:
     assert pregunta.opciones == ["la uno", "la dos", "la tres"]
 
 
+def test_el_diferencial_no_se_adjudica_a_una_bomba_ambigua(planta: dict) -> None:
+    """Un diferencial no es de ninguna bomba: no se le cuelga a la ambigua.
+
+    Es el caso de una nota en la que el ASR se comió el nombre del filtro:
+    el diferencial queda sin equipo en vez de quedar adjudicado a una bomba
+    que no lo tiene.
+    """
+    extraccion = ExtractorParte(planta).extraer(
+        "La uno está en 102 kilogramos de descarga. "
+        "También bomba está en 1600 psi de descarga. "
+        "El frito a medio 1,3 de diferencial."
+    )
+    lecturas = [(f.tag, f.variable, f.unidad) for f in extraccion.filas]
+    assert ("B-101", "presion_descarga_local", "kg/cm2") in lecturas
+    # La presión de la bomba ambigua queda pendiente de la pregunta.
+    pendiente = next(f for f in extraccion.filas if f.tag is None)
+    assert pendiente.variable == "presion_descarga_local"
+    # Y el diferencial no aparece adjudicado a ninguna bomba.
+    assert not [f for f in extraccion.filas if f.variable == "presion_diferencial"]
+    assert len(extraccion.preguntas) == 1
+    assert extraccion.preguntas[0].campo == "equipo"
+    assert extraccion.preguntas[0].filas == [extraccion.filas.index(pendiente)]
+
+
 def test_diferencial_dicho_dieciocho_pregunta_y_usa_uno_ocho(planta: dict) -> None:
     extraccion = ExtractorParte(planta).extraer("El filtro B me dio dieciocho de diferencial.")
     assert _filas(extraccion) == [

@@ -78,6 +78,26 @@ class CausaProbable:
 
 
 @dataclass(frozen=True)
+class Medicion:
+    """Una medición estructurada de la evidencia.
+
+    Sólo entra lo que el sistema midió: variable, valor, unidad y el sentido
+    del desvío. **No entra el texto del operador**: la observación escrita en
+    campo es no confiable y no se le muestra a ningún modelo.
+    """
+
+    variable: str
+    valor: float | None = None
+    unidad: str | None = None
+    direccion: str | None = None
+
+    @property
+    def texto(self) -> str:
+        valor = "-" if self.valor is None else f"{self.valor:g}"
+        return f"{self.variable}: {valor} {self.unidad or ''}".strip()
+
+
+@dataclass(frozen=True)
 class RepuestoOrden:
     """Repuesto pedido por la orden, con su costo y si hay stock."""
 
@@ -146,3 +166,5 @@ class Analisis:
     ts: datetime | None = None
     reincidencia: bool = False
     notas: tuple[str, ...] = field(default_factory=tuple)
+    # Mediciones estructuradas de la evidencia (sin texto del operador).
+    mediciones: tuple[Medicion, ...] = ()

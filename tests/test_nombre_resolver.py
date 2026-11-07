@@ -38,6 +38,24 @@ def test_generico_con_numero_no_es_ambiguo(planta: dict) -> None:
     assert mencion.tag == "B-101"
 
 
+def test_generico_sin_articulo_tambien_es_ambiguo(planta: dict) -> None:
+    """El ASR a veces se come el artículo: "también bomba está en 1600"."""
+    resolver = desde_api(planta)
+    mencion = resolver.resolver("ambienta bomba esta en mil seiscientos psi")
+    assert mencion is not None
+    assert mencion.es_ambigua
+    assert mencion.generico == "bomba"
+
+
+def test_filtro_generico_sin_articulo(planta: dict) -> None:
+    resolver = desde_api(planta)
+    mencion = resolver.resolver("filtro me dio uno coma tres de diferencial")
+    assert mencion is not None
+    assert mencion.es_ambigua
+    assert mencion.generico == "filtro"
+    assert set(resolver.candidatos("filtro")) == {"F-201A", "F-201B"}
+
+
 def test_nombre_canonico(planta: dict) -> None:
     resolver = desde_api(planta)
     assert resolver.nombre_canonico("B-101") == "la uno"
