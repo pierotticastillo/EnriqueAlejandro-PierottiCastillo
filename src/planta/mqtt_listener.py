@@ -1,4 +1,4 @@
-"""Listener MQTT de la planta: notas de recorrida y respuestas de tablet."""
+"""Listener MQTT de la planta: notas de recorrida, respuestas de tablet y cierres."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from planta_contrato import (
     EventoSistema,
     LecturaSensor,
     MensajeTablet,
+    NotaCierre,
     NotaRecorrida,
     OrdenSistema,
     RespuestaOperador,
@@ -40,6 +41,7 @@ class ClientePlanta:
         al_nota: Callable[[NotaRecorrida], None],
         al_respuesta: Callable[[RespuestaOperador], None],
         al_sensor: Callable[[LecturaSensor], None],
+        al_cierre: Callable[[NotaCierre], None] | None = None,
         al_conectar: Callable[[], None] | None = None,
         cliente: mqtt.Client | None = None,
         cola: RepositorioCola | None = None,
@@ -48,6 +50,9 @@ class ClientePlanta:
         self._al_nota = al_nota
         self._al_respuesta = al_respuesta
         self._al_sensor = al_sensor
+        # El cierre de orden (Fase 7). Es opcional para que las pruebas que no
+        # lo usan no tengan que saber de él.
+        self._al_cierre = al_cierre
         # El callback del usuario no lleva argumentos; el de paho sí. Se
         # guardan con nombres distintos para que uno no tape al otro.
         self._callback_conectar = al_conectar
@@ -180,10 +185,13 @@ class ClientePlanta:
             [
                 (Topicos.RECORRIDAS, 1),
                 (Topicos.RESPUESTAS, 1),
+                (Topicos.CIERRES, 1),
                 (Topicos.SENSORES.format(tag="+", variable="+"), 1),
             ]
         )
-        logger.info("MQTT conectado; suscripciones de recorridas, respuestas y sensores activas")
+        logger.info(
+            "MQTT conectado; suscripciones de recorridas, respuestas, cierres y sensores activas"
+        )
         if self._callback_conectar is not None:
             # Al conectar (o al reconectar) se recupera lo que quedó en la base:
             # las órdenes pendientes se vuelven a publicar con el mismo id.
@@ -210,6 +218,11 @@ class ClientePlanta:
                 self._al_nota(NotaRecorrida.model_validate_json(crudo))
             elif topico == Topicos.RESPUESTAS:
                 self._al_respuesta(RespuestaOperador.model_validate_json(crudo))
+            elif topico == Topicos.CIERRES:
+                if self._al_cierre is None:
+                    logger.debug("Cierre recibido y nadie lo atiende: %s", topico)
+                    return
+                self._al_cierre(NotaCierre.model_validate_json(crudo))
             elif topico.startswith("planta/sensores/"):
                 lectura = LecturaSensor.model_validate_json(crudo)
                 segmentos = topico.split("/")

@@ -44,6 +44,11 @@ from planta.transcriber import Transcriber
 
 logger = logging.getLogger("planta.servicio")
 
+# Los estados en los que una orden ya no se abre más: se ejecutó, se cerró,
+# se observó o se certificó. Una republicación posterior (por ejemplo, la
+# redacción técnica que llega tarde) no puede rebajar el estado.
+ESTADOS_CERRADOS = {"Ejecutada", "Cerrada", "Observada", "Certificada"}
+
 
 class ServicioParteVoz:
     """Procesa las notas y mantiene la conversación con la tablet."""
@@ -209,6 +214,16 @@ class ServicioParteVoz:
             texto,
             modelo=self._analisis.nombre_modelo,
         )
+        # Una orden que ya se ejecutó o se cerró no se vuelve a abrir: la
+        # redacción llega después y no puede rebajar el estado.
+        actual = self._repo.obtener_orden(orden.id)
+        if actual is not None and str(actual.get("estado")) in ESTADOS_CERRADOS:
+            logger.info(
+                "Orden %s ya está en %s; no se vuelve a publicar",
+                orden.id,
+                actual.get("estado"),
+            )
+            return
         # La orden se vuelve a publicar con el mismo id y el mismo estado: la
         # planta no ve una orden nueva y el id sigue siendo idempotente.
         self._cliente.publicar_orden(orden)

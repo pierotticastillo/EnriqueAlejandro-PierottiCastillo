@@ -71,6 +71,36 @@ class CatalogoManuales:
 
     # ------------------------------------------------------------------ tareas
 
+    def vocabulario_asr(self) -> str:
+        """El vocabulario de la planta, para el ASR local.
+
+        El decodificador de voz escribe lo que oye; si no conoce los nombres
+        de las tareas y de los repuestos de la planta, escribe "Chofitrante"
+        en vez de "filtrante" y el cierre ya no se puede comparar contra la
+        orden. Con estos nombres de referencia, el ASR local acierta.
+
+        Se arma con lo que dice el manual: los nombres de las tareas del plan
+        de mantenimiento y los de los repuestos de la lista de materiales.
+        """
+        tareas: list[str] = []
+        for tarea in self.tareas:
+            nombre = _nombre_corto(tarea.nombre)
+            if nombre and nombre not in tareas:
+                tareas.append(nombre)
+        repuestos: list[str] = []
+        for repuesto in self.repuestos.values():
+            nombre = _nombre_corto(repuesto.nombre)
+            if nombre and nombre not in repuestos:
+                repuestos.append(nombre)
+        partes = [
+            "Cierre de orden de trabajo de la planta de inyección de agua PIA-3.",
+            f"Tareas: {', '.join(tareas)}." if tareas else "",
+            f"Repuestos: {', '.join(repuestos)}." if repuestos else "",
+            "El técnico dice qué hizo, qué repuestos usó, cuántas horas tardó "
+            "y cómo quedó la prueba final.",
+        ]
+        return " ".join(parte for parte in partes if parte)
+
     def tarea_para_equipo(self, codigo: str, equipo: str) -> TareaCatalogo | None:
         """La tarea del código que aplica al equipo (T-F-CAR tiene dos variantes)."""
         for tarea in self.tareas:
@@ -215,6 +245,20 @@ def _codigos_procedimiento(texto: str | None) -> tuple[str, ...]:
     if not texto:
         return ()
     return tuple(_CODIGO_PROCEDIMIENTO.findall(texto))
+
+
+def _nombre_corto(nombre: str | None) -> str:
+    """El nombre del manual, sin el agregado entre paréntesis.
+
+    "kit de empaquetadura TX-350 (3 émbolos)" → "kit de empaquetadura TX-350":
+    en campo el técnico no dice cuántos émbolos tiene el kit. Y sin la unidad
+    "µm": el ASR la confunde con el final de un decimal ("fueron tres µm").
+    """
+    if not nombre:
+        return ""
+    texto = nombre.split(" (", 1)[0].strip()
+    texto = texto.replace("µm", "").replace("µ", "")
+    return " ".join(texto.split())
 
 
 def _prefijo_procedimiento(texto: str | None) -> str:

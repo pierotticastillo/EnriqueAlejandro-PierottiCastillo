@@ -1,4 +1,4 @@
-"""Arranque del sistema PIA-3: latido + parte por voz + análisis y órdenes."""
+"""Arranque del sistema PIA-3: latido + parte por voz + análisis, órdenes y cierre."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from db.session import crear_engine
 from deteccion.sensores import DetectorSensores
 from modelos_lista import LISTA_CERRADA
 from planta.almacenamiento import Almacenamiento
+from planta.cierre import ServicioCierre
 from planta.cola import DrenadorCola
 from planta.heartbeat import Heartbeat, comprobar_enlace
 from planta.heartbeat import crear_cliente as crear_cliente_latido
@@ -33,6 +34,8 @@ from planta.servicio import ServicioParteVoz
 from planta.transcriber import crear_transcriptor
 from rag.corpus import CorpusPlanta
 from tools.cliente import ClientePlanta as ClienteApi
+from tools.manuales import CorpusManuales
+from tools.precios import ListaPrecios, precios_contrato
 from verificacion_modelos import verificar as verificar_modelos
 
 logger = logging.getLogger("planta.main")
@@ -219,12 +222,20 @@ def main() -> None:
         timeout_s=settings.historial_timeout_s,
     )
     almacenamiento = Almacenamiento(settings.datos_dir, settings.planta_api_url)
+    # El vocabulario del ASR (los nombres de las tareas y de los repuestos de
+    # la planta) se pide al transcribir: para entonces el catálogo ya está
+    # cargado. Sin esto, el ASR escribe los nombres de la planta como los oye
+    # ("Chofitrante") y el cierre no se puede comparar contra la orden.
+    catalogo_ref: dict[str, CatalogoManuales] = {}
     transcriptor = crear_transcriptor(
         settings.asr_motor,
         settings.asr_modelo,
         descarga_local=settings.asr_local_only,
         directorio_descarga=settings.asr_download_root,
         hilos_cpu=settings.asr_hilos_cpu,
+        vocabulario=lambda: (
+            catalogo_ref["catalogo"].vocabulario_asr() if "catalogo" in catalogo_ref else ""
+        ),
     )
 
     # ------------------------------------------------- análisis y órdenes (Fase 5)
@@ -237,6 +248,18 @@ def main() -> None:
     except Exception:  # noqa: BLE001 - sin catálogo no hay análisis, pero la planta sigue
         logger.exception("No se pudo cargar el catálogo de manuales")
         catalogo = CatalogoManuales.desde_documentos([])
+    catalogo_ref["catalogo"] = catalogo
+    # La lista de precios del contrato (CT-SVP-2025 §2.1). El monto del
+    # habilita sale de la orden y de esta lista, nunca de lo que declara el
+    # cierre de la contratista (§3.2).
+    try:
+        precios = ListaPrecios(
+            precios_contrato(cliente_api, corpus=CorpusManuales(cliente_api))
+        )
+    except Exception:  # noqa: BLE001 - sin precios no se certifica, pero la planta sigue
+        logger.exception("No se pudo cargar la lista de precios del contrato")
+        precios = ListaPrecios()
+    logger.info("Lista de precios del contrato: %s ítem(s)", len(precios))
     estado_bombas = EstadoBombas(settings.planta_api_url)
     recuperador = RecuperadorDiferido()
     # El modelo de lenguaje local es un auxiliar de redacción. Si no está
@@ -295,6 +318,15 @@ def main() -> None:
             # manda notas de voz.
             referencia["servicio"].encolar_orden_por_evento(evento)
 
+    def al_cierre(nota) -> None:
+        """Cierre de orden por voz (Fase 7).
+
+        Va por la cola del servicio de cierre: el loop de MQTT es uno solo y
+        no puede quedarse transcribiendo el audio mientras la planta manda
+        notas de voz.
+        """
+        referencia["cierre"].encolar_cierre(nota)
+
     def al_conectar() -> None:
         """Al conectar (o al volver de un corte) se recupera lo pendiente.
 
@@ -323,6 +355,7 @@ def main() -> None:
         al_nota=al_nota,
         al_respuesta=al_respuesta,
         al_sensor=al_sensor,
+        al_cierre=al_cierre,
         al_conectar=al_conectar,
         cola=repositorio,
     )
@@ -347,6 +380,18 @@ def main() -> None:
         vision=vision,
     )
     referencia["servicio"] = servicio
+    # Cierre de órdenes por voz (Fase 7): el técnico cierra la orden hablando
+    # y el sistema decide, contra la orden, si queda cerrada, observada o
+    # certificada.
+    servicio_cierre = ServicioCierre(
+        repositorio,
+        almacenamiento,
+        transcriptor,
+        cliente,
+        catalogo,
+        precios,
+    )
+    referencia["cierre"] = servicio_cierre
 
     parar = threading.Event()
 
@@ -395,6 +440,7 @@ def main() -> None:
     hilo_latido.start()
     hilo_cola.start()
     servicio.iniciar()
+    servicio_cierre.iniciar()
     cliente.iniciar()
 
     logger.info("PIA-3 en marcha")
@@ -402,6 +448,7 @@ def main() -> None:
 
     logger.info("Deteniendo PIA-3")
     servicio.detener()
+    servicio_cierre.detener()
     cliente.detener()
     historiador.cerrar()
     estado_bombas.cerrar()

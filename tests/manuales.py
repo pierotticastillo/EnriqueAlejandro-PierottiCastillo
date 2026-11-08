@@ -248,6 +248,45 @@ Repuestos | TX-EMP-KIT (1 kit)
 }
 
 
+# El contrato de servicios con la contratista: la lista de precios (§2.1) y
+# las reglas de certificación (§3). El monto del habilita sale de acá.
+CT_SVP_2025 = {
+    "tipo": "contrato",
+    "titulo": "Contrato de servicios de mantenimiento CT-SVP-2025",
+    "equipos": ("B-101", "B-102", "B-103", "F-201A", "F-201B"),
+    "secciones": {
+        "1.4": (
+            "Repuestos",
+            """1.4 Repuestos
+Los repuestos los provee la operadora desde sus almacenes y no integran el precio del servicio. Si la contratista provee un repuesto con autorización escrita del planificador, se reconoce a costo de la lista de materiales de la operadora más 10 %. Un repuesto provisto sin autorización no se paga.""",
+        ),
+        "2.1": (
+            "Precios vigentes 2025-2026",
+            """2.1 Precios vigentes 2025-2026
+Precios en dólares estadounidenses, sin IVA. Se facturan en pesos al tipo de cambio del día anterior a la factura.
+Ítem | Descripción | Unidad | Precio | Horas incluidas
+SVP-01 | Cambio de rodamientos del cigüeñal TX-350 (T-B-ROD) | precio cerrado | USD 1.150 | 16
+SVP-02 | Alineación láser de acople y cambio de elastómero (T-B-ALI) | precio cerrado | USD 780 | 5
+SVP-03 | Análisis de vibraciones con colector (I-VIB) | por equipo medido | USD 320 | 1
+SVP-04 | Hora de técnico mecánico | hora | USD 68 | -
+SVP-05 | Hora de ayudante | hora | USD 45 | -
+SVP-06 | Movilización a planta (solo trabajos por hora) | por intervención | USD 180 | -
+SVP-07 | Guardia de emergencia fuera de horario | por llamada | USD 350 | -""",
+        ),
+        "3.2": (
+            "Cálculo del monto",
+            """3.2 Cálculo del monto
+Tomar las tareas de la orden y su ítem en la lista de precios vigente a la fecha de inicio.
+Para precios cerrados, el precio del ítem. Para ítems por equipo, el precio por la cantidad de equipos de la orden.
+Para ítems por hora, las horas del registro de ingreso o las declaradas, la menor.
+Sumar los repuestos provistos por la contratista con autorización (costo + 10 %).
+No sumar lo declarado que no está en la orden.
+El monto del habilita sale de la orden y de la lista de precios, no de lo que declara el cierre.""",
+        ),
+    },
+}
+
+
 def _documento(clave: str, datos: dict) -> DocumentoRag:
     chunks = tuple(
         ChunkRag(
@@ -273,7 +312,12 @@ def _documento(clave: str, datos: dict) -> DocumentoRag:
 
 def documentos(*, con_revision_vencida: bool = False) -> list[DocumentoRag]:
     """Los documentos del recorte, como los devuelve la API de la planta."""
-    documentos = [_documento("MBP-4", MBP_4), _documento("TX350-D", TX350_D), _documento("FC48-3", FC48_3)]
+    documentos = [
+        _documento("MBP-4", MBP_4),
+        _documento("TX350-D", TX350_D),
+        _documento("FC48-3", FC48_3),
+        _documento("CT-SVP-2025", CT_SVP_2025),
+    ]
     if con_revision_vencida:
         documentos.append(_documento("TX350-C", TX350_C))
     return documentos

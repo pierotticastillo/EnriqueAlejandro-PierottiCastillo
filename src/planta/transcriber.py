@@ -9,6 +9,8 @@ el sistema sigue funcionando con una transcripción vacía y lo deja en el log.
 from __future__ import annotations
 
 import logging
+import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -45,6 +47,7 @@ class FasterWhisperTranscriber:
         hilos_cpu: int = 2,
         descarga_local: bool = False,
         directorio_descarga: str | None = None,
+        vocabulario: Callable[[], str] | None = None,
     ) -> None:
         self._modelo = modelo
         self._dispositivo = dispositivo
@@ -53,7 +56,15 @@ class FasterWhisperTranscriber:
         self._hilos_cpu = hilos_cpu
         self._descarga_local = descarga_local
         self._directorio_descarga = directorio_descarga
+        # El vocabulario de la planta (tareas y repuestos del catálogo) se le
+        # pasa al decodificador: sin él, el ASR escribe "Chofitrante" y no se
+        # puede comparar el cierre contra la orden.
+        self._vocabulario = vocabulario
         self._instancia = None
+        # El motor se usa desde dos hilos (las notas y los cierres de orden).
+        # CTranslate2 no garantiza que dos inferencias al mismo tiempo sobre
+        # la misma instancia sean seguras: se turnan.
+        self._candado = threading.Lock()
 
     def _cargar(self):
         if self._instancia is not None:
@@ -83,18 +94,36 @@ class FasterWhisperTranscriber:
 
     def transcribir(self, ruta: Path) -> str:
         modelo = self._cargar()
-        segmentos, _info = modelo.transcribe(
-            str(ruta),
-            language=self._idioma,
-            beam_size=5,
-            vad_filter=True,
-            condition_on_previous_text=False,
-            without_timestamps=True,
-            temperature=0.0,
-        )
-        texto = " ".join(segmento.text.strip() for segmento in segmentos).strip()
+        with self._candado:
+            segmentos, _info = modelo.transcribe(
+                str(ruta),
+                language=self._idioma,
+                beam_size=5,
+                vad_filter=True,
+                condition_on_previous_text=False,
+                without_timestamps=True,
+                temperature=0.0,
+                initial_prompt=self._prompt(),
+            )
+            texto = " ".join(segmento.text.strip() for segmento in segmentos).strip()
         logger.info("Transcripción de %s: %s", ruta.name, texto[:160])
         return texto
+
+    def _prompt(self) -> str | None:
+        """El vocabulario de la planta, si lo hay.
+
+        Se arma al transcribir (y no al construir) porque el catálogo de
+        manuales se carga después que el motor: así el prompt tiene los
+        nombres reales de las tareas y de los repuestos.
+        """
+        if self._vocabulario is None:
+            return None
+        try:
+            prompt = self._vocabulario()
+        except Exception:  # noqa: BLE001 - el prompt es una ayuda, no un requisito
+            logger.exception("No se pudo armar el vocabulario del ASR")
+            return None
+        return prompt or None
 
     def precargar(self) -> None:
         """Descarga/carga el modelo. Se usa en la build para dejarlo cacheado."""
@@ -108,6 +137,7 @@ def crear_transcriptor(
     descarga_local: bool = False,
     directorio_descarga: str | None = None,
     hilos_cpu: int = 2,
+    vocabulario: Callable[[], str] | None = None,
 ) -> Transcriber:
     """Crea el motor configurado; si no se puede, degrada a nulo."""
     if motor in {"ninguno", "nulo", "off", ""}:
@@ -118,6 +148,7 @@ def crear_transcriptor(
             descarga_local=descarga_local,
             directorio_descarga=directorio_descarga,
             hilos_cpu=hilos_cpu,
+            vocabulario=vocabulario,
         )
     logger.warning("Motor de transcripción desconocido %r; se usa el nulo", motor)
     return TranscriberNulo()

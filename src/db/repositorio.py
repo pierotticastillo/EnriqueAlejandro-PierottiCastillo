@@ -10,7 +10,7 @@ from uuid import UUID
 
 from planta_contrato import EventoSistema, MensajeTablet, NotaRecorrida, OrdenSistema
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from planta.parte_extractor import Hallazgo, Pregunta
 
@@ -494,17 +494,21 @@ class Repositorio:
                     """
                     INSERT INTO orden (
                         id, evento_id, equipo, estado, motivo, detencion,
-                        costo_estimado, creada_en, actualizada_en
+                        costo_estimado, ejecutor, reduce_inyeccion,
+                        creada_en, actualizada_en
                     )
                     VALUES (
                         :id, :evento_id, :equipo, CAST(:estado AS estado_orden), :motivo,
-                        :detencion, :costo, now(), now()
+                        :detencion, :costo, :ejecutor, :reduce,
+                        now(), now()
                     )
                     ON CONFLICT (id) DO UPDATE SET
                         estado = EXCLUDED.estado,
                         motivo = EXCLUDED.motivo,
                         detencion = EXCLUDED.detencion,
                         costo_estimado = EXCLUDED.costo_estimado,
+                        ejecutor = EXCLUDED.ejecutor,
+                        reduce_inyeccion = EXCLUDED.reduce_inyeccion,
                         actualizada_en = now()
                     """
                 ),
@@ -516,6 +520,8 @@ class Repositorio:
                     "motivo": orden.motivo,
                     "detencion": orden.detiene_equipo,
                     "costo": costo_usd,
+                    "ejecutor": orden.ejecutor or "propio",
+                    "reduce": orden.reduce_inyeccion,
                 },
             )
             conexion.execute(
@@ -665,6 +671,282 @@ class Repositorio:
                         """
                     ),
                     {"id": orden_id},
+                )
+                .mappings()
+                .first()
+            )
+        return dict(fila) if fila else None
+
+    def obtener_orden_completa(self, orden_id: str) -> dict[str, Any] | None:
+        """La orden con sus tareas y repuestos, tal como se publicó.
+
+        El cierre necesita la orden completa para compararse contra ella y
+        republicarla con el estado nuevo: con el mismo id, las mismas tareas y
+        los mismos repuestos.
+        """
+        with self._engine.connect() as conexion:
+            fila = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT o.id, o.evento_id, o.equipo, o.estado, o.motivo,
+                               o.detencion, o.ejecutor, o.reduce_inyeccion,
+                               o.creada_en, o.actualizada_en,
+                               COALESCE(
+                                   (SELECT json_agg(t.tarea_id ORDER BY t.tarea_id)
+                                    FROM orden_tarea t WHERE t.orden_id = o.id),
+                                   '[]'::json
+                               ) AS tareas,
+                               COALESCE(
+                                   (SELECT json_agg(
+                                       json_build_object(
+                                           'codigo', r.repuesto_id,
+                                           'cantidad', r.cantidad
+                                       ) ORDER BY r.repuesto_id
+                                   )
+                                    FROM orden_repuesto r WHERE r.orden_id = o.id),
+                                   '[]'::json
+                               ) AS repuestos
+                        FROM orden o
+                        WHERE o.id = :id
+                        """
+                    ),
+                    {"id": orden_id},
+                )
+                .mappings()
+                .first()
+            )
+        return dict(fila) if fila else None
+
+    # ------------------------------------------------------------------ cierre
+
+    def registrar_cierre(
+        self,
+        *,
+        cierre_id: str,
+        orden_id: str,
+        estado: str,
+        anio: int,
+        tecnico: str,
+        empresa: str,
+        transcripcion: str,
+        tareas_hechas: list[str],
+        repuestos_usados: list[dict[str, Any]],
+        horas: float | None,
+        prueba_final: str | None,
+        diferencias: list[dict[str, Any]],
+        inspector: str,
+        decision: str | None,
+        motivo: str | None,
+        monto_usd: float | None = None,
+        fuente_monto: str | None = None,
+    ) -> dict[str, Any]:
+        """Guarda el cierre, la certificación y el habilita, y actualiza la orden.
+
+        Todo en una transacción: o queda escrito el cierre con su certificación
+        y el estado nuevo de la orden, o no queda nada.
+
+        Es **idempotente** por el id externo del cierre: la misma nota de
+        cierre puede volver a llegar (o el sistema puede reiniciar) y no se
+        duplica ni el cierre ni la certificación ni el habilita.
+
+        Devuelve el número del habilita y su monto: el número se emite acá,
+        dentro de la transacción, para que no haya dos habilita con el mismo
+        número.
+
+        ``decision`` es ``None`` cuando el cierre no se certifica: el trabajo
+        propio lo cierra el supervisor, sin habilita ni certificación.
+        """
+        if decision is not None and decision not in {"certifica", "observa"}:
+            raise ValueError(f"Decisión de certificación inválida: {decision}")
+        estado_db = _ESTADO_ORDEN_DB.get(estado)
+        if estado_db is None:
+            raise ValueError(f"Estado de orden desconocido: {estado}")
+        with self._engine.begin() as conexion:
+            id_cierre = conexion.execute(
+                text(
+                    """
+                    INSERT INTO cierre (
+                        externa_id, orden_id, tecnico, empresa, transcripcion,
+                        tareas_hechas, repuestos_usados, horas, prueba_final,
+                        diferencias
+                    )
+                    VALUES (
+                        :externa_id, :orden_id, :tecnico, :empresa, :transcripcion,
+                        CAST(:tareas AS jsonb), CAST(:repuestos AS jsonb), :horas,
+                        :prueba_final, CAST(:diferencias AS jsonb)
+                    )
+                    ON CONFLICT (externa_id) DO NOTHING
+                    RETURNING id
+                    """
+                ),
+                {
+                    "externa_id": cierre_id,
+                    "orden_id": orden_id,
+                    "tecnico": tecnico,
+                    "empresa": empresa,
+                    "transcripcion": transcripcion,
+                    "tareas": json.dumps(tareas_hechas, ensure_ascii=False),
+                    "repuestos": json.dumps(repuestos_usados, ensure_ascii=False),
+                    "horas": horas,
+                    "prueba_final": prueba_final,
+                    "diferencias": json.dumps(diferencias, ensure_ascii=False),
+                },
+            ).scalar_one_or_none()
+            nuevo = id_cierre is not None
+            if id_cierre is None:
+                id_cierre = conexion.execute(
+                    text("SELECT id FROM cierre WHERE externa_id = :externa_id"),
+                    {"externa_id": cierre_id},
+                ).scalar_one()
+
+            conexion.execute(
+                text(
+                    """
+                    UPDATE orden
+                    SET estado = CAST(:estado AS estado_orden),
+                        motivo = :motivo,
+                        actualizada_en = now()
+                    WHERE id = :id
+                    """
+                ),
+                {"estado": estado_db, "motivo": motivo, "id": orden_id},
+            )
+
+            conexion.execute(
+                text(
+                    """
+                    INSERT INTO certificacion (
+                        orden_id, cierre_id, inspector, decision, motivo
+                    )
+                    SELECT :orden_id, :cierre_id, :inspector, :decision, :motivo
+                    WHERE CAST(:decision AS text) IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM certificacion WHERE cierre_id = :cierre_id
+                      )
+                    """
+                ),
+                {
+                    "orden_id": orden_id,
+                    "cierre_id": id_cierre,
+                    "inspector": inspector,
+                    "decision": decision,
+                    "motivo": motivo,
+                },
+            )
+
+            habilita: str | None = None
+            monto: float | None = None
+            if decision == "certifica" and monto_usd is not None:
+                existente = conexion.execute(
+                    text(
+                        """
+                        SELECT numero, monto FROM habilitacion
+                        WHERE orden_id = :orden_id
+                        ORDER BY emitida_en LIMIT 1
+                        """
+                    ),
+                    {"orden_id": orden_id},
+                ).mappings().first()
+                if existente is not None:
+                    habilita = str(existente["numero"])
+                    monto = float(existente["monto"])
+                else:
+                    habilita, monto = self._emitir_habilita(
+                        conexion,
+                        orden_id=orden_id,
+                        monto_usd=monto_usd,
+                        anio=anio,
+                        fuente=fuente_monto or "CT-SVP-2025 §2.1",
+                    )
+        return {
+            "cierre_id": str(id_cierre),
+            "nuevo": nuevo,
+            "habilita": habilita,
+            "monto_habilita_usd": monto,
+        }
+
+    def _emitir_habilita(
+        self,
+        conexion: Connection,
+        *,
+        orden_id: str,
+        monto_usd: float,
+        anio: int,
+        fuente: str,
+    ) -> tuple[str, float]:
+        """Emite el habilita con su número HAB-AAAA-NNNN (CT-SVP-2025 §3.4).
+
+        El número es correlativo dentro del año. Si dos cierres llegan juntos,
+        el índice único del número hace que uno reintente con el siguiente.
+        """
+        for intento in range(10):
+            emitidas = conexion.execute(
+                text(
+                    """
+                    SELECT count(*) FROM habilitacion
+                    WHERE numero LIKE :prefijo
+                    """
+                ),
+                {"prefijo": f"HAB-{anio}-%"},
+            ).scalar_one()
+            numero = f"HAB-{anio}-{int(emitidas) + 1 + intento:04d}"
+            insertado = conexion.execute(
+                text(
+                    """
+                    INSERT INTO habilitacion (
+                        orden_id, numero, monto, moneda, fuente_monto
+                    )
+                    VALUES (:orden_id, :numero, :monto, 'USD', :fuente)
+                    ON CONFLICT (numero) DO NOTHING
+                    RETURNING numero
+                    """
+                ),
+                {
+                    "orden_id": orden_id,
+                    "numero": numero,
+                    "monto": monto_usd,
+                    "fuente": fuente,
+                },
+            ).scalar_one_or_none()
+            if insertado is not None:
+                return str(insertado), float(monto_usd)
+        raise RuntimeError("No se pudo emitir el número de habilita")
+
+    def obtener_cierre(self, cierre_id: str) -> dict[str, Any] | None:
+        """El cierre registrado, por su id externo."""
+        with self._engine.connect() as conexion:
+            fila = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT id, externa_id, orden_id, tecnico, empresa,
+                               transcripcion, tareas_hechas, repuestos_usados,
+                               horas, prueba_final, diferencias, creado_en
+                        FROM cierre WHERE externa_id = :externa_id
+                        """
+                    ),
+                    {"externa_id": cierre_id},
+                )
+                .mappings()
+                .first()
+            )
+        return dict(fila) if fila else None
+
+    def obtener_habilitacion(self, orden_id: str) -> dict[str, Any] | None:
+        """El habilita de la orden, si lo tiene."""
+        with self._engine.connect() as conexion:
+            fila = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT id, orden_id, numero, monto, moneda,
+                               fuente_monto, emitida_en
+                        FROM habilitacion WHERE orden_id = :orden_id
+                        ORDER BY emitida_en LIMIT 1
+                        """
+                    ),
+                    {"orden_id": orden_id},
                 )
                 .mappings()
                 .first()
