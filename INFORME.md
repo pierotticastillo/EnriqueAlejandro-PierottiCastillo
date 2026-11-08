@@ -1119,6 +1119,7 @@ corrida guardada:
 | `scripts/probar_mcp.py` | cliente MCP contra el servidor dockerizado: lista las tools y las llama |
 | `scripts/probar_extractor.py` | el extractor con las transcripciones reales de la corrida |
 | `scripts/medir_vision.py` | el modelo de nube con visión sobre fotos reales: tiempo por llamada, tokens de entrada y de salida, y la respuesta efectiva |
+| `scripts/probar_cola.py` | la cola de salida en vivo: encola un radio, un evento y una orden, y comprueba que salen en orden, por su tópico y que llegan a la planta |
 
 Los resultados de la corrida end-to-end sobre la planta simulada se resumen en
 la sección 12.

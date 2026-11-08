@@ -401,6 +401,7 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 | `scripts/analizar_notas.py` | extractor vs. verdad de campo, con el tipo de evento esperado |
 | `scripts/verificar_modelos.py` | lista cerrada de modelos: tabla, configuración y runtime |
 | `scripts/medir_vision.py` | medición del modelo de visión: tiempo, tokens y respuesta efectiva |
+| `scripts/probar_cola.py` | prueba en vivo de la cola de salida: encola un radio, un evento y una orden, y comprueba que salen en orden, por su tópico y que llegan a la planta |
 
 ## Próximos pasos
 
