@@ -385,6 +385,9 @@ Las principales están documentadas en `.env.example`:
 | `OLLAMA_NUM_THREAD` | `2` | hilos de CPU |
 | `OLLAMA_TIMEOUT_S` | `90` | timeout de la llamada |
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga al terminar |
+| `NVIDIA_API_KEY` | (vacío) | clave del modelo de nube con visión; **va en el `.env` local**, que Git ignora |
+| `NVIDIA_MODELO` | (vacío) | identificador exacto del modelo de visión (lo tiene que dar el curso) |
+| `NVIDIA_URL` | `https://integrate.api.nvidia.com/v1` | API de NVIDIA (la llamada sale por el proxy del enlace) |
 | `DATOS_DIR` | `/datos` | audios y fotos |
 | `PARTE_MAX_INTENTOS` | `3` | reintentos de tablet |
 | `MCP_TRANSPORTE` | `streamable-http` | transporte del servidor MCP |
@@ -535,6 +538,20 @@ Ni el `.env` ni el código eligen modelos: los comparan contra esa lista.
 | `embeddings` | `paraphrase-multilingual-MiniLM-L12-v2` | fastembed (ONNX) | planta | 384 dims, índice pgvector |
 | `llm` | `Qwen2.5-3B-Instruct` | Ollama (llama.cpp) | planta | Q4_K_M, ctx 2048, 2 hilos, `temperature=0`, `keep_alive=0`, timeout 90 s |
 | `vision` | NVIDIA (modelo de nube con visión) | API de NVIDIA | nube | **deshabilitado**: falta el identificador exacto |
+
+La clave de NVIDIA ya está **cableada** (`NVIDIA_API_KEY` en el `.env` local,
+que Git ignora, y `NVIDIA_API_KEY` en el entorno del contenedor), pero **no
+habilita nada por sí sola**: la lista publicada no dice qué modelo es, así que
+hasta que el curso dé el identificador y la versión exactos, el modelo sigue
+deshabilitado y con salida *fail-safe*. El verificador lo dice explícito:
+
+| Situación | Qué reporta el verificador |
+|---|---|
+| sin clave y sin modelo | `deshabilitado` (lo normal) |
+| clave puesta, sin identificador | `advertencia`: la clave no se usa hasta saber el modelo |
+| identificador que no está en la lista | `fuera-de-lista`: es un incumplimiento, sale con código 1 |
+
+La clave **nunca** se imprime en el log ni entra en el repositorio.
 
 ### Cómo se comprueba
 

@@ -100,4 +100,13 @@ class Settings(BaseSettings):
     # Con 8 GB de RAM en la planta no puede quedar residente.
     ollama_keep_alive: int = 0
 
+    # Modelo de nube con visión (NVIDIA). La lista publicada del curso no
+    # dice todavía cuál es: queda deshabilitado y con salida fail-safe (las
+    # fotos con posible daño estructural van a revisión humana). La clave se
+    # lee del entorno —archivo `.env`, que Git ignora— y nunca se escribe en
+    # el código ni en el repositorio.
+    nvidia_api_key: str = ""
+    nvidia_modelo: str = ""
+    nvidia_url: str = "https://integrate.api.nvidia.com/v1"
+
     log_level: str = "INFO"

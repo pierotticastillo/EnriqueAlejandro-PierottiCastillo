@@ -101,6 +101,13 @@ El **identificador exacto del modelo de NVIDIA con visión** no está en la
 lista publicada. Es el único punto abierto de la restricción 04: hay que
 pedirlo al curso. Mientras tanto la falla es segura (revisión humana).
 
+La **clave ya está cableada** para cuando ese dato llegue: se lee de
+`NVIDIA_API_KEY` (archivo `.env` local, que Git ignora; en el contenedor, de la
+variable de entorno) y nunca del código. Poner la clave no habilita el modelo:
+el identificador tiene que estar en `src/modelos_lista.py`, y el verificador lo
+comprueba al arrancar (`deshabilitado` / `advertencia` / `fuera-de-lista`). La
+clave no se imprime nunca en el log.
+
 ## Fase 1 — la tablet: que el operador y el sistema se entiendan
 
 Con `faster-whisper-base` el ASR de campo no entrega notas limpias: el texto

@@ -85,9 +85,12 @@ def _settings(**cambios) -> Settings:
         "llm_activo": True,
         "ollama_modelo": "qwen2.5:3b-instruct",
         "ollama_url": "http://ollama:11434",
+        "nvidia_api_key": "",
+        "nvidia_modelo": "",
     }
     base.update(cambios)
-    return Settings(**base)
+    # `_env_file=None`: los tests no dependen del `.env` local de quien los corre.
+    return Settings(_env_file=None, **base)
 
 
 def _estado(resultados, clave: str) -> str:
@@ -159,6 +162,42 @@ def test_un_llm_que_no_es_de_la_lista_se_reporta() -> None:
 def test_sin_llm_activo_el_sistema_no_depende_del_modelo() -> None:
     resultados = verificar_configuracion(_settings(llm_activo=False))
     assert _estado(resultados, CLAVE_LLM) == DESHABILITADO
+
+
+# ------------------------------------------------------- el modelo de visión
+
+
+def test_sin_clave_la_vision_sigue_deshabilitada() -> None:
+    resultados = verificar_configuracion(_settings())
+    assert _estado(resultados, CLAVE_VISION) == DESHABILITADO
+
+
+def test_la_clave_sola_no_habilita_el_modelo() -> None:
+    """Con la clave puesta pero sin identificador, el modelo sigue sin usarse.
+
+    La lista publicada no dice cuál es el modelo de visión: hasta que el curso
+    lo diga, la clave no habilita nada.
+    """
+    resultados = verificar_configuracion(_settings(nvidia_api_key="nvapi-secreto"))
+    assert _estado(resultados, CLAVE_VISION) == ADVERTENCIA
+
+
+def test_un_modelo_de_vision_fuera_de_la_lista_se_reporta() -> None:
+    """Si se configura un modelo de visión, tiene que estar en la lista."""
+    resultados = verificar_configuracion(
+        _settings(nvidia_api_key="nvapi-secreto", nvidia_modelo="nvidia/llama-3.2-90b-vision")
+    )
+    assert _estado(resultados, CLAVE_VISION) == FUERA_DE_LISTA
+
+
+def test_la_clave_de_nvidia_no_aparece_en_el_log() -> None:
+    """La clave no se imprime nunca: sólo se dice si hay o no."""
+    clave = "nvapi-secreto"
+    resultados = verificar_configuracion(
+        _settings(nvidia_api_key=clave, nvidia_modelo="nvidia/llama-3.2-90b-vision")
+    )
+    for resultado in resultados:
+        assert clave not in resultado.detalle
 
 
 # -------------------------------------------------------------- runtime vs lista

@@ -197,6 +197,13 @@ services:
       OLLAMA_TIMEOUT_S: ${OLLAMA_TIMEOUT_S:-90}
       OLLAMA_SEED: ${OLLAMA_SEED:-42}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-0}
+      # Modelo de nube con visión (NVIDIA). Sigue deshabilitado hasta que el
+      # curso indique el identificador exacto del modelo; la clave se lee del
+      # `.env` local (ignorado por Git) y la llamada saldría por el proxy del
+      # enlace, que es la única salida sancionada.
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_MODELO: ${NVIDIA_MODELO:-}
+      NVIDIA_URL: ${NVIDIA_URL:-https://integrate.api.nvidia.com/v1}
       # Directorio de datos para audios y fotos (volumen Docker).
       DATOS_DIR: ${DATOS_DIR:-/datos}
     depends_on:

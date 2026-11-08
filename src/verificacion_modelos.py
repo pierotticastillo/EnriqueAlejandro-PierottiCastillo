@@ -77,14 +77,7 @@ def verificar_configuracion(settings: Settings) -> list[Resultado]:
     resultados.append(
         _configuracion_llm(settings, por_clave(CLAVE_LLM))
     )
-    resultados.append(
-        Resultado(
-            clave=CLAVE_VISION,
-            modelo=por_clave(CLAVE_VISION).nombre,
-            estado=DESHABILITADO,
-            detalle=por_clave(CLAVE_VISION).nota,
-        )
-    )
+    resultados.append(_configuracion_vision(settings))
     return resultados
 
 
@@ -174,6 +167,61 @@ def _configuracion_llm(settings: Settings, modelo: ModeloPermitido) -> Resultado
         detalle=(
             f"{settings.ollama_modelo} · {modelo.cuantizacion} · ctx {settings.ollama_num_ctx} "
             f"· {settings.ollama_num_thread} hilo(s) · timeout {settings.ollama_timeout_s:g} s"
+        ),
+    )
+
+
+def _configuracion_vision(settings: Settings) -> Resultado:
+    """El modelo de nube con visión: qué se	configuró y qué se puede usar.
+
+    La clave **nunca** se imprime: acá sólo se dice si hay una o no.
+
+    Mientras la lista publicada no identifique el modelo, cualquier
+    ``NVIDIA_MODELO`` que se configure está **fuera de la lista cerrada** y
+    queda escrito en el log. Poner la clave no habilita nada por sí solo.
+    """
+    modelo = por_clave(CLAVE_VISION)
+    if not settings.nvidia_modelo:
+        if settings.nvidia_api_key:
+            return Resultado(
+                clave=CLAVE_VISION,
+                modelo=modelo.nombre,
+                estado=ADVERTENCIA,
+                detalle=(
+                    "hay NVIDIA_API_KEY pero no NVIDIA_MODELO: la clave no se usa "
+                    "hasta que el curso indique el identificador exacto del modelo"
+                ),
+            )
+        return Resultado(
+            clave=CLAVE_VISION,
+            modelo=modelo.nombre,
+            estado=DESHABILITADO,
+            detalle=modelo.nota,
+        )
+    if not modelo.coincide(settings.nvidia_modelo):
+        return Resultado(
+            clave=CLAVE_VISION,
+            modelo=modelo.nombre,
+            estado=FUERA_DE_LISTA,
+            detalle=(
+                f"NVIDIA_MODELO={settings.nvidia_modelo!r} no está en la lista "
+                "cerrada: la lista publicada no identifica el modelo de visión"
+            ),
+        )
+    if not modelo.habilitado:
+        return Resultado(
+            clave=CLAVE_VISION,
+            modelo=modelo.nombre,
+            estado=DESHABILITADO,
+            detalle="el modelo de visión está deshabilitado en la lista cerrada",
+        )
+    return Resultado(
+        clave=CLAVE_VISION,
+        modelo=modelo.nombre,
+        estado=OK,
+        detalle=(
+            f"{settings.nvidia_modelo} · API de NVIDIA · "
+            f"clave {'configurada' if settings.nvidia_api_key else 'ausente'}"
         ),
     )
 

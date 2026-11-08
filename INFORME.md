@@ -816,6 +816,20 @@ estructural va a revisión humana (regla `revision_humana`), nunca a "no hay
 daño" inventado. Es el único punto de la restricción 04 que queda pendiente, y
 depende de un dato que sólo tiene el curso.
 
+La clave **ya está cableada** para cuando ese dato llegue: se lee de
+`NVIDIA_API_KEY` (archivo `.env` local, que Git ignora; en el contenedor, de la
+variable de entorno), nunca del código. Poner la clave **no habilita el
+modelo**: el identificador tiene que estar en `src/modelos_lista.py`, y el
+verificador lo comprueba al arrancar y en `scripts/verificar_modelos.py`:
+
+| Situación | Estado que reporta |
+|---|---|
+| sin clave y sin identificador | `deshabilitado` |
+| clave puesta, sin identificador | `advertencia` (la clave no se usa todavía) |
+| identificador que no está en la lista cerrada | `fuera-de-lista` (incumplimiento) |
+
+La clave no se imprime nunca en el log: el verificador sólo dice si hay o no.
+
 #### 9.9 La latencia del ASR y el indexado del RAG
 
 El corrector oficial no corre la planta a velocidad constante: usa un **reloj
@@ -1043,6 +1057,9 @@ Variables principales (ver `.env.example`):
 | `OLLAMA_TIMEOUT_S` | `90` | timeout de la llamada |
 | `OLLAMA_SEED` | `42` | semilla fija (salida reproducible) |
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga de memoria al terminar |
+| `NVIDIA_API_KEY` | (vacío) | clave del modelo de nube con visión; va en el `.env` local, que Git ignora |
+| `NVIDIA_MODELO` | (vacío) | identificador exacto del modelo de visión (lo tiene que dar el curso) |
+| `NVIDIA_URL` | `https://integrate.api.nvidia.com/v1` | API de NVIDIA (la llamada sale por el proxy del enlace) |
 
 ### Volumen `datos`
 
