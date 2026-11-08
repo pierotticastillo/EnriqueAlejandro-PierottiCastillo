@@ -732,18 +732,29 @@ class Repositorio:
 
     # ------------------------------------------------------------------ cola
 
-    def encolar_outbox(self, tipo: str, payload: dict[str, Any]) -> str:
+    def encolar_outbox(
+        self,
+        tipo: str,
+        payload: dict[str, Any],
+        topico: str = "sistema/tablet",
+    ) -> str:
         """Encola un mensaje para publicar cuando vuelva el enlace.
 
-        La idempotencia la da el id del mensaje: si el mismo aviso se encola
-        dos veces no queda duplicado en la cola.
+        La idempotencia la da el id del mensaje: si el mismo aviso, evento u
+        orden se encola dos veces **mientras está pendiente**, no queda
+        duplicado en la cola. Un mensaje que ya salió puede volver a encolarse
+        (si el bus se cae otra vez): lo que importa es que no haya dos copias
+        del mismo mensaje esperando a la vez.
+
+        Además queda escrito en ``idempotency_key``, que es el registro
+        auditable de qué se encoló.
         """
         with self._engine.begin() as conexion:
             id_outbox = conexion.execute(
                 text(
                     """
-                    INSERT INTO outbox_cola (tipo, payload, estado)
-                    VALUES (:tipo, CAST(:payload AS jsonb), 'pendiente')
+                    INSERT INTO outbox_cola (tipo, payload, topico, estado)
+                    VALUES (:tipo, CAST(:payload AS jsonb), :topico, 'pendiente')
                     ON CONFLICT DO NOTHING
                     RETURNING id
                     """
@@ -751,29 +762,60 @@ class Repositorio:
                 {
                     "tipo": tipo,
                     "payload": json.dumps(payload, ensure_ascii=False),
+                    "topico": topico,
                 },
             ).scalar_one_or_none()
             if id_outbox is None:
+                # El mensaje ya estaba en la cola: se devuelve su fila, no se
+                # encola otra vez. Sólo se buscan los pendientes: una fila
+                # ya enviada es historia, no una copia de este mensaje.
                 id_outbox = conexion.execute(
                     text(
                         """
                         SELECT id FROM outbox_cola
-                        WHERE tipo = :tipo AND payload ->> 'id' = :mensaje_id
+                        WHERE tipo = :tipo
+                          AND payload ->> 'id' = :mensaje_id
+                          AND estado = 'pendiente'
                         LIMIT 1
                         """
                     ),
                     {"tipo": tipo, "mensaje_id": payload.get("id", "")},
                 ).scalar_one()
+            else:
+                # El registro de idempotencia deja escrito qué mensaje se
+                # encoló y en qué fila: así no se encola dos veces y se puede
+                # auditar qué salió de la planta.
+                conexion.execute(
+                    text(
+                        """
+                        INSERT INTO idempotency_key (clave, tipo, referencia_id)
+                        VALUES (:clave, :tipo, :referencia)
+                        ON CONFLICT (clave) DO UPDATE
+                        SET referencia_id = EXCLUDED.referencia_id
+                        """
+                    ),
+                    {
+                        "clave": f"outbox:{tipo}:{payload.get('id', '')}",
+                        "tipo": tipo,
+                        "referencia": str(id_outbox),
+                    },
+                )
         return str(id_outbox)
 
-    def pendientes_outbox(self, limite: int = 50) -> list[tuple[str, dict[str, Any]]]:
-        """Mensajes en cola, en el orden en que se encolaron."""
+    def pendientes_outbox(
+        self, limite: int = 50
+    ) -> list[tuple[str, str, str, dict[str, Any]]]:
+        """Mensajes en cola, en el orden en que se encolaron.
+
+        Cada fila trae ``(id, tipo, topico, payload)``: el tipo dice qué
+        contrato hay que validar y el tópico, por dónde sale.
+        """
         with self._engine.connect() as conexion:
             filas = (
                 conexion.execute(
                     text(
                         """
-                        SELECT id, payload
+                        SELECT id, tipo, topico, payload
                         FROM outbox_cola
                         WHERE estado = 'pendiente'
                           AND (proximo_intento IS NULL OR proximo_intento <= now())
@@ -786,7 +828,10 @@ class Repositorio:
                 .mappings()
                 .all()
             )
-        return [(str(fila["id"]), dict(fila["payload"])) for fila in filas]
+        return [
+            (str(fila["id"]), str(fila["tipo"]), str(fila["topico"]), dict(fila["payload"]))
+            for fila in filas
+        ]
 
     def marcar_outbox_enviado(self, id_outbox: str) -> None:
         with self._engine.begin() as conexion:

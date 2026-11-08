@@ -3,9 +3,10 @@
 **Trabajo práctico:** Academia Novit 2026 — planta de inyección de agua PIA‑3
 **Repositorio de la solución:** `EnriqueAlejandro-PierottiCastillo`
 **Planta simulada:** [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
-**Fecha del informe:** 2026-11-07
-**Estado:** Fases 0, 0.5, 1, 2, 3, 4 y 5 implementadas y verificadas; Fase 6
-(operación sin enlace) parcial. Corrector oficial: **91,5/100 — APRUEBA**.
+**Fecha del informe:** 2026-11-08
+**Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5 y 6 implementadas y verificadas; Fase 7
+(cierre y certificación) pendiente. Corrector oficial: **91,5/100 — APRUEBA**
+(reescalado sobre 2 de los 7 escenarios de la rúbrica).
 
 ---
 
@@ -27,9 +28,10 @@ El sistema PIA‑3 corre junto a la planta simulada dentro de la red Docker
 5. el **análisis de anomalías y el borrador de orden**: catálogo de fallas
    leído de los manuales de la planta, causas probables con su evidencia y su
    cita, y las seis reglas de aprobación evaluadas **en código**;
-6. la **operación sin enlace**: lo que no sale queda encolado, el latido
-   muestra de inmediato cuánto hay pendiente, y las órdenes se republican al
-   reconectar con el mismo id y el mismo estado.
+6. la **operación sin enlace**: la cola en PostgreSQL es la salida de la planta
+   (eventos, órdenes y avisos); lo que no sale no se pierde, sale en orden y
+   **por destino** cuando vuelve el enlace, sin duplicar lo pendiente, y el
+   latido muestra de inmediato cuánto hay pendiente.
 
 La transcripción, la detección de seguridad, las tools, el RAG y el análisis son
 locales: el modelo de embeddings corre en el contenedor, sin salir a internet.
@@ -48,7 +50,7 @@ Las decisiones de aprobación no pasan por un LLM.
 | 3 | Tools y MCP | Completa |
 | 4 | RAG, contexto y memoria | Completa y verificada |
 | 5 | Anomalías y borrador de orden | Completa y verificada |
-| 6 | Operación sin enlace y cola | Parcial: cola, pendientes visibles y republicación |
+| 6 | Operación sin enlace y cola | Completa y verificada |
 | 7 | Cierre y certificación | Pendiente |
 
 ### Fase 2 — lo que hay
@@ -222,6 +224,12 @@ pendiente no queda invisible hasta el siguiente latido.
   HNSW.
 - `0002_nota_externa.py`: identidad externa de notas y estado de la
   conversación de tablet.
+- `0003_cola_outbox.py`: orden de salida de la cola (`creado_en`) e índice
+  único por mensaje.
+- `0004_rag_pgvector.py`: índice pgvector del RAG.
+- `0005_outbox_topico.py`: la cola sabe **a qué tópico** va cada mensaje, y el
+  índice único pasa a ser **parcial** (`WHERE estado = 'pendiente'`), para que
+  un mensaje ya enviado pueda volver a encolarse si el bus se cae otra vez.
 
 Cambios principales de `0002`:
 
@@ -1030,7 +1038,7 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **315 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **339 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
 - **273 passed, 13 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
 - `ruff check src tests scripts migrations` sin observaciones.
@@ -1069,6 +1077,18 @@ Cobertura funcional de los tests:
   daño”), la clave no aparece en el log, un modelo fuera de la lista cerrada
   no se llama, y la descripción **no cambia** el estado de la alerta de
   seguridad;
+- **cola de salida**: el aviso encolado queda pendiente, la cola publica en
+  orden y marca enviado, un mensaje que falla queda para reintentar, el evento
+  y la orden salen por su propio tópico, **el radio espera al enlace y los
+  eventos no**, los avisos por radio conservan el orden entre ellos, un
+  mensaje inválido no frena a los demás, el cliente **encola cuando el bus no
+  está** (o cuando el bus rechaza) y el drenador con candado no publica dos
+  veces lo mismo;
+- **cola contra PostgreSQL**: la fila guarda su tópico, el mismo mensaje no se
+  encola dos veces **mientras está pendiente**, queda escrito en
+  `idempotency_key` qué se encoló, los pendientes salen en orden, un mensaje
+  enviado sale de los pendientes y **un mensaje ya enviado puede volver a
+  encolarse** si el bus se cae otra vez;
 - constraints e idempotencia de la base.
 
 ### Verificación end-to-end
@@ -1105,6 +1125,131 @@ la sección 12.
 
 ---
 
+## 10. Fase 6 — operación sin enlace y cola
+
+### Qué tenía y qué tiene
+
+Hasta la Fase 5, la cola (`outbox_cola`) guardaba **sólo el aviso por radio**
+al supervisor de turno: si el radioenlace estaba caído, el aviso no se podía
+mandar y quedaba esperando. Los eventos y las órdenes se publicaban directo
+al bus de la planta: si el bus no estaba, el mensaje se perdía en la memoria
+del cliente MQTT (y con ella, al reiniciar el proceso).
+
+En la Fase 6 la cola es **la salida de la planta**:
+
+| Qué sale | Tópico | ¿Necesita el radioenlace? |
+|----------|---------|----------------------------|
+| Evento del sistema | `sistema/eventos` | no |
+| Orden de trabajo | `sistema/ordenes` | no |
+| Aviso en tablet | `sistema/tablet` | no (la tablet está en la planta) |
+| Aviso por radio al supervisor | `sistema/tablet` | **sí** |
+
+Todo lo que el sistema publica pasa por la cola: si el bus está, el mensaje
+sale en el acto; si no está, queda en PostgreSQL y sale cuando vuelve. **Nada
+se pierde en memoria del proceso.**
+
+### El orden es por destino
+
+Los mensajes salen en el orden en que se encolaron (FIFO), pero **el radio va
+por otro lado**: no puede bloquear a los demás.
+
+- Los **avisos por radio** esperan al enlace y conservan el orden entre ellos:
+  el aviso 2 no puede salir antes que el aviso 1.
+- Los **eventos y las órdenes** salen en cuanto el bus está, sin esperar al
+  radioenlace.
+
+Esto se decide en `publicar_pendientes` (`src/planta/cola.py`): un mensaje de
+tipo `radio` con el enlace caído se salta (sigue en la cola, en su lugar) y
+el drenaje sigue con los siguientes.
+
+Si un mensaje **no se puede publicar**, queda pendiente con espera
+(`proximo_intento`) y se reintenta en la próxima vuelta. El corte se hace en
+el primero que falla, para **no cambiar el orden** de lo que sale.
+
+### Idempotencia: no dos copias esperando, no una copia para siempre
+
+La cola es idempotente por el **id del mensaje** (`payload->>'id'`), con un
+índice único en `outbox_cola(tipo, id)`.
+
+**Un hueco real que se encontró y se corrigió.** El índice era único sobre
+*todas* las filas. Eso impedía **re-encolar un mensaje que ya se había
+enviado**: si el bus se caía una segunda vez, ese mensaje no se podía volver
+a encolar y se perdía. La idempotencia correcta es "no encolar dos veces
+**mientras está pendiente**", no "una vez para siempre".
+
+La migración `0005_outbox_topico.py` deja el índice **parcial**:
+
+```sql
+CREATE UNIQUE INDEX ix_outbox_tipo_mensaje
+ON outbox_cola(tipo, ((payload ->> 'id')))
+WHERE estado = 'pendiente' AND payload ->> 'id' IS NOT NULL;
+```
+
+Cada mensaje vive **una sola vez en la cola a la vez**, pero puede volver a
+encolarse si vuelve a hacer falta. Además, `idempotency_key` deja escrito
+**qué** se encoló y **en qué fila** (`outbox:<tipo>:<id>` → `referencia_id`),
+con `ON CONFLICT DO UPDATE`: es el registro auditable de la salida.
+
+### Cómo se vacía
+
+Dos caminos, ambos con el mismo candado (`DrenadorCola`), para que no se
+publique dos veces lo mismo:
+
+1. **Hilo dedicado** `cola-salida`, cada `COLA_SONDEO_S` segundos (5 s por
+   defecto). Es el camino normal: el bus de la planta y el radioenlace son
+   dos enlaces distintos, y un evento no tiene por qué esperar a que vuelva
+   el radio.
+2. **El latido**, que además avisa en `sistema/estado` el estado del enlace
+   y la cantidad de mensajes pendientes (`pendientes_sincronizar`).
+
+Al **reconectar** el bus también se drena: lo que quedó esperando sale antes
+de que empiece a llegar otra vez.
+
+### Qué corre en la planta y qué en la nube
+
+| Dónde | Qué corre |
+|-------|-----------|
+| **Planta** (contenedor `sistema`) | ASR (`faster-whisper-base`), extracción determinista, detección S1–S4, reglas de aprobación, RAG con embeddings locales (`paraphrase-multilingual-MiniLM-L12-v2`), redacción con el LLM local (`Qwen2.5-3B-Instruct` en Ollama), cola en PostgreSQL, latido y publicación al bus. |
+| **Nube** (por el proxy del enlace) | **sólo** la descripción de la foto con el modelo de visión de NVIDIA. Es un **auxiliar**: describe, no decide ni aprueba. |
+
+El sistema **no depende** de la nube: si el enlace está caído o la clave no
+está, la descripción de la foto queda **indeterminada** y el aviso de
+seguridad sale igual. La salida a la nube es la única que sale del contenedor
+del sistema, y sale por `NVIDIA_PROXY=http://enlace:3128`.
+
+### Verificación en vivo
+
+Todo lo de abajo se comprobó contra el contenedor, no sólo en tests.
+
+1. **Encolado y drenaje.** Se encolaron a mano un aviso de radio, un evento y
+   una orden; el hilo de la cola los publicó **en orden** y por el tópico que
+   corresponde: `sistema/tablet`, `sistema/eventos`, `sistema/ordenes`. Los
+   tres quedaron `estado=enviado`.
+2. **Llegada a la planta.** Con un suscriptor al bus, los tres mensajes
+   llegaron: `sistema/tablet :: prueba-…-radio`,
+   `sistema/eventos :: parte:PRUEBA:…`,
+   `sistema/ordenes :: ORD-PRUEBA-…`.
+3. **Enlace caído.** Se bajó el contenedor del radioenlace. El aviso por radio
+   **siguió en la cola**; el evento y la orden **salieron igual**. Al subir
+   el enlace, el radio salió y quedó `enviado`.
+4. **Sin duplicados.** El mismo mensaje encolado dos veces **mientras está
+   pendiente** devuelve la misma fila (no hay dos copias esperando). Y el
+   mismo mensaje **ya enviado** se puede volver a encolar: la segunda corrida
+   creó una fila nueva, la drenó y las dos constan como `enviado` (una por
+   caída del bus, que es lo correcto: no se duplica **lo pendiente**, no se
+   borra la historia).
+
+### Criterio de salida
+
+> «Simular caída de enlace, generar eventos, restaurar enlace y verificar que
+> no hay duplicados.»
+
+Cumplido: con el enlace caído se generan eventos y órdenes, quedan en la cola
+los que no pueden salir, al restaurar el enlace salen en orden y no hay
+mensajes duplicados (verificado contra PostgreSQL y contra el bus).
+
+---
+
 ## 11. Configuración
 
 Variables principales (ver `.env.example`):
@@ -1121,6 +1266,7 @@ Variables principales (ver `.env.example`):
 | `ENLACE_TIMEOUT_S` | `3` | timeout del chequeo del enlace |
 | `LATIDO_INTERVALO_S` | `30` | período del latido `sistema/estado` |
 | `LATIDO_SONDEO_S` | `5` | cada cuánto se sondea el enlace (para avisar el cambio de estado) |
+| `COLA_SONDEO_S` | `5` | cada cuánto se intenta vaciar la cola de salida (eventos, órdenes y avisos) |
 | `ASR_MOTOR` | `faster-whisper` | motor de transcripción |
 | `ASR_MODELO` | `base` | modelo local (lista cerrada: `faster-whisper-base`) |
 | `ASR_LOCAL_ONLY` | `true` | impide descargas en runtime |
@@ -1344,9 +1490,9 @@ repuestos**.
    cuya firma no aparece literalmente en la evidencia puede quedar sin
    identificar. Cuando eso pasa, la conclusión es una inspección, no una
    intervención.
-10. La operación sin enlace completa (outbox con reintento ordenado para todo
-    lo que no sale) y la certificación de órdenes corresponden a fases
-    posteriores.
+10. La operación sin enlace quedó completa (cola con reintento ordenado para
+    todo lo que no sale, por destino, sin duplicar lo pendiente). Lo que falta
+    es la **certificación de órdenes**, que es la Fase 7.
 11. La calidad del modelo de visión **no se pudo medir con fotos reales**: las
     fotos del simulador son *placeholders* (un rectángulo, un círculo y un
     texto). Lo que sí quedó medido es el tráfico, el formato de la salida, el
@@ -1362,10 +1508,9 @@ repuestos**.
 2. Medir la calidad del modelo de visión con **fotos de campo reales**, que es
    lo que falta para poder afirmar algo sobre su criterio y no sólo sobre su
    disponibilidad y su costo.
-3. Completar la cola/outbox y la operación sin enlace (Fase 6): las órdenes que
-   no salen por el enlace quedan encoladas y se reintentan en orden.
-4. Implementar cierre y certificación (Fase 7).
-5. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
+3. Implementar cierre y certificación (Fase 7): cierre de órdenes por voz,
+   certificación de la contratista y cierre de la orden ejecutada.
+4. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
    cuando cambie la planta.
 
 ---

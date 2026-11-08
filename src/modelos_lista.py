@@ -121,7 +121,7 @@ LISTA_CERRADA: tuple[ModeloPermitido, ...] = (
         motor="API de NVIDIA (por el proxy del enlace)",
         ubicacion="nube",
         configuracion=(
-            "temperature 0, max_tokens 800, timeout 30 s, una foto por llamada, "
+            "temperature 0, max_tokens 800, timeout 8 s, una foto por llamada, "
             "salida validada contra esquema"
         ),
         identificadores=("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",),

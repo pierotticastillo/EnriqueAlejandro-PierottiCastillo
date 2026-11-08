@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     # para avisar apenas se cae o se restablece el radioenlace.
     latido_sondeo_s: float = 5.0
 
+    # Cada cuánto se intenta vaciar la cola de salida. Es el camino de salida
+    # de los eventos, las órdenes y los avisos que quedaron esperando: no
+    # dependen del radioenlace (salvo el aviso por radio, que sí).
+    cola_sondeo_s: float = 5.0
+
     database_url: str = "postgresql+psycopg://pia3:pia3@postgres:5432/pia3"
 
     planta_api_url: str = "http://sim:8100"

@@ -25,7 +25,7 @@ class RepositorioFalso:
         self.evidencias.append(evidencia)
         return "evento-1"
 
-    def encolar_outbox(self, tipo, payload):
+    def encolar_outbox(self, tipo, payload, topico="sistema/tablet"):
         self.encolados.append((tipo, payload))
         return "out-1"
 

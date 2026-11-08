@@ -24,8 +24,8 @@ from db.session import crear_engine
 from deteccion.sensores import DetectorSensores
 from modelos_lista import LISTA_CERRADA
 from planta.almacenamiento import Almacenamiento
-from planta.cola import publicar_pendientes
-from planta.heartbeat import Heartbeat
+from planta.cola import DrenadorCola
+from planta.heartbeat import Heartbeat, comprobar_enlace
 from planta.heartbeat import crear_cliente as crear_cliente_latido
 from planta.historial import Historiador
 from planta.mqtt_listener import ClientePlanta
@@ -300,7 +300,7 @@ def main() -> None:
 
         Las órdenes que estaban esperando aprobación se vuelven a publicar con
         el mismo id y el mismo estado: la planta no las pierde y no se abre
-        una orden nueva.
+        una orden nueva. Y sale lo que quedó en la cola de salida.
         """
         try:
             pendientes = repositorio.ordenes_pendientes()
@@ -311,6 +311,12 @@ def main() -> None:
             orden = _orden_recuperada(fila, catalogo, estado_bombas.de_bombas())
             cliente_ref["cliente"].publicar_orden(orden)
             logger.info("Orden pendiente recuperada: %s", orden.id)
+        # La cola de salida se vacía con el bus ya conectado.
+        drenador = referencia.get("drenador")
+        if drenador is not None:
+            enviados = drenador.drenar()
+            if enviados:
+                logger.info("Cola de salida vaciada al conectar: %s mensajes", enviados)
 
     cliente = ClientePlanta(
         settings,
@@ -318,8 +324,17 @@ def main() -> None:
         al_respuesta=al_respuesta,
         al_sensor=al_sensor,
         al_conectar=al_conectar,
+        cola=repositorio,
     )
     cliente_ref["cliente"] = cliente
+    # El drenador publica por el mismo cliente: lo que quedó en la cola sale
+    # por el bus, en orden, sin duplicarse.
+    drenador = DrenadorCola(
+        repositorio,
+        cliente,
+        enlace_ok_fn=lambda: comprobar_enlace(settings),
+    )
+    referencia["drenador"] = drenador
     servicio = ServicioParteVoz(
         settings,
         repositorio,
@@ -347,7 +362,7 @@ def main() -> None:
         mqtt_client=crear_cliente_latido(settings),
         # Con el enlace de vuelta salen los mensajes que quedaron en la cola
         # (por ejemplo, el aviso por radio al supervisor).
-        vaciar_cola_fn=lambda: publicar_pendientes(repositorio, cliente),
+        vaciar_cola_fn=drenador.drenar,
     )
     hilo_latido = threading.Thread(
         target=latido.ejecutar,
@@ -356,7 +371,29 @@ def main() -> None:
         daemon=True,
     )
 
+    def _viciar_cola() -> None:
+        """Vacia la cola de salida mientras el sistema esté vivo.
+
+        Es el camino de salida de **todo** lo que la planta publica: eventos,
+        órdenes y avisos. El latido también la vacía cuando vuelve el enlace,
+        pero el enlace y el bus son dos cosas distintas: un evento no tiene
+        que esperar a que vuelva el radioenlace.
+        """
+        while not parar.is_set():
+            try:
+                drenador.drenar()
+            except Exception:  # noqa: BLE001 - la cola no puede tumbar el sistema
+                logger.exception("Falló el drenaje de la cola de salida")
+            parar.wait(settings.cola_sondeo_s)
+
+    hilo_cola = threading.Thread(
+        target=_viciar_cola,
+        name="cola-salida",
+        daemon=True,
+    )
+
     hilo_latido.start()
+    hilo_cola.start()
     servicio.iniciar()
     cliente.iniciar()
 
@@ -370,6 +407,7 @@ def main() -> None:
     estado_bombas.cerrar()
     cliente_api.cerrar()
     hilo_latido.join(timeout=10)
+    hilo_cola.join(timeout=10)
     engine.dispose()
 
 

@@ -169,6 +169,9 @@ services:
       PLANTA_API_URL: ${PLANTA_API_URL:-http://sim:8100}
       SISTEMA_ID: ${SISTEMA_ID:-pia3}
       LATIDO_INTERVALO_S: ${LATIDO_INTERVALO_S:-30}
+      # Cola de salida: cada cuánto se intenta vaciar lo que quedó esperando
+      # (eventos, órdenes y avisos). Es el camino de salida de la planta.
+      COLA_SONDEO_S: ${COLA_SONDEO_S:-5}
       # Estado del radioenlace: la planta lo publica en su puerto de control.
       ENLACE_CHECK_URL: ${ENLACE_CHECK_URL:-http://enlace:8081/estado}
       ENLACE_TIMEOUT_S: ${ENLACE_TIMEOUT_S:-3}

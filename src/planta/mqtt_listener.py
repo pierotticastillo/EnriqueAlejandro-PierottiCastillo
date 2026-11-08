@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from collections.abc import Callable
+from typing import Any
 
 import paho.mqtt.client as mqtt
 from planta_contrato import (
@@ -19,8 +21,13 @@ from planta_contrato import (
 from pydantic import ValidationError
 
 from config import Settings
+from planta.cola import RepositorioCola
 
 logger = logging.getLogger("planta.listener")
+
+
+class ErrorPublicacion(Exception):
+    """El bus de la planta no aceptó el mensaje."""
 
 
 class ClientePlanta:
@@ -35,6 +42,7 @@ class ClientePlanta:
         al_sensor: Callable[[LecturaSensor], None],
         al_conectar: Callable[[], None] | None = None,
         cliente: mqtt.Client | None = None,
+        cola: RepositorioCola | None = None,
     ) -> None:
         self._settings = settings
         self._al_nota = al_nota
@@ -44,6 +52,9 @@ class ClientePlanta:
         # guardan con nombres distintos para que uno no tape al otro.
         self._callback_conectar = al_conectar
         self._cliente = cliente or self._crear_cliente()
+        # Cola de salida: si el bus no está, lo que no se puede publicar no se
+        # pierde, queda en PostgreSQL y sale cuando vuelve.
+        self._cola = cola
         self._detenido = threading.Event()
 
     def _crear_cliente(self) -> mqtt.Client:
@@ -74,15 +85,72 @@ class ClientePlanta:
         logger.info("Listener MQTT detenido")
 
     def publicar(self, topico: str, payload: str, *, qos: int = 1) -> None:
+        """Publica un mensaje ya serializado.
+
+        Si el bus no acepta el mensaje, **levanta**: quien publica tiene que
+        saber que no salió, para que el mensaje quede en la cola en vez de
+        perderse.
+        """
         info = self._cliente.publish(topico, payload, qos=qos)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             logger.warning("No se pudo publicar en %s (rc=%s)", topico, info.rc)
+            raise ErrorPublicacion(f"No se pudo publicar en {topico} (rc={info.rc})")
+
+    @property
+    def conectado(self) -> bool:
+        """¿Está el bus de la planta?"""
+        return bool(self._cliente.is_connected())
+
+    def _publicar_o_encolar(
+        self,
+        tipo: str,
+        topico: str,
+        payload: dict[str, Any],
+        id_mensaje: str,
+    ) -> None:
+        """Publica; si el bus no está, encola para salir después."""
+        if self._cola is not None and not self.conectado:
+            id_outbox = self._cola.encolar_outbox(tipo, payload, topico)
+            logger.warning(
+                "Bus caído: el %s %s queda en la cola (%s)",
+                tipo,
+                id_mensaje,
+                id_outbox,
+            )
+            return
+        try:
+            self.publicar(topico, json.dumps(payload, ensure_ascii=False))
+        except ErrorPublicacion:
+            if self._cola is None:
+                raise
+            id_outbox = self._cola.encolar_outbox(tipo, payload, topico)
+            logger.warning(
+                "Bus caído: el %s %s queda en la cola (%s)",
+                tipo,
+                id_mensaje,
+                id_outbox,
+            )
 
     def publicar_tablet(self, mensaje: MensajeTablet) -> None:
-        self.publicar(Topicos.TABLET, mensaje.model_dump_json())
+        """Publica un mensaje de tablet.
+
+        La tablet es local, pero su mensaje también viaja por el bus: si el
+        bus no está, el mensaje queda en la cola y sale cuando vuelve.
+        """
+        self._publicar_o_encolar(
+            "tablet",
+            Topicos.TABLET,
+            mensaje.model_dump(mode="json"),
+            mensaje.id,
+        )
 
     def publicar_evento(self, evento: EventoSistema) -> None:
-        self.publicar(Topicos.EVENTOS, evento.model_dump_json())
+        self._publicar_o_encolar(
+            "evento",
+            Topicos.EVENTOS,
+            evento.model_dump(mode="json"),
+            evento.id,
+        )
 
     def publicar_orden(self, orden: OrdenSistema) -> None:
         """Publica la orden de trabajo en ``sistema/ordenes``.
@@ -90,7 +158,12 @@ class ClientePlanta:
         Cada publicación es el estado actual de la orden: el id es el mismo
         para toda la vida de la orden, así que la planta la reconoce.
         """
-        self.publicar(Topicos.ORDENES, orden.model_dump_json())
+        self._publicar_o_encolar(
+            "orden",
+            Topicos.ORDENES,
+            orden.model_dump(mode="json"),
+            orden.id,
+        )
 
     def _al_conectar(
         self,

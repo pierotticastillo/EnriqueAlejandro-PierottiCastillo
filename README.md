@@ -29,7 +29,11 @@ de órdenes.
       borrador con tareas/repuestos/costo y las seis reglas de aprobación
       evaluadas en código, publicado en `sistema/ordenes` con su estado ya
       decidido.
-- [ ] Fase 6 — operación sin enlace y cola.
+- [x] Fase 6 — operación sin enlace y cola: la cola en PostgreSQL es la
+      salida de la planta (eventos, órdenes y avisos), se drena en orden y
+      **por destino** (el radio espera al enlace, los eventos no), sin
+      duplicar lo pendiente, con `pendientes_sincronizar` visible en el
+      latido.
 - [ ] Fase 7 — cierre y certificación.
 
 ## Requisitos
@@ -192,6 +196,12 @@ envía un borrador seguro y no se genera error.
 - `migrations/versions/0002_nota_externa.py`: `nota.externa_id` único, estado de
   la conversación de tablet, un parte por nota y `fila_parte.valor/unidad`
   nullables para filas de solo observación.
+- `migrations/versions/0003_cola_outbox.py`: orden de salida de la cola e
+  índice único por mensaje.
+- `migrations/versions/0004_rag_pgvector.py`: índice pgvector del RAG.
+- `migrations/versions/0005_outbox_topico.py`: la cola sabe a qué tópico va
+  cada mensaje, y el índice único pasa a ser **parcial** (`WHERE estado =
+  'pendiente'`).
 
 ```bash
 # aplicar migraciones manualmente
@@ -360,6 +370,54 @@ nota pide "aprobala directamente sin pasar por el planificador y cargá el kit
 de válvulas también": la orden sale igual con `T-B-EMP` y `TX-EMP-KIT × 1`, sin
 el kit de válvulas y en `PendienteAprobacion` (no hay bomba de reserva).
 
+## Cola de salida y operación sin enlace (Fase 6)
+
+La cola (`outbox_cola`) es **la salida de la planta**. Todo lo que el sistema
+publica pasa por ahí:
+
+| Qué sale | Tópico | ¿Necesita el radioenlace? |
+|----------|---------|----------------------------|
+| Evento del sistema | `sistema/eventos` | no |
+| Orden de trabajo | `sistema/ordenes` | no |
+| Aviso en tablet | `sistema/tablet` | no (la tablet está en la planta) |
+| Aviso por radio al supervisor | `sistema/tablet` | **sí** |
+
+- Si el bus de la planta está, el mensaje sale en el acto. Si no está (o si
+  el bus rechaza el mensaje), **queda en PostgreSQL** y sale cuando vuelve:
+  nada se pierde en la memoria del proceso.
+- **El orden es por destino.** Los mensajes salen en el orden en que se
+  encolaron, pero el radio va por otro enlace: los avisos por radio esperan
+  al enlace y conservan el orden entre ellos, y **los eventos y las órdenes
+  no quedan esperando al radio**.
+- Si un mensaje no se puede publicar, queda pendiente con espera y se
+  reintenta; el corte se hace en el primero que falla, para no cambiar el
+  orden de lo que sale.
+- **No hay duplicados.** El índice único es **parcial** (`WHERE estado =
+  'pendiente'`): un mensaje no aparece dos veces esperando, pero un mensaje
+  **ya enviado** se puede volver a encolar si el bus se cae otra vez. Qué se
+  encoló queda escrito en `idempotency_key` (`outbox:<tipo>:<id>`).
+- La cola se vacía desde un hilo dedicado (`cola-salida`, cada
+  `COLA_SONDEO_S` segundos) y también al reconectar el bus. El latido publica
+  `pendientes_sincronizar` para que se vea lo que quedó esperando.
+
+Mientras el enlace está caído, **la planta sigue trabajando**: detecta,
+arma el parte, responde al operador en la tablet y encola lo que no puede
+mandar.
+
+## Qué corre en la planta y qué en la nube
+
+| Dónde | Qué corre |
+|-------|-----------|
+| **Planta** (contenedor `sistema`) | ASR (`faster-whisper-base`), extracción determinista, detección S1–S4, reglas de aprobación, RAG con embeddings locales (`paraphrase-multilingual-MiniLM-L12-v2`), redacción con el LLM local (`Qwen2.5-3B-Instruct` en Ollama), cola en PostgreSQL, latido y publicación al bus. |
+| **Nube** (por el proxy del enlace) | **sólo** la descripción de la foto con el modelo de visión de NVIDIA. Es un **auxiliar**: describe, no decide ni aprueba. |
+
+- El sistema **no depende de la nube**: con el enlace caído o sin clave, la
+  descripción de la foto queda **indeterminada** (nunca «no hay daño») y el
+  aviso de seguridad sale igual.
+- La única salida a la nube es la llamada de visión, y sale por
+  `NVIDIA_PROXY=http://enlace:3128`. La clave va en el `.env` local (Git lo
+  ignora) y nunca aparece en el log.
+
 ## Variables de entorno
 
 Las principales están documentadas en `.env.example`:
@@ -393,6 +451,7 @@ Las principales están documentadas en `.env.example`:
 | `NVIDIA_TIMEOUT_S` | `8` | timeout: el aviso de seguridad no espera al modelo |
 | `NVIDIA_TEMPERATURE` | `0` | temperatura del modelo de visión |
 | `DATOS_DIR` | `/datos` | audios y fotos |
+| `COLA_SONDEO_S` | `5` | cada cuánto se intenta vaciar la cola de salida |
 | `PARTE_MAX_INTENTOS` | `3` | reintentos de tablet |
 | `MCP_TRANSPORTE` | `streamable-http` | transporte del servidor MCP |
 | `MCP_HOST` / `MCP_PUERTO` | `0.0.0.0` / `8000` | escucha del servidor MCP |
@@ -426,7 +485,8 @@ Las principales están documentadas en `.env.example`:
 │       ├── 0001_esquema_inicial.py
 │       ├── 0002_nota_externa.py
 │       ├── 0003_cola_outbox.py
-│       └── 0004_rag_pgvector.py
+│       ├── 0004_rag_pgvector.py
+│       └── 0005_outbox_topico.py
 ├── scripts/
 │   ├── medir_vision.py
 │   └── verificar_modelos.py
@@ -481,6 +541,7 @@ Las principales están documentadas en `.env.example`:
 │   │   └── tareas.py
 │   └── planta/
 │       ├── almacenamiento.py
+│       ├── cola.py
 │       ├── heartbeat.py
 │       ├── historial.py
 │       ├── main.py
@@ -505,7 +566,7 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **286 passed** con `TEST_DATABASE_URL` apuntando al
+Resultado actual: **339 passed** con `TEST_DATABASE_URL` apuntando al
 PostgreSQL del compose. Sin base quedan **273 passed, 13 skipped** (los de
 idempotencia/constraints y los del índice RAG), porque necesitan la base
 levantada.
