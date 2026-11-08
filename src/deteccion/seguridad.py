@@ -221,14 +221,28 @@ def es_instruccion_no_autorizada(texto: str) -> bool:
     return bool(_INSTRUCCION_NO_AUTORIZADA.search(normalizar(texto)))
 
 
-def texto_aviso_tablet(codigo: str, equipo: str | None = None) -> str:
-    """Texto de la tablet: qué hacer, sin esperar respuesta."""
+def texto_aviso_tablet(
+    codigo: str,
+    equipo: str | None = None,
+    descripcion_foto: str | None = None,
+) -> str:
+    """Texto de la tablet: qué hacer, sin esperar respuesta.
+
+    ``descripcion_foto`` es lo que el modelo de visión vio en la foto adjunta
+    (si lo pudo describir). Es **información para quien revise**, no una
+    decisión: si el modelo no está o no valida, el aviso sale igual que
+    siempre, sin descripción.
+    """
     proc = procedimiento(codigo)
     donde = f" en {equipo}" if equipo else ""
+    foto = ""
+    if descripcion_foto and descripcion_foto.strip():
+        foto = f" La foto adjunta muestra: {descripcion_foto.strip()}"
     return (
         f"ALERTA DE SEGURIDAD {proc.codigo}{donde}: {proc.titulo}. "
         f"Qué hacer: {proc.que_hacer} "
         f"Avisa al supervisor de turno por radio (canal {RADIO_SUPERVISOR}). "
+        f"{foto}"
         f"{PELIGRO}"
     )
 

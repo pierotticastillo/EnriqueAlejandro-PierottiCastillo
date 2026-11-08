@@ -115,18 +115,24 @@ LISTA_CERRADA: tuple[ModeloPermitido, ...] = (
     ),
     ModeloPermitido(
         clave=CLAVE_VISION,
-        nombre="NVIDIA (modelo de nube con visión)",
-        familia="NVIDIA",
-        version="sin identificar",
+        nombre="Nemotron 3 Nano Omni 30B A3B",
+        familia="Nemotron",
+        version="3-nano-omni-30b-a3b",
         motor="API de NVIDIA (por el proxy del enlace)",
         ubicacion="nube",
-        configuracion="deshabilitado hasta tener el identificador y la versión exacta",
-        identificadores=(),
-        habilitado=False,
+        configuracion=(
+            "temperature 0, max_tokens 800, timeout 30 s, una foto por llamada, "
+            "salida validada contra esquema"
+        ),
+        identificadores=("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",),
+        habilitado=True,
         nota=(
-            "La lista publicada no dice qué modelo de visión es. Mientras tanto "
-            "no se llama a la nube y las fotos con posible daño estructural van "
-            "a revisión humana (fail-safe)."
+            "El Nemotron con visión que la lista publicada dejó sin identificar "
+            "ya no existe: `nvidia/nemotron-nano-12b-v2-vl` fue retirado por "
+            "NVIDIA (HTTP 410 Gone, fin de vida 2026-08-26) y además era sólo "
+            "en inglés. Se usa el Nemotron con visión vigente del catálogo, que "
+            "responde en español y es el más rápido de los medidos. Es un "
+            "auxiliar: describe la foto, no decide ni aprueba nada."
         ),
     ),
 )

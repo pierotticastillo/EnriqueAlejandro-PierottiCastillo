@@ -113,11 +113,18 @@ def test_los_modelos_locales_son_los_de_la_lista_publicada() -> None:
     assert por_clave(CLAVE_LLM).cuantizacion == "Q4_K_M"
 
 
-def test_el_modelo_de_vision_esta_deshabilitado() -> None:
+def test_el_modelo_de_vision_es_el_nemotron_vigente() -> None:
+    """El modelo de visión es el Nemotron con visión que sigue en el catálogo.
+
+    El que la lista publicada dejó sin identificar
+    (`nvidia/nemotron-nano-12b-v2-vl`) fue retirado por NVIDIA: la API responde
+    410 Gone (fin de vida 2026-08-26). Se usa el Nemotron con visión vigente.
+    """
     vision = por_clave(CLAVE_VISION)
-    assert vision.habilitado is False
+    assert vision.habilitado is True
     assert vision.ubicacion == "nube"
-    assert vision.identificadores == ()
+    assert vision.identificadores == ("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",)
+    assert "410" in vision.nota or "retirado" in vision.nota
 
 
 def test_la_tabla_alcanza_para_documentar() -> None:
@@ -186,6 +193,24 @@ def test_un_modelo_de_vision_fuera_de_la_lista_se_reporta() -> None:
     """Si se configura un modelo de visión, tiene que estar en la lista."""
     resultados = verificar_configuracion(
         _settings(nvidia_api_key="nvapi-secreto", nvidia_modelo="nvidia/llama-3.2-90b-vision")
+    )
+    assert _estado(resultados, CLAVE_VISION) == FUERA_DE_LISTA
+
+
+def test_el_modelo_de_vision_de_la_lista_pasa() -> None:
+    resultados = verificar_configuracion(
+        _settings(
+            nvidia_api_key="nvapi-secreto",
+            nvidia_modelo="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        )
+    )
+    assert _estado(resultados, CLAVE_VISION) == OK
+
+
+def test_el_modelo_retirado_por_nvidia_no_pasa() -> None:
+    """`nvidia/nemotron-nano-12b-v2-vl` dio 410 Gone: ya no es un modelo."""
+    resultados = verificar_configuracion(
+        _settings(nvidia_api_key="nvapi-secreto", nvidia_modelo="nvidia/nemotron-nano-12b-v2-vl")
     )
     assert _estado(resultados, CLAVE_VISION) == FUERA_DE_LISTA
 

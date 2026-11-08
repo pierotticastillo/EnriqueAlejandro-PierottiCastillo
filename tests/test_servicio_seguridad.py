@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from planta_contrato import NotaRecorrida, TipoEvento
 
+from analisis.vision import ResultadoVision
 from config import Settings
 from planta.parte_extractor import Extraccion, Hallazgo
 from planta.servicio import ServicioParteVoz
@@ -40,11 +42,42 @@ class ClienteFalso:
         self.tablets.append(mensaje)
 
 
+class VisionFalsa:
+    """Un cliente de visión que devuelve lo que se le pide."""
+
+    def __init__(self, resultado: ResultadoVision, *, habilitado: bool = True) -> None:
+        self._resultado = resultado
+        self.habilitado = habilitado
+        self.fotos: list[Path] = []
+
+    def describir(self, ruta: Path) -> ResultadoVision:
+        self.fotos.append(ruta)
+        return self._resultado
+
+
+def _resultado(
+    estado: str = "ok",
+    danio: bool | None = True,
+    descripcion: str = "una grieta en la línea de descarga",
+) -> ResultadoVision:
+    return ResultadoVision(
+        estado=estado,
+        danio_estructural=danio,
+        descripcion=descripcion,
+        detalle="ok" if estado == "ok" else "sin red",
+        modelo="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        tokens_prompt=861,
+        tokens_completion=191,
+        segundos=2.9,
+    )
+
+
 def _servicio(
     cliente: ClienteFalso,
     repo: RepositorioFalso,
     *,
     enlace_ok: bool = True,
+    vision=None,
 ) -> ServicioParteVoz:
     return ServicioParteVoz(
         Settings(),
@@ -54,6 +87,7 @@ def _servicio(
         cliente=cliente,
         planta={},
         enlace_ok_fn=lambda: enlace_ok,
+        vision=vision,
     )
 
 
@@ -159,3 +193,62 @@ def test_sin_enlace_el_aviso_por_radio_queda_en_la_cola() -> None:
     assert tipo == "radio"
     assert payload["id"].endswith("-radio")
     assert cliente.tablets[0].id != payload["id"]
+
+
+# ------------------------------------------------- la foto que ve el modelo
+
+
+def test_el_aviso_incluye_lo_que_ve_el_modelo_de_vision() -> None:
+    """La descripción de la foto va al aviso: es información para quien revise."""
+    cliente = ClienteFalso()
+    vision = VisionFalsa(_resultado())
+    servicio = _servicio(cliente, RepositorioFalso(), vision=vision)
+
+    servicio._publicar_alerta_seguridad(
+        uuid4(), _nota(), _extraccion(), "sale agua a presión", [Path("/datos/foto.jpg")]
+    )
+
+    assert "una grieta en la línea de descarga" in cliente.tablets[0].texto
+
+
+def test_sin_modelo_de_vision_el_aviso_sale_igual() -> None:
+    """Sin modelo, el aviso de seguridad no cambia: es un auxiliar, no el sistema."""
+    cliente = ClienteFalso()
+    servicio = _servicio(cliente, RepositorioFalso())
+
+    servicio._publicar_alerta_seguridad(
+        uuid4(), _nota(), _extraccion(), "sale agua a presión", [Path("/datos/foto.jpg")]
+    )
+
+    assert "La foto adjunta muestra" not in cliente.tablets[0].texto
+    assert "ALERTA DE SEGURIDAD S1" in cliente.tablets[0].texto
+
+
+def test_si_el_modelo_no_puede_describir_el_aviso_sale_sin_descripcion() -> None:
+    """Fail-safe: un fallo del modelo no es "no hay daño", es silence."""
+    cliente = ClienteFalso()
+    vision = VisionFalsa(_resultado(estado="indeterminado", danio=None, descripcion=""))
+    servicio = _servicio(cliente, RepositorioFalso(), vision=vision)
+
+    servicio._publicar_alerta_seguridad(
+        uuid4(), _nota(), _extraccion(), "sale agua a presión", [Path("/datos/foto.jpg")]
+    )
+
+    assert "La foto adjunta muestra" not in cliente.tablets[0].texto
+    assert "ALERTA DE SEGURIDAD S1" in cliente.tablets[0].texto
+
+
+def test_el_modelo_de_vision_no_cambia_el_estado_de_la_alerta() -> None:
+    """La decisión sigue en código: el modelo sólo describe."""
+    cliente = ClienteFalso()
+    vision = VisionFalsa(_resultado(danio=False, descripcion="todo en orden"))
+    servicio = _servicio(cliente, RepositorioFalso(), vision=vision)
+
+    servicio._publicar_alerta_seguridad(
+        uuid4(), _nota(), _extraccion(), "sale agua a presión", [Path("/datos/foto.jpg")]
+    )
+
+    # El evento sigue siendo una alerta de seguridad (no un parte, no una orden
+    # aprobada): el modelo no decide.
+    assert cliente.eventos[0].tipo is TipoEvento.alerta_seguridad
+    assert cliente.tablets[0].espera_respuesta is False

@@ -386,8 +386,12 @@ Las principales están documentadas en `.env.example`:
 | `OLLAMA_TIMEOUT_S` | `90` | timeout de la llamada |
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga al terminar |
 | `NVIDIA_API_KEY` | (vacío) | clave del modelo de nube con visión; **va en el `.env` local**, que Git ignora |
-| `NVIDIA_MODELO` | (vacío) | identificador exacto del modelo de visión (lo tiene que dar el curso) |
+| `NVIDIA_MODELO` | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | modelo de visión (el de la lista cerrada; si no coincide, no se llama a la nube) |
 | `NVIDIA_URL` | `https://integrate.api.nvidia.com/v1` | API de NVIDIA (la llamada sale por el proxy del enlace) |
+| `NVIDIA_PROXY` | `http://enlace:3128` | proxy de la llamada de visión (vacío = directo) |
+| `NVIDIA_MAX_TOKENS` | `800` | tope de tokens de la respuesta (el modelo es de razonamiento) |
+| `NVIDIA_TIMEOUT_S` | `8` | timeout: el aviso de seguridad no espera al modelo |
+| `NVIDIA_TEMPERATURE` | `0` | temperatura del modelo de visión |
 | `DATOS_DIR` | `/datos` | audios y fotos |
 | `PARTE_MAX_INTENTOS` | `3` | reintentos de tablet |
 | `MCP_TRANSPORTE` | `streamable-http` | transporte del servidor MCP |
@@ -424,6 +428,7 @@ Las principales están documentadas en `.env.example`:
 │       ├── 0003_cola_outbox.py
 │       └── 0004_rag_pgvector.py
 ├── scripts/
+│   ├── medir_vision.py
 │   └── verificar_modelos.py
 ├── src/
 │   ├── config.py
@@ -441,7 +446,8 @@ Las principales están documentadas en `.env.example`:
 │   │   ├── orden.py
 │   │   ├── redaccion.py
 │   │   ├── servicio.py
-│   │   └── sintomas.py
+│   │   ├── sintomas.py
+│   │   └── vision.py
 │   ├── db/
 │   │   ├── repositorio.py
 │   │   └── session.py
@@ -537,19 +543,18 @@ Ni el `.env` ni el código eligen modelos: los comparan contra esa lista.
 | `asr` | `faster-whisper-base` | faster-whisper (CTranslate2) | planta | CPU `int8`, 2 hilos, sólo local |
 | `embeddings` | `paraphrase-multilingual-MiniLM-L12-v2` | fastembed (ONNX) | planta | 384 dims, índice pgvector |
 | `llm` | `Qwen2.5-3B-Instruct` | Ollama (llama.cpp) | planta | Q4_K_M, ctx 2048, 2 hilos, `temperature=0`, `keep_alive=0`, timeout 90 s |
-| `vision` | NVIDIA (modelo de nube con visión) | API de NVIDIA | nube | **deshabilitado**: falta el identificador exacto |
+| `vision` | `Nemotron 3 Nano Omni 30B A3B` | API de NVIDIA | nube | `temperature=0`, `max_tokens=800`, timeout 8 s, salida validada contra esquema |
 
-La clave de NVIDIA ya está **cableada** (`NVIDIA_API_KEY` en el `.env` local,
-que Git ignora, y `NVIDIA_API_KEY` en el entorno del contenedor), pero **no
-habilita nada por sí sola**: la lista publicada no dice qué modelo es, así que
-hasta que el curso dé el identificador y la versión exactos, el modelo sigue
-deshabilitado y con salida *fail-safe*. El verificador lo dice explícito:
+La clave de NVIDIA está **cableada** (`NVIDIA_API_KEY` en el `.env` local, que
+Git ignora, y `NVIDIA_API_KEY` en el entorno del contenedor). La clave por sí
+sola **no habilita nada**: el modelo configurado tiene que ser el de la lista
+cerrada, y el verificador lo dice explícito:
 
 | Situación | Qué reporta el verificador |
 |---|---|
-| sin clave y sin modelo | `deshabilitado` (lo normal) |
-| clave puesta, sin identificador | `advertencia`: la clave no se usa hasta saber el modelo |
-| identificador que no está en la lista | `fuera-de-lista`: es un incumplimiento, sale con código 1 |
+| sin clave | `deshabilitado` (el modelo de visión queda apagado, con salida *fail-safe*) |
+| clave puesta y modelo de la lista | `ok` |
+| modelo configurado que no está en la lista | `fuera-de-lista`: es un incumplimiento, sale con código 1 |
 
 La clave **nunca** se imprime en el log ni entra en el repositorio.
 
@@ -565,6 +570,13 @@ docker compose exec sistema python scripts/verificar_modelos.py --tabla
 
 El mismo chequeo corre **al arrancar** del sistema y queda en el log. No puede
 tumbar la planta: si un modelo no está, se informa y el sistema sigue.
+
+Para **medir** el modelo de visión (tiempo, tokens y respuesta efectiva) con el
+mismo cliente que usa la planta:
+
+```bash
+docker compose exec sistema python scripts/medir_vision.py --fotos /datos --repetir 3
+```
 
 ### Qué hace el modelo de lenguaje (y qué no)
 
@@ -591,12 +603,64 @@ un hilo aparte, después de que la orden ya se publicó. Eso es todo.
 
 ### El modelo de nube con visión
 
-La lista publicada no dice qué modelo de visión es. Mientras tanto queda
-**deshabilitado** y con salida *fail-safe*: el sistema no llama a la nube, no
-hay credenciales en el repositorio y una foto que pueda mostrar daño estructural
-va a **revisión humana** (regla `revision_humana`), nunca a "no hay daño". Cuando
-el curso dé el identificador exacto, se suma a `src/modelos_lista.py` y se
-habilita.
+La lista publicada nombra los tres modelos locales y dice que hay "modelos en
+la nube de NVIDIA con visión", pero **no dice cuál**. El que podía querer
+(`nvidia/nemotron-nano-12b-v2-vl`) **ya no existe**: la API de NVIDIA
+responde `HTTP 410 Gone` —*"end of life on 2026-08-26"*— y además su ficha
+decía *English only*, cuando todo el sistema es en español.
+
+Se midieron uno por uno los seis modelos con visión del catálogo de la cuenta,
+con una foto real de la planta y la misma pregunta cerrada que le hace el
+sistema:
+
+| Modelo | Resultado | Latencia | Salida |
+|---|---|---|---|
+| **`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`** | **200** | **1,2 – 2,2 s** | `content` con JSON en español |
+| `meta/llama-3.2-90b-vision-instruct` | 200 | 26 – 43 s | `content` con JSON en español |
+| `nvidia/nemotron-3.5-super-vl-120b-a12b` | 200 | 1,5 s | `content: null` (sólo razonamiento) |
+| `nvidia/nemotron-nano-12b-v2-vl` | 410 Gone | — | retirado por NVIDIA |
+| `microsoft/phi-3-vision-128k-instruct` | 404 | — | sin acceso en la cuenta |
+| `nvidia/llama-nemotron-embed-vl-1b-v2` | 404 | — | es de embeddings, no de chat |
+
+**Decisión: `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`** (Nemotron 3
+Nano Omni 30B A3B): el Nemotron con visión **vigente**, el más rápido de los
+que funcionan y el único que devuelve la respuesta en `content` limpio.
+
+Medición en el camino real (dentro del contenedor, por el proxy del enlace;
+20 llamadas, 4 fotos de la planta, 5 por foto):
+
+| Métrica | Valor |
+|---|---|
+| Llamadas que terminaron bien | **19 de 20** (una agotó el timeout de 8 s) |
+| Tiempo por llamada | mínimo **1,55 s** · mediana **2,93 s** · máximo **5,88 s** |
+| Tokens de entrada | **861** (constantes) |
+| Tokens de salida | 100 – 509 · mediana **191** |
+| Respuestas que detectaron daño | 2 de 20 |
+
+La respuesta efectiva, textual:
+
+> `No se observa grieta, rotura, deformación permanente ni pérdida de material en la imagen.`
+
+> **Desviación documentada de la lista cerrada:** la lista publicada no
+> identifica el modelo de visión, así que se elige el vigente del catálogo con
+> la evidencia de arriba. Si el curso responde con otro identificador, se
+> cambia en `src/modelos_lista.py` y en el `.env`: el verificador rechaza
+> cualquier modelo que no sea el de la lista.
+
+**Qué hace y qué no.** Es un **auxiliar de descripción**: dice qué se ve en la
+foto para que quien la revise sepa qué está mirando. La descripción va al
+**texto del aviso** de la tablet; **no cambia** el estado del evento ni de la
+orden (eso lo deciden las reglas de `src/analisis/aprobacion.py`).
+
+- La salida se valida contra un esquema (`SalidaVision`, `extra="forbid"`).
+- El prompt **no lleva el texto libre del operador**: sólo la foto y la
+  pregunta cerrada.
+- Si falta la clave, no hay red, la respuesta no valida o el modelo agota el
+  timeout, el resultado es **indeterminado**: el aviso sale sin descripción y
+  la foto sigue yendo a revisión humana. **Nunca** "no hay daño".
+- La llamada sale por el **proxy del enlace** (`enlace:3128`), la única salida
+  sancionada: el modelo de visión no abre un camino nuevo.
+- La clave **nunca** se imprime en el log ni entra en el repositorio.
 
 ### Memoria de la planta
 

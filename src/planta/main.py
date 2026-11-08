@@ -17,6 +17,7 @@ from analisis.catalogo import CatalogoManuales
 from analisis.estado import EstadoBombas
 from analisis.llm import crear_modelo
 from analisis.servicio import RecuperadorDiferido, ServicioAnalisis
+from analisis.vision import crear_cliente_vision
 from config import Settings
 from db.repositorio import Repositorio
 from db.session import crear_engine
@@ -251,6 +252,11 @@ def main() -> None:
     )
     if modelo is not None:
         logger.info("Modelo local de redacción activo: %s", modelo.nombre)
+    # El modelo de nube con visión describe las fotos; no decide nada. Si no
+    # hay clave, o el modelo no es el de la lista cerrada, no se llama a la nube.
+    vision = crear_cliente_vision(settings)
+    if vision is not None:
+        logger.info("Modelo de visión activo: %s", vision.nombre)
     hilo_rag = threading.Thread(
         target=_cargar_recuperador,
         args=(recuperador, cliente_api, settings, engine),
@@ -323,6 +329,7 @@ def main() -> None:
         planta,
         historiador=historiador,
         analisis=analisis,
+        vision=vision,
     )
     referencia["servicio"] = servicio
 

@@ -21,6 +21,7 @@ from planta_contrato import (
 )
 
 from analisis.servicio import ServicioAnalisis
+from analisis.vision import ClienteVision
 from config import Settings
 from db.repositorio import Repositorio, filas_desde_json
 from deteccion import seguridad
@@ -61,6 +62,7 @@ class ServicioParteVoz:
         historiador: Historiador | None = None,
         enlace_ok_fn: Callable[[], bool] | None = None,
         analisis: ServicioAnalisis | None = None,
+        vision: ClienteVision | None = None,
     ) -> None:
         self._settings = settings
         self._repo = repositorio
@@ -70,6 +72,9 @@ class ServicioParteVoz:
         self._planta = planta
         self._historiador = historiador
         self._analisis = analisis
+        # Modelo de nube con visión: sólo describe las fotos. Es opcional:
+        # sin clave o sin modelo, el aviso de seguridad sale igual que siempre.
+        self._vision = vision
         self._resolver = resolver or desde_api(planta)
         self._extractor = extractor or ExtractorParte(planta, self._resolver)
         self._enlace_ok = enlace_ok_fn or (lambda: comprobar_enlace(settings))
@@ -278,7 +283,7 @@ class ServicioParteVoz:
             seguridad=extraccion.seguridad,
         )
         if extraccion.seguridad:
-            self._publicar_alerta_seguridad(nota_id, nota, extraccion, texto)
+            self._publicar_alerta_seguridad(nota_id, nota, extraccion, texto, fotos_locales)
             return
         self._iniciar_conversacion(nota_id, nota, extraccion, fotos_locales)
 
@@ -301,6 +306,7 @@ class ServicioParteVoz:
         nota: NotaRecorrida,
         extraccion: Extraccion,
         evidencia_texto: str,
+        fotos_locales: list[Path | None] | None = None,
     ) -> None:
         """Alerta de seguridad: evento, aviso en tablet y aviso por radio.
 
@@ -347,6 +353,9 @@ class ServicioParteVoz:
         )
 
         # Aviso en la tablet del operador: qué hacer, sin esperar respuesta.
+        # La foto adjunta, si el modelo de visión pudo describirla, va en el
+        # texto: es información para quien revise, no una decisión.
+        descripcion_foto = self._describir_foto(fotos_locales or [])
         fila = FilaParte(
             tag=equipo or "PLANTA",
             variable="condicion_insegura",
@@ -356,7 +365,7 @@ class ServicioParteVoz:
             id=f"pia3-{evento_id}-alerta",
             ts=nota.ts,
             nota_ids=[nota.id],
-            texto=seguridad.texto_aviso_tablet(tipo, equipo),
+            texto=seguridad.texto_aviso_tablet(tipo, equipo, descripcion_foto),
             pantalla=Pantalla(
                 titulo=f"Alerta de seguridad {tipo} · {proc.titulo}",
                 filas=[fila],
@@ -393,6 +402,34 @@ class ServicioParteVoz:
             equipo,
             seguridad.RADIO_SUPERVISOR,
         )
+
+    def _describir_foto(self, fotos_locales: list[Path | None]) -> str | None:
+        """Lo que el modelo de visión ve en la foto, si lo puede describir.
+
+        Es un **auxiliar**: la descripción va al aviso para que quien revise
+        la foto sepa qué está mirando. **No decide nada**: si el modelo no
+        está, no responde o su salida no valida, el aviso sale sin
+        descripción y la foto sigue yendo a revisión humana. Nunca se
+        interpreta un fallo como "no hay daño".
+        """
+        if self._vision is None or not self._vision.habilitado:
+            return None
+        for foto in fotos_locales:
+            if foto is None:
+                continue
+            resultado = self._vision.describir(foto)
+            logger.info(
+                "Foto %s: %s (%s, %.1f s, %d tokens de entrada / %d de salida)",
+                foto.name,
+                resultado.estado,
+                resultado.detalle,
+                resultado.segundos,
+                resultado.tokens_prompt,
+                resultado.tokens_completion,
+            )
+            if resultado.utilizable:
+                return resultado.descripcion
+        return None
 
     def _iniciar_conversacion(
         self,

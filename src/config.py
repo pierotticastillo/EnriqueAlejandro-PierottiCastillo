@@ -100,13 +100,25 @@ class Settings(BaseSettings):
     # Con 8 GB de RAM en la planta no puede quedar residente.
     ollama_keep_alive: int = 0
 
-    # Modelo de nube con visión (NVIDIA). La lista publicada del curso no
-    # dice todavía cuál es: queda deshabilitado y con salida fail-safe (las
-    # fotos con posible daño estructural van a revisión humana). La clave se
-    # lee del entorno —archivo `.env`, que Git ignora— y nunca se escribe en
-    # el código ni en el repositorio.
+    # Modelo de nube con visión (NVIDIA). Es un auxiliar: **describe** la foto
+    # para que quien la revise sepa qué está mirando. No decide, no aprueba y
+    # nunca afirma que "no hay daño": si no puede responder, el resultado queda
+    # indeterminado y la foto sigue yendo a revisión humana.
+    #
+    # La llamada sale por el proxy del enlace, que es la única salida
+    # sancionada de la planta (las redes del contenedor son internas).
     nvidia_api_key: str = ""
-    nvidia_modelo: str = ""
+    nvidia_modelo: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
     nvidia_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_proxy: str | None = None
+    # El modelo es de razonamiento: con un tope chico se le va todo en
+    # razonamiento y la respuesta final queda cortada. Medido: ~190 tokens de
+    # razonamiento más la respuesta.
+    nvidia_max_tokens: int = 800
+    # Timeout corto a propósito: el aviso de seguridad no puede esperar al
+    # modelo de visión. Medido: ~2 s por foto; si la red se cae, el aviso sale
+    # igual (fail-safe) a los 8 s.
+    nvidia_timeout_s: float = 8.0
+    nvidia_temperature: float = 0.0
 
     log_level: str = "INFO"

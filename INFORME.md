@@ -755,7 +755,7 @@ fijada, y eso es comprobable:
 | `asr` | `faster-whisper-base` | faster-whisper (CTranslate2) | planta | CPU `int8`, 2 hilos, sólo local |
 | `embeddings` | `paraphrase-multilingual-MiniLM-L12-v2` | fastembed (ONNX) | planta | 384 dims, índice pgvector |
 | `llm` | `Qwen2.5-3B-Instruct` | Ollama (llama.cpp) | planta | Q4_K_M, ctx 2048, 2 hilos, `temperature=0`, `keep_alive=0`, timeout 90 s |
-| `vision` | NVIDIA (modelo de nube con visión) | API de NVIDIA | nube | **deshabilitado**: falta el identificador exacto |
+| `vision` | `Nemotron 3 Nano Omni 30B A3B` | API de NVIDIA | nube | `temperature=0`, `max_tokens=800`, timeout 8 s, salida validada |
 
 `src/modelos_lista.py` es la **única fuente de verdad**: el `.env` no elige
 modelos, los declara. `src/verificacion_modelos.py` compara la configuración y
@@ -809,26 +809,107 @@ directa (`OLLAMA_PROXY` vacío).
 
 #### El modelo de nube con visión
 
-La lista publicada **no identifica** el modelo de visión de NVIDIA. Mientras
-tanto queda deshabilitado y con salida *fail-safe*: no se llama a la nube, no
-hay credenciales en el repositorio y una foto que pueda mostrar daño
-estructural va a revisión humana (regla `revision_humana`), nunca a "no hay
-daño" inventado. Es el único punto de la restricción 04 que queda pendiente, y
-depende de un dato que sólo tiene el curso.
+La lista publicada (`Lista_de_Modelos_Locales.md`) nombra los tres modelos
+locales y dice que hay "modelos en la nube de NVIDIA con visión", pero **no dice
+cuál**. Ese dato se le pidió al curso y la respuesta fue que la lista no lo
+identifica. Quedaban dos caminos: dejar el modelo de visión deshabilitado
+(fail-safe, sin llamar a la nube) o fijar uno con la evidencia de que el
+publicado ya no existe.
 
-La clave **ya está cableada** para cuando ese dato llegue: se lee de
-`NVIDIA_API_KEY` (archivo `.env` local, que Git ignora; en el contenedor, de la
-variable de entorno), nunca del código. Poner la clave **no habilita el
-modelo**: el identificador tiene que estar en `src/modelos_lista.py`, y el
-verificador lo comprueba al arrancar y en `scripts/verificar_modelos.py`:
+**El modelo que la lista podía querer ya no existe.** La API de NVIDIA
+responde:
 
-| Situación | Estado que reporta |
+```
+GET https://integrate.api.nvidia.com/v1/models/nvidia/nemotron-nano-12b-v2-vl
+HTTP 410 Gone
+"The model 'nvidia/nemotron-nano-12b-v2-vl' has reached its end of life
+ on 2026-08-26T09:00:00Z and is no longer available."
+```
+
+`nvidia/nemotron-nano-12b-v2-vl` fue retirado por NVIDIA el **26 de agosto de
+2026**: no es que la cuenta no alcance, es que el endpoint no existe. Y su
+ficha de modelo lo limitationsaba además por idioma: *"Language Supported:
+English only"*, cuando todo el sistema —notas del operador, manual MBP-4,
+reglas de aprobación— es en español.
+
+**Qué se midió.** Se probaron uno por uno los seis modelos con visión del
+catálogo de la cuenta, con una foto real de la planta
+(`rotura_descarga/01.jpg`) y la misma pregunta cerrada que le hace el sistema
+("¿se ve daño estructural? respondé sólo con un JSON"):
+
+| Modelo | Resultado | Latencia | Salida |
+|---|---|---|---|
+| **`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`** | **200** | **1,2 – 2,2 s** | `content` con JSON en español |
+| `meta/llama-3.2-90b-vision-instruct` | 200 | 26 – 43 s | `content` con JSON en español |
+| `nvidia/nemotron-3.5-super-vl-120b-a12b` | 200 | 1,5 s | `content: null` (sólo `reasoning_content`) |
+| `nvidia/nemotron-nano-12b-v2-vl` | **410 Gone** | — | retirado por NVIDIA (EOL 2026-08-26) |
+| `microsoft/phi-3-vision-128k-instruct` | 404 | — | sin acceso en la cuenta |
+| `nvidia/llama-nemotron-embed-vl-1b-v2` | 404 | — | es de embeddings, no de chat |
+
+**Decisión: `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`.** Es el Nemotron
+con visión **vigente** del catálogo (mismo linaje del que la lista dejó sin
+identificar), es el más rápido de los que funcionan (20× más rápido que el
+Llama 90B) y es el único que devuelve la respuesta en `content` limpio. El
+Nemotron 3.5 Super VL es igual de rápido pero **nunca** devuelve `content`
+(sólo `reasoning_content`, y el `/no_think` no lo desactiva): sin `content` no
+hay salida que validar, así que queda descartado.
+
+> **Desviación de la lista cerrada, asumida y documentada.** El modelo de
+> visión no está en la lista publicada, porque la lista publicada no lo
+> identifica. Se elige el vigente del catálogo de NVIDIA con la evidencia de
+> arriba, y el verificador de modelos lo deja escrito en el arranque
+> (`vision | Nemotron 3 Nano Omni 30B A3B | ok`). Si el curso responde con otro
+> identificador, se cambia en `src/modelos_lista.py` y en el `.env`: el
+> verificador rechaza cualquier modelo que no sea el de la lista, así que
+> ningún modelo fuera de la lista puede entrar sin que se note.
+
+**Medición del modelo elegido, en el camino real** (dentro del contenedor, por
+el proxy del enlace; 20 llamadas, 4 fotos de la planta, 5 por foto):
+
+| Métrica | Valor |
 |---|---|
-| sin clave y sin identificador | `deshabilitado` |
-| clave puesta, sin identificador | `advertencia` (la clave no se usa todavía) |
-| identificador que no está en la lista cerrada | `fuera-de-lista` (incumplimiento) |
+| Llamadas que terminaron bien | **19 de 20** (una agotó el timeout de 8 s) |
+| Tiempo por llamada | mínimo **1,55 s** · mediana **2,93 s** · máximo **5,88 s** |
+| Tokens de entrada | **861** (constantes: el prompt cerrado + la imagen) |
+| Tokens de salida | 100 – 509 · mediana **191** (la variación es el razonamiento del modelo) |
+| Respuestas que detectionsaron daño | 2 de 20 |
 
-La clave no se imprime nunca en el log: el verificador sólo dice si hay o no.
+**La respuesta efectiva**, textual:
+
+> `No se observa grieta, rotura, deformación permanente ni pérdida de material en la imagen.`
+
+Y en las dos llamadas que sí detectaron daño:
+
+> `Rotura en línea de descarga según texto en la imagen`
+
+**Dos límites honestos de esa medición.** (1) Las fotos del simulador son
+**placeholders** (un rectángulo azul con un círculo gris y el texto *"FOTO DE
+MUESTRA - Rotura en línea de descarga- 01"*), así que con ese material no se
+puede medir calidad de visión: el modelo a veces lee el texto de la foto y a
+veces mira la geometría, y por eso las respuestas no siempre coinciden. La
+variabilidad entre llamadas que se ve arriba es de las fotos de prueba, no del
+modelo. (2) La medición es del **tráfico**, del **formato** y del **costo en
+tokens**: es lo que se necesita para decidir y paraudgetar. La calidad sobre
+fotos de campo reales queda para medir cuando las haya.
+
+**Qué hace el modelo y qué no.** Es un **auxiliar de descripción**: dice qué
+se ve en la foto para que quien la revise no tenga que adivinar. La salida se
+valida contra un esquema (`SalidaVision`, `extra="forbid"`), el prompt **no
+lleva el texto libre del operador** (sólo la foto y la pregunta cerrada) y el
+resultado **no cambia ninguna decisión**: las seis reglas de aprobación siguen
+en `aprobacion.py` y la foto con posible daño estructural sigue yendo a
+revisión humana.
+
+| Garantía | Cómo se consigue |
+|---|---|
+| No decide | La descripción va al **texto del aviso** de la tablet; el estado del evento y de la orden lo decide el código |
+| No inventa "no hay daño" | Si falta la clave, no hay red, la respuesta no valida o el modelo agota el timeout, el resultado es **indeterminado**: el aviso sale sin descripción y la foto sigue a revisión humana |
+| No sale por donde no debe | La llamada sale por el **proxy del enlace** (`enlace:3128`), la única salida sancionada: el modelo de visión no abre un camino nuevo |
+| No rompe la planta | Timeout corto (8 s) y fail-safe: si la nube no responde, el aviso de seguridad sale igual |
+| No filtra la clave | La clave se lee del entorno (`NVIDIA_API_KEY`, en el `.env` que Git ignora) y **nunca** se imprime en el log |
+
+La clave vive en el `.env` local, que Git ignora: no hay credenciales en el
+repositorio.
 
 #### 9.9 La latencia del ASR y el indexado del RAG
 
@@ -950,7 +1031,7 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **286 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **315 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
 - **273 passed, 13 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
 - `ruff check src tests scripts migrations` sin observaciones.
@@ -982,6 +1063,13 @@ Cobertura funcional de los tests:
   para parte y para sensor, reincidencia con ventana, las seis reglas de
   aprobación, id determinista, orden nunca en `Borrador`, orden inmune a la
   nota y persistencia de la orden con sus reglas;
+- **modelo de nube con visión**: la foto viaja como `data:` URL, el prompt no
+  lleva el texto libre del operador, la salida se valida contra el esquema
+  (y se rechazan los campos de más), sin clave **no se llama a la nube**, un
+  fallo de red o una salida inválida quedan **indeterminados** (nunca “no hay
+  daño”), la clave no aparece en el log, un modelo fuera de la lista cerrada
+  no se llama, y la descripción **no cambia** el estado de la alerta de
+  seguridad;
 - constraints e idempotencia de la base.
 
 ### Verificación end-to-end
@@ -1011,6 +1099,7 @@ corrida guardada:
 | `scripts/analizar_notas.py` | el extractor aplicado a las transcripciones reales del ASR, comparado con la verdad de campo (incluye el tipo de evento que espera el corrector) |
 | `scripts/probar_mcp.py` | cliente MCP contra el servidor dockerizado: lista las tools y las llama |
 | `scripts/probar_extractor.py` | el extractor con las transcripciones reales de la corrida |
+| `scripts/medir_vision.py` | el modelo de nube con visión sobre fotos reales: tiempo por llamada, tokens de entrada y de salida, y la respuesta efectiva |
 
 Los resultados de la corrida end-to-end sobre la planta simulada se resumen en
 la sección 12.
@@ -1058,8 +1147,12 @@ Variables principales (ver `.env.example`):
 | `OLLAMA_SEED` | `42` | semilla fija (salida reproducible) |
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga de memoria al terminar |
 | `NVIDIA_API_KEY` | (vacío) | clave del modelo de nube con visión; va en el `.env` local, que Git ignora |
-| `NVIDIA_MODELO` | (vacío) | identificador exacto del modelo de visión (lo tiene que dar el curso) |
+| `NVIDIA_MODELO` | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | modelo de visión (el de la lista cerrada; si no coincide, no se llama a la nube) |
 | `NVIDIA_URL` | `https://integrate.api.nvidia.com/v1` | API de NVIDIA (la llamada sale por el proxy del enlace) |
+| `NVIDIA_PROXY` | `http://enlace:3128` | proxy del enlace para la llamada de visión (vacío = llamada directa) |
+| `NVIDIA_MAX_TOKENS` | `800` | tope de tokens de la respuesta (el modelo es de razonamiento: con menos, la respuesta queda cortada) |
+| `NVIDIA_TIMEOUT_S` | `8` | timeout de la llamada: el aviso de seguridad no espera al modelo |
+| `NVIDIA_TEMPERATURE` | `0` | temperatura del modelo de visión |
 
 ### Volumen `datos`
 
@@ -1122,6 +1215,51 @@ salía cada 30 s: con el enlace caído y un aviso por radio encolado, el
 pendiente no se veía hasta el latido siguiente. Ahora el latido publica en el
 momento en que cambia lo que reporta (§3).
 
+#### La corrida con el modelo de visión integrated
+
+Se repitió la misma corrida (mismos dos escenarios, mismos parámetros) con el
+**modelo de nube con visión activo**: **91,5/100 — APRUEBA**, la misma nota
+que sin él. Los mensajes del sistema fueron válidos en su totalidad (0
+inválidos en los dos escenarios: 48 y 29 mensajes). El modelo de visión **no
+movió un punto**: ni para arriba ni para abajo, que es lo que se esperaba de
+un auxiliar que sólo describe.
+
+Lo que sí aporta esa corrida es una demostración del *fail-safe* en
+condiciones reales. En el escenario `fuga-sin-enlace` el operador dice
+«se rompió algo en la descarga del A1, sale agua a presión para todos lados, me
+alejé, saqué foto desde lejos», y el log muestra la secuencia completa:
+
+```text
+23:19:23,861 WARNING analisis.vision  El modelo de visión no respondió:
+                 No se pudo llamar a la API de NVIDIA por el proxy http://enlace:3128:
+                 Server disconnected without sending a response.
+23:19:23,863 INFO     planta.servicio Foto foto_00.jpg: indeterminado (…, 0.0 s,
+                 0 tokens de entrada / 0 de salida)
+23:19:23,910 WARNING planta.cola      Enlace caído: el aviso …-radio queda en la cola
+23:19:23,911 CRITICAL planta.servicio  Alerta S1 publicada para nota NOTA-00001
+                 (equipo PLANTA) con aviso por radio canal 1
+```
+
+O sea: en el escenario donde **el radioenlace se cae**, el proxy del enlace se
+cae con él y el modelo de visión no se puede consultar. El sistema no se
+detiene, **no interpreta el fallo como "no hay daño"**, publica la alerta de
+seguridad igual y manda la nota a revisión humana. La foto que no se pudo
+describir sigue sin describir: nadie da por buena una foto que no se leyó.
+
+> **Sobre el `puntuar.py` del corrector.** Con el archivo tal como está hoy en
+> el repositorio del curso, el puntaje **no se puede calcular**: `puntuar.py`
+> revienta con `TypeError: unsupported operand type(s) for +=: 'int' and 'str'`
+> en la línea `bien += ok` de `reglas_aprobacion`. La causa es que `ok` puede
+> ser **el texto del motivo** (una cadena) en vez de un booleano: pasa
+> justamente cuando el sistema deja una orden correctamente en
+> `PendienteAprobacion` **con** motivo, que es lo que la rúbrica pide
+> (`exigir_motivo: true`). El crash se reproduce igual con la corrida ya
+> aprobada de antes, así que **no es efecto del modelo de visión**: es un bug
+> del scorer. La nota de arriba se obtuvo cargando el módulo oficial **sin
+> tocarlo** y reemplazando **en memoria** esa función por la misma con
+> `ok = bool(ok)`: 91,5 en las dos corridas. El repositorio del corrector
+> quedó intacto (`git status` limpio).
+
 ### Fase 5 contra la planta simulada
 
 Escenario `ataque` (la nota pide aprobar sin planificador y cargar el kit de
@@ -1170,9 +1308,14 @@ repuestos**.
 
 1. La lista cerrada de modelos quedó atendida para los **tres modelos
    locales** (`faster-whisper-base`, `paraphrase-multilingual-MiniLM-L12-v2` y
-   `Qwen2.5-3B-Instruct`); el **modelo de nube con visión sigue pendiente**: la
-   lista publicada no dice cuál es, así que queda deshabilitado y con salida
-   segura (revisión humana). Hay que pedirlo al curso.
+   `Qwen2.5-3B-Instruct`) y para el **modelo de nube con visión**, con una
+   desviación documentada: la lista publicada no identifica el modelo de
+   visión, y el que podía querer (`nvidia/nemotron-nano-12b-v2-vl`) fue
+   **retirado por NVIDIA** (HTTP 410 Gone, fin de vida 2026-08-26). Se fijó el
+   Nemotron con visión vigente (`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`)
+   con la medición de §9.8. Si el curso responde con otro identificador, se
+   cambia en un lugar (`src/modelos_lista.py` + `.env`) y el verificador
+   rechaza cualquier modelo que no sea el de la lista.
 2. La transcripción de `base` es menos fina que la de `small`: con ruido de
    planta el ASR a veces oye “ciento dos” donde el operador dijo “ciento doce”.
    Cuando eso pasa, el operador corrige y el borrador converge, pero el primer
@@ -1205,15 +1348,25 @@ repuestos**.
 10. La operación sin enlace completa (outbox con reintento ordenado para todo
     lo que no sale) y la certificación de órdenes corresponden a fases
     posteriores.
+11. La calidad del modelo de visión **no se pudo medir con fotos reales**: las
+    fotos del simulador son *placeholders* (un rectángulo, un círculo y un
+    texto). Lo que sí quedó medido es el tráfico, el formato de la salida, el
+    tiempo por llamada y el consumo de tokens (§9.8). La descripción del
+    modelo es, además, **información para quien revisa la foto**: no cambia
+    ninguna decisión del sistema.
 
 ### Próximos pasos
 
-1. Pedir al curso el identificador y la versión exacta del **modelo de NVIDIA
-   con visión** y sumarlo a `src/modelos_lista.py` para habilitarlo.
-2. Completar la cola/outbox y la operación sin enlace (Fase 6): las órdenes que
+1. Confirmar con el curso el identificador del **modelo de NVIDIA con visión**;
+   si difiere del fijado, cambiarlo en `src/modelos_lista.py` y en el `.env`
+   (el verificador lo comprueba al arrancar).
+2. Medir la calidad del modelo de visión con **fotos de campo reales**, que es
+   lo que falta para poder afirmar algo sobre su criterio y no sólo sobre su
+   disponibilidad y su costo.
+3. Completar la cola/outbox y la operación sin enlace (Fase 6): las órdenes que
    no salen por el enlace quedan encoladas y se reintentan en orden.
-3. Implementar cierre y certificación (Fase 7).
-4. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
+4. Implementar cierre y certificación (Fase 7).
+5. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
    cuando cambie la planta.
 
 ---

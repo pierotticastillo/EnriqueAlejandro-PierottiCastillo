@@ -197,13 +197,17 @@ services:
       OLLAMA_TIMEOUT_S: ${OLLAMA_TIMEOUT_S:-90}
       OLLAMA_SEED: ${OLLAMA_SEED:-42}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-0}
-      # Modelo de nube con visión (NVIDIA). Sigue deshabilitado hasta que el
-      # curso indique el identificador exacto del modelo; la clave se lee del
-      # `.env` local (ignorado por Git) y la llamada saldría por el proxy del
-      # enlace, que es la única salida sancionada.
+      # Modelo de nube con visión (NVIDIA). Es un AUXILIAR: describe las fotos
+      # para que quien revise sepa qué está mirando. No decide ni aprueba.
+      # La llamada sale por el proxy del enlace, que es la única salida
+      # sancionada (las redes del contenedor son internas).
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
-      NVIDIA_MODELO: ${NVIDIA_MODELO:-}
+      NVIDIA_MODELO: ${NVIDIA_MODELO:-nvidia/nemotron-3-nano-omni-30b-a3b-reasoning}
       NVIDIA_URL: ${NVIDIA_URL:-https://integrate.api.nvidia.com/v1}
+      NVIDIA_PROXY: ${NVIDIA_PROXY:-http://enlace:3128}
+      NVIDIA_MAX_TOKENS: ${NVIDIA_MAX_TOKENS:-800}
+      NVIDIA_TIMEOUT_S: ${NVIDIA_TIMEOUT_S:-8}
+      NVIDIA_TEMPERATURE: ${NVIDIA_TEMPERATURE:-0}
       # Directorio de datos para audios y fotos (volumen Docker).
       DATOS_DIR: ${DATOS_DIR:-/datos}
     depends_on:

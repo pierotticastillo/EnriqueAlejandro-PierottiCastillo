@@ -12,7 +12,7 @@ El proyecto tiene las **Fases 0, 0.5, 1, 2, 3, 4 y 5 implementadas y verificadas
 
 La Fase 5 (análisis y borrador de orden) quedó cerrada con la prueba end-to-end contra la planta simulada: el catálogo de fallas sale de los manuales de la planta, las reglas de aprobación se evalúan en código y la orden se publica **una sola vez** con el estado ya decidido (`Aprobada` o `PendienteAprobacion`, nunca `Borrador`).
 
-La **restricción 04 (lista cerrada de modelos)** quedó atendida: el ASR pasó a `faster-whisper-base`, el embedder sigue siendo `paraphrase-multilingual-MiniLM-L12-v2` (384 dims), el LLM local `Qwen2.5-3B-Instruct` (Q4_K_M) entra como auxiliar de redacción acotado, y la lista quedó como fuente única de verdad con un verificador que corre al arrancar. El modelo de nube con visión sigue **deshabilitado** porque la lista publicada no dice cuál es: hay que pedirlo al curso.
+La **restricción 04 (lista cerrada de modelos)** quedó atendida: el ASR pasó a `faster-whisper-base`, el embedder sigue siendo `paraphrase-multilingual-MiniLM-L12-v2` (384 dims), el LLM local `Qwen2.5-3B-Instruct` (Q4_K_M) entra como auxiliar de redacción acotado, y la lista quedó como fuente única de verdad con un verificador que corre al arrancar. El **modelo de nube con visión** quedó fijado en `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (Nemotron 3 Nano Omni 30B A3B), con la desviación documentada: la lista publicada no lo identifica y el que podía querer (`nvidia/nemotron-nano-12b-v2-vl`) fue **retirado por NVIDIA** (HTTP 410 Gone, fin de vida 2026-08-26).
 
 La **conversación de tablet** quedó cerrada: la corrección del operador se aplica a la lectura que está corrigiendo (no a la última del equipo), al mover una lectura a otro equipo el valor se convierte, la negación saca una sola lectura y la conversación tiene tope (`PARTE_MAX_CORRECCIONES=5`): si no converge, la nota queda para revisión humana en vez de dar vueltas.
 
@@ -66,7 +66,7 @@ tres modelos locales y un modelo de nube con visión. Quedó implementada así:
 | `asr` | `faster-whisper-base` | El ASR pasó de `small` (placeholder) a `base`, que es el de la lista. La imagen descarga el modelo en la build (`ARG ASR_MODELO=base`) y el runtime no baja nada. |
 | `embeddings` | `paraphrase-multilingual-MiniLM-L12-v2` (384 dims) | Sin cambios: ya era el de la lista, y las 384 dimensiones son las del índice pgvector. |
 | `llm` | `Qwen2.5-3B-Instruct` Q4_K_M | Nuevo: cliente de Ollama detrás de `AnalysisModel.invoke(prompt, images) -> StructuredOutput`, redaction acotada con fallback determinista y hilo propio. |
-| `vision` | NVIDIA (nube, con visión) | **Deshabilitado y fail-safe**: no se llama a la nube, no hay credenciales en el repo y una foto con posible daño estructural va a revisión humana. |
+| `vision` | `Nemotron 3 Nano Omni 30B A3B` (nube, con visión) | **Implementado y fail-safe**: `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` en la API de NVIDIA, por el proxy del enlace. Es un **auxiliar de descripción**: la salida va al texto del aviso de tablet y **no cambia ninguna decisión** (las seis reglas siguen en código). |
 
 ### El verificador
 
@@ -95,18 +95,81 @@ Ollama respondiendo `qwen2.5:3b-instruct · Q4_K_M · 3.1B`.
 - **Medición**: ~40 s por vuelta a través del proxy (el modelo se carga en cada llamada, ~9 s, y genera a ~8 tok/s); ~13 s cuando se lo llama directamente. Por eso el timeout quedó en 90 s y la redacción va en un hilo aparte, que no frena la cola de notas.
 - **Presupuesto**: los topes del compose bajaron (`postgres` 1,5 GB, `sistema` 3 GB, `mcp` 0,5 GB) para que el pico del modelo (~2,1 GB) entre en los 8 GB.
 
-### Lo que falta
+### El modelo de nube con visión
 
-El **identificador exacto del modelo de NVIDIA con visión** no está en la
-lista publicada. Es el único punto abierto de la restricción 04: hay que
-pedirlo al curso. Mientras tanto la falla es segura (revisión humana).
+La lista publicada dice que hay "modelos en la nube de NVIDIA con visión", pero
+**no dice cuál**. El que podía querer (`nvidia/nemotron-nano-12b-v2-vl`) **ya no
+existe**: la API responde `HTTP 410 Gone` —*"end of life on 2026-08-26"*— y su
+ficha decía además *English only*, cuando todo el sistema es en español.
 
-La **clave ya está cableada** para cuando ese dato llegue: se lee de
-`NVIDIA_API_KEY` (archivo `.env` local, que Git ignora; en el contenedor, de la
-variable de entorno) y nunca del código. Poner la clave no habilita el modelo:
-el identificador tiene que estar en `src/modelos_lista.py`, y el verificador lo
-comprueba al arrancar (`deshabilitado` / `advertencia` / `fuera-de-lista`). La
-clave no se imprime nunca en el log.
+Se probaron uno por uno los seis modelos con visión del catálogo de la cuenta,
+con una foto real de la planta:
+
+| Modelo | Resultado | Latencia | Salida |
+|---|---|---|---|
+| **`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`** | **200** | **1,2 – 2,2 s** | `content` con JSON en español |
+| `meta/llama-3.2-90b-vision-instruct` | 200 | 26 – 43 s | `content` con JSON en español |
+| `nvidia/nemotron-3.5-super-vl-120b-a12b` | 200 | 1,5 s | `content: null` (sólo razonamiento) |
+| `nvidia/nemotron-nano-12b-v2-vl` | 410 Gone | — | retirado por NVIDIA |
+| `microsoft/phi-3-vision-128k-instruct` | 404 | — | sin acceso en la cuenta |
+| `nvidia/llama-nemotron-embed-vl-1b-v2` | 404 | — | es de embeddings, no de chat |
+
+**Decisión: `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`** (Nemotron 3 Nano
+Omni 30B A3B): el Nemotron con visión **vigente**, el más rápido de los que
+funcionan y el único que devuelve la respuesta en `content` limpio.
+
+Medición en el camino real (dentro del contenedor, por el proxy del enlace; 20
+llamadas, 4 fotos de la planta, 5 por foto):
+
+| Métrica | Valor |
+|---|---|
+| Llamadas que terminaron bien | **19 de 20** (una agotó el timeout de 8 s) |
+| Tiempo por llamada | mínimo **1,55 s** · mediana **2,93 s** · máximo **5,88 s** |
+| Tokens de entrada | **861** (constantes) |
+| Tokens de salida | 100 – 509 · mediana **191** |
+| Respuestas que detectaron daño | 2 de 20 |
+
+Respuesta efectiva (textual):
+
+> `No se observa grieta, rotura, deformación permanente ni pérdida de material en la imagen.`
+
+> **Desviación de la lista cerrada, asumida y documentada.** La lista publicada
+> no identifica el modelo de visión, así que se elige el vigente del catálogo con
+> la evidencia de arriba. Si el curso responde con otro identificador, se cambia
+> en `src/modelos_lista.py` y en el `.env`: el verificador rechaza cualquier
+> modelo que no sea el de la lista.
+
+**Lo que falta:** la **calidad** del modelo no se pudo medir con fotos reales
+(las del simulador son *placeholders*: un rectángulo, un círculo y un texto).
+Lo medido es el tráfico, el formato, el tiempo y el consumo de tokens.
+
+### El fail-safe, verificado end-to-end
+
+La llamada sale por el **proxy del enlace** (`enlace:3128`), la única salida
+sancionada. En la corrida del corrector, escenario `fuga-sin-enlace`, el proxy
+se cae con el radioenlace y el modelo no se puede consultar:
+
+```text
+WARNING analisis.vision  El modelo de visión no respondió: No se pudo llamar a la
+        API de NVIDIA por el proxy http://enlace:3128: Server disconnected…
+INFO     planta.servicio Foto foto_00.jpg: indeterminado (…, 0.0 s, 0 tokens)
+WARNING planta.cola      Enlace caído: el aviso …-radio queda en la cola
+CRITICAL planta.servicio  Alerta S1 publicada para nota NOTA-00001 (equipo PLANTA)
+```
+
+El sistema **no se detiene**, **no interpreta el fallo como "no hay daño"**,
+publica la alerta igual y manda la nota a revisión humana. El corrector oficial
+dio **91,5/100 — APRUEBA** con el modelo de visión activo: la misma nota que
+sin él.
+
+### La clave
+
+La clave se lee de `NVIDIA_API_KEY` (archivo `.env` local, que Git ignora; en
+el contenedor, de la variable de entorno) y nunca del código. Poner la clave no
+habilita el modelo por sí sola: el identificador tiene que estar en
+`src/modelos_lista.py`, y el verificador lo comprueba al arrancar
+(`deshabilitado` / `fuera-de-lista` / `ok`). La clave no se imprime nunca en el
+log.
 
 ## Fase 1 — la tablet: que el operador y el sistema se entiendan
 
@@ -306,9 +369,11 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Última verificación
 
-- `python -m pytest`: **286 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **273 pasaron, 13 omitidas**.
+- `python -m pytest`: **315 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **273 pasaron, 13 omitidas**.
 - `ruff check src tests scripts migrations`: **sin errores**.
 - Corrector oficial (`martes-tranquilo` + `fuga-sin-enlace`, `faster-whisper-base`, LLM local activo): **91,5/100 — APRUEBA**, sin eliminatorias. Por criterio: A1 100 %, A2 58 %, A3 69 %, A4a 100 %, A4b 100 %, B1 100 %, B2 100 %, D1 100 %, E1 100 %, **E2 100 %**, E3 100 %, F1 100 %, F2 100 %.
+  - Repetida **con el modelo de nube con visión activo**: **91,5/100 — APRUEBA**, los mismos números y 0 mensajes inválidos (48 y 29). El modelo es un auxiliar de descripción y no mueve ningún punto.
+  - Nota sobre la herramienta: el `puntuar.py` del corrector, tal como está hoy, **no puede calcular el puntaje** — `TypeError: int + str` en `bien += ok` (`ok` puede ser el texto del motivo). El crash se reproduce igual con la corrida anterior, ya aprobada: es un bug del scorer, no del sistema. La nota se obtuvo cargando el módulo oficial **sin tocarlo** y corrigiendo esa función **en memoria** (`ok = bool(ok)`); el repositorio del corrector quedó con `git status` limpio.
   - Lo que queda debajo del 100 %: de las 13 notas, **tres no tienen mediciones numéricas** (dos «la bomba está parada, en reserva» y la alerta de seguridad) y el operador virtual de la planta **sólo puede confirmar las filas que tienen valor**; las otras dos necesitaron un segundo borrador porque el ASR oyó «ciento dos» por «ciento doce» — el operador corrigió y el sistema convergió.
 - Servidor MCP probado en vivo contra la planta: **8 tools**, todas con `additionalProperties: false` y `structuredContent` válido (`scripts/probar_mcp.py`).
 - Extr extractor contrastado contra la verdad de campo con las transcripciones reales del ASR (`scripts/analizar_notas.py`): todas las lecturas coinciden y las 22 decisiones de B1 dan el tipo que espera el corrector.
@@ -327,15 +392,19 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 | `scripts/analizar_borradores.py` | qué corrigió el operador en cada borrador y por qué |
 | `scripts/analizar_notas.py` | extractor vs. verdad de campo, con el tipo de evento esperado |
 | `scripts/verificar_modelos.py` | lista cerrada de modelos: tabla, configuración y runtime |
+| `scripts/medir_vision.py` | medición del modelo de visión: tiempo, tokens y respuesta efectiva |
 
 ## Próximos pasos
 
 1. **Fase 6:** outbox en Postgres y reintento ordenado al volver el enlace; las órdenes que no salen por el enlace quedan encoladas.
 2. **Fase 7:** cierre por voz, control contra la orden, certificación y habilitación.
 3. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar` cuando cambie la planta.
-4. **Pedir al curso el identificador y la versión exacta del modelo de NVIDIA con visión**, y sumarlo a `src/modelos_lista.py` para habilitarlo.
+4. **Confirmar con el curso el identificador del modelo de NVIDIA con visión**: si difiere del fijado (`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`), se cambia en `src/modelos_lista.py` y en el `.env` (el verificador lo comprueba al arrancar).
+5. **Medir la calidad del modelo de visión con fotos de campo reales**: con los *placeholders* del simulador sólo se midió tráfico, formato, tiempo y tokens.
 
 ## Historial
+
+- **2026-11-07 (noche, cierre del modelo de visión):** se implementó el **modelo de nube con visión** (`src/analisis/vision.py`). La lista publicada no lo identifica, y el que podía querer (`nvidia/nemotron-nano-12b-v2-vl`) fue **retirado por NVIDIA** (HTTP 410 Gone, EOL 2026-08-26; además era *English only*). Se midieron los seis modelos con visión del catálogo de la cuenta con una foto real y se fijó `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (Nemotron 3 Nano Omni 30B A3B): 1,2-2,2 s, `content` con JSON limpio, 861 tokens de entrada y mediana de 191 de salida; 19 de 20 llamadas bien en el camino real (por el proxy del enlace). La integración es conservadora: la descripción va **sólo al texto del aviso de tablet** de seguridad y no toca el resumen del evento, el borrador de la orden ni el estado — `revision_humana` la sigue activando el código. Fail-safe total: sin clave, sin red, salida inválida o timeout dan **indeterminado**, nunca "no hay daño"; la clave se lee del `.env` local (ignorado por Git) y no se imprime nunca. La corrida del corrector con el modelo activo dio **91,5/100 — APRUEBA** (la misma nota) y mostró el fail-safe real: en `fuga-sin-enlace` el proxy se cae con el enlace, la foto queda `indeterminado` y la alerta S1 se publica igual. La suite quedó en **315 pruebas aprobadas**.
 
 - **2026-11-07 (noche):** se cerró la **conversación de tablet** y se corrió la
   corrida final. El bucle de borradores (una nota llegó al borrador b352: el
