@@ -82,6 +82,18 @@ _CUE_ESTADO = (
 )
 _CUE_REBALSE = ("rebals", "rebalse")
 
+# Observaciones que se derivan del VALOR de la fila y no de lo que dijo el
+# operador. Viven en una tabla para que la regla sea una sola: si el operador
+# corrige el valor en la tablet, la observación se vuelve a derivar (si no, un
+# diferencial que el operador corrigió de 4 a 0,4 sigue marcado como
+# "diferencial alto" y se escala una bomba que está bien).
+#
+#   variable                (umbral, observación, el umbral cuenta)
+_OBSERVACION_POR_VALOR = {
+    "temperatura_rodamiento_ir": (75.0, "rodamiento caliente", False),
+    "presion_diferencial": (1.5, "diferencial alto", True),
+}
+
 # Muletillas y palabras de enlace que no son una observación por sí solas.
 _STOPWORDS = {
     "a",
@@ -277,6 +289,15 @@ class ExtractorParte:
             return "presion_diferencial"
         if any(cue in norm for cue in _CUE_DESCARGA):
             return "presion_descarga_local"
+        # El ruido manda sobre el rodamiento: "un ruido raro de rodamiento"
+        # habla del ruido, no de la temperatura del rodamiento. Sin esto, la
+        # frase se tomaba como una temperatura y el síntoma se perdía. Si la
+        # misma frase trae la temperatura ("60 grados con la pistola"), la
+        # temperatura es lo que se midió y manda ella.
+        if any(cue in norm for cue in _CUE_RUIDO) and not (
+            "grado" in norm or "pistola" in norm
+        ):
+            return "ruido"
         if any(cue in norm for cue in _CUE_RODAMIENTO) and (
             "grado" in norm or "pistola" in norm or numero is not None
         ):
@@ -648,11 +669,40 @@ def _observacion(
         if "chorrea" in norm or "pierde bastante" in norm:
             return "pérdida importante por empaquetadura"
         return "goteo por empaquetadura"
-    if variable == "temperatura_rodamiento_ir" and valor is not None and valor > 75:
-        return "rodamiento caliente"
-    if variable == "presion_diferencial" and valor is not None and valor >= 1.5:
-        return "diferencial alto"
+    if valor is not None and _cumple_umbral(variable, valor):
+        return _OBSERVACION_POR_VALOR[variable][1]
     return None
+
+
+def _cumple_umbral(variable: str, valor: float) -> bool:
+    """Si el valor de la fila dispara la observación derivada del valor."""
+    regla = _OBSERVACION_POR_VALOR.get(variable)
+    if regla is None:
+        return False
+    umbral, _, incluye = regla
+    return valor >= umbral if incluye else valor > umbral
+
+
+def recalcular_observacion(fila: Hallazgo) -> None:
+    """Vuelve a derivar la observación que depende del valor de la fila.
+
+    El operador puede corregir un valor en la tablet ("era cero cuatro, no
+    cuatro"). La observación que se había derivado del valor viejo ("diferencial
+    alto") ya no corresponde: se saca y se calcula de nuevo con el valor
+    nuevo. Las observaciones que salen del texto (el ruido, el goteo, ...) se
+    dejan como están.
+    """
+    derivadas = {texto for _, texto, _ in _OBSERVACION_POR_VALOR.values()}
+    if fila.observacion:
+        partes = [
+            parte.strip()
+            for parte in fila.observacion.split(",")
+            if parte.strip() and parte.strip() not in derivadas
+        ]
+        fila.observacion = ", ".join(partes) or None
+    regla = _OBSERVACION_POR_VALOR.get(fila.variable)
+    if regla is not None and fila.valor is not None and _cumple_umbral(fila.variable, fila.valor):
+        fila.observacion = _unir_observacion(fila.observacion, regla[1])
 
 
 def _canonizar_obs(norm: str) -> str:

@@ -15,7 +15,7 @@ from planta_contrato import FilaParte, MensajeTablet, Pantalla
 
 from planta.nombre_resolver import ResolutorNombres
 from planta.numeros import parsear_numero
-from planta.parte_extractor import Hallazgo, Pregunta
+from planta.parte_extractor import Hallazgo, Pregunta, recalcular_observacion
 from planta.texto import normalizar, oraciones
 from planta.unidades import convertir, normalizar_unidad, unidad_canonica
 
@@ -336,6 +336,10 @@ def _aplicar_valor(
     valor = convertir(correccion.valor, correccion.unidad, canonica)
     fila.valor = valor
     fila.unidad = canonica
+    # La observación que se había derivado del valor viejo ya no corresponde:
+    # un diferencial que el operador corrigió de 4 a 0,4 no es "diferencial
+    # alto" y la bomba no se tiene que escalar.
+    recalcular_observacion(fila)
     return fila
 
 
@@ -379,6 +383,8 @@ def _aplicar_equipo(
     origen.tag = correccion.tag
     if canonica:
         origen.unidad = canonica
+    # El valor y la variable cambiaron: la observación se vuelve a derivar.
+    recalcular_observacion(origen)
     _fusionar_duplicadas(filas)
     return next(
         (f for f in filas if f.tag == correccion.tag and f.variable == variable),
@@ -617,6 +623,9 @@ def _fusionar_duplicadas(filas: list[Hallazgo]) -> None:
                 )
             if previa.foto_indice is None:
                 previa.foto_indice = fila.foto_indice
+            # La fila que se fusiona trae el valor que manda: la observación
+            # derivada se vuelve a calcular con ese valor.
+            recalcular_observacion(previa)
         else:
             vistas[clave] = fila
             resultado.append(fila)
@@ -652,3 +661,5 @@ def _reconvertir(fila: Hallazgo, tag: str, planta: dict[str, Any]) -> None:
         return
     fila.valor = convertir(fila.valor, fila.unidad, canonica)
     fila.unidad = canonica
+    # El valor cambió de unidad: la observación que dependía de él también.
+    recalcular_observacion(fila)

@@ -192,6 +192,22 @@ def test_equipo_parado_en_reserva_no_es_falla(planta: dict) -> None:
     assert extraccion.preguntas == []
 
 
+def test_ruido_de_rodamiento_es_ruido_y_no_temperatura(planta: dict) -> None:
+    """"Un ruido raro de rodamiento" es un síntoma, no una temperatura.
+
+    El "un" del enunciado no es un número: es un artículo. Con él, la frase
+    caía en la variable del rodamiento y el síntoma se perdía (la fila queda
+    sin observación y el equipo no se escala).
+    """
+    extraccion = ExtractorParte(planta).extraer(
+        "Este, la de la punta está en 113 kilos de descarga, tiene un ruido raro de rodamiento."
+    )
+    assert _filas(extraccion) == [
+        ("B-101", "presion_descarga_local", 113.0, "kg/cm2", None),
+        ("B-101", "ruido", None, None, "tiene un ruido raro de rodamiento"),
+    ]
+
+
 def test_filtro_sin_la_palabra_diferencial(planta: dict) -> None:
     """Si el filtro tiene una sola variable en el catálogo, esa es la que se oyó."""
     extraccion = ExtractorParte(planta).extraer("el filtro a medio 1,3 de")

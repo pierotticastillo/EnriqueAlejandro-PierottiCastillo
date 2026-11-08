@@ -77,6 +77,51 @@ def test_corrige_equipo(planta: dict) -> None:
     assert filas[0].unidad == "psi"
 
 
+def test_corregir_el_valor_saca_la_observacion_que_venia_del_valor_viejo(
+    planta: dict,
+) -> None:
+    """El operador corrige "cuatro" por "cero coma cuatro": el filtro está bien.
+
+    La observación "diferencial alto" se había derivado del valor que el
+    operador dijo al principio. Si queda pegada, el filtro se escala aunque
+    el valor corregido sea normal.
+    """
+    resolver = desde_api(planta)
+    filas = [Hallazgo("F-201A", "presion_diferencial", 4.0, "kg/cm2", "diferencial alto")]
+    respuesta = "No. El filtro a estaba en cero coma cuatro kilos, no en cuatro. Arreglá eso."
+    correcciones = interpretar(respuesta, resolver).correcciones
+    aplicar_correcciones(filas, correcciones, planta, resolver)
+    assert filas[0].valor == 0.4
+    assert filas[0].observacion is None
+
+
+def test_corregir_el_valor_deja_la_observacion_si_el_valor_nuevo_tambien_la_tiene(
+    planta: dict,
+) -> None:
+    """Si el valor corregido sigue fuera de límite, la observación se queda."""
+    resolver = desde_api(planta)
+    filas = [Hallazgo("F-201A", "presion_diferencial", 4.0, "kg/cm2", "diferencial alto")]
+    respuesta = "No. El filtro a estaba en tres kilos, no en cuatro."
+    correcciones = interpretar(respuesta, resolver).correcciones
+    aplicar_correcciones(filas, correcciones, planta, resolver)
+    assert filas[0].valor == 3.0
+    assert filas[0].observacion == "diferencial alto"
+
+
+def test_la_observacion_que_sale_del_texto_no_se_toca_al_corregir(planta: dict) -> None:
+    """El ruido es del texto: corregir otro valor no lo borra."""
+    resolver = desde_api(planta)
+    filas = [
+        Hallazgo("B-102", "ruido", None, None, "tiene un ruido raro de rodamiento"),
+        Hallazgo("B-102", "presion_descarga_local", 1600.0, "psi"),
+    ]
+    respuesta = "La dos estaba en mil seiscientos diez psi, no en mil seiscientos."
+    correcciones = interpretar(respuesta, resolver).correcciones
+    aplicar_correcciones(filas, correcciones, planta, resolver)
+    ruido = next(f for f in filas if f.variable == "ruido")
+    assert ruido.observacion == "tiene un ruido raro de rodamiento"
+
+
 def test_agrega_faltante(planta: dict) -> None:
     resolver = desde_api(planta)
     filas = _filas()
