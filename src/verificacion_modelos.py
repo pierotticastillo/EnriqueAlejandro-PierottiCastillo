@@ -172,13 +172,15 @@ def _configuracion_llm(settings: Settings, modelo: ModeloPermitido) -> Resultado
 
 
 def _configuracion_vision(settings: Settings) -> Resultado:
-    """El modelo de nube con visión: qué se	configuró y qué se puede usar.
+    """El modelo de nube con visión: qué se configuró y qué se puede usar.
 
     La clave **nunca** se imprime: acá sólo se dice si hay una o no.
 
-    Mientras la lista publicada no identifique el modelo, cualquier
-    ``NVIDIA_MODELO`` que se configure está **fuera de la lista cerrada** y
-    queda escrito en el log. Poner la clave no habilita nada por sí solo.
+    El modelo de la lista cerrada es el Nemotron con visión vigente
+    (``nvidia/nemotron-3-nano-omni-30b-a3b-reasoning``): el que la lista
+    publicada dejó sin identificar fue retirado por NVIDIA (HTTP 410 Gone).
+    Cualquier otro ``NVIDIA_MODELO`` queda **fuera de la lista cerrada** y se
+    escribe en el log; con la clave puesta, el sistema **no** llama a la nube.
     """
     modelo = por_clave(CLAVE_VISION)
     if not settings.nvidia_modelo:
@@ -189,7 +191,7 @@ def _configuracion_vision(settings: Settings) -> Resultado:
                 estado=ADVERTENCIA,
                 detalle=(
                     "hay NVIDIA_API_KEY pero no NVIDIA_MODELO: la clave no se usa "
-                    "hasta que el curso indique el identificador exacto del modelo"
+                    "hasta que se configure el modelo de visión de la lista"
                 ),
             )
         return Resultado(
@@ -205,7 +207,7 @@ def _configuracion_vision(settings: Settings) -> Resultado:
             estado=FUERA_DE_LISTA,
             detalle=(
                 f"NVIDIA_MODELO={settings.nvidia_modelo!r} no está en la lista "
-                "cerrada: la lista publicada no identifica el modelo de visión"
+                "cerrada: el modelo de visión tiene que ser el de la lista"
             ),
         )
     if not modelo.habilitado:

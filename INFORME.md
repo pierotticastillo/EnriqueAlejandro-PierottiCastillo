@@ -811,10 +811,9 @@ directa (`OLLAMA_PROXY` vacío).
 
 La lista publicada (`Lista_de_Modelos_Locales.md`) nombra los tres modelos
 locales y dice que hay "modelos en la nube de NVIDIA con visión", pero **no dice
-cuál**. Ese dato se le pidió al curso y la respuesta fue que la lista no lo
-identifica. Quedaban dos caminos: dejar el modelo de visión deshabilitado
-(fail-safe, sin llamar a la nube) o fijar uno con la evidencia de que el
-publicado ya no existe.
+cuál**: el identificador exacto no está en el material del curso. Quedaban dos
+caminos: dejar el modelo de visión deshabilitado (fail-safe, sin llamar a la
+nube) o fijar uno con la evidencia de que el publicado ya no existe.
 
 **El modelo que la lista podía querer ya no existe.** La API de NVIDIA
 responde:
@@ -828,7 +827,7 @@ HTTP 410 Gone
 
 `nvidia/nemotron-nano-12b-v2-vl` fue retirado por NVIDIA el **26 de agosto de
 2026**: no es que la cuenta no alcance, es que el endpoint no existe. Y su
-ficha de modelo lo limitationsaba además por idioma: *"Language Supported:
+ficha de modelo lo limitaba además por idioma: *"Language Supported:
 English only"*, cuando todo el sistema —notas del operador, manual MBP-4,
 reglas de aprobación— es en español.
 
@@ -872,7 +871,7 @@ el proxy del enlace; 20 llamadas, 4 fotos de la planta, 5 por foto):
 | Tiempo por llamada | mínimo **1,55 s** · mediana **2,93 s** · máximo **5,88 s** |
 | Tokens de entrada | **861** (constantes: el prompt cerrado + la imagen) |
 | Tokens de salida | 100 – 509 · mediana **191** (la variación es el razonamiento del modelo) |
-| Respuestas que detectionsaron daño | 2 de 20 |
+| Respuestas que detectaron daño | 2 de 20 |
 
 **La respuesta efectiva**, textual:
 
@@ -889,7 +888,7 @@ puede medir calidad de visión: el modelo a veces lee el texto de la foto y a
 veces mira la geometría, y por eso las respuestas no siempre coinciden. La
 variabilidad entre llamadas que se ve arriba es de las fotos de prueba, no del
 modelo. (2) La medición es del **tráfico**, del **formato** y del **costo en
-tokens**: es lo que se necesita para decidir y paraudgetar. La calidad sobre
+tokens**: es lo que se necesita para decidir y presupuestar. La calidad sobre
 fotos de campo reales queda para medir cuando las haya.
 
 **Qué hace el modelo y qué no.** Es un **auxiliar de descripción**: dice qué
