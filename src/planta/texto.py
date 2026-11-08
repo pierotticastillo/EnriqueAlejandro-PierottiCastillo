@@ -44,6 +44,18 @@ _BORDE_MEDICION = re.compile(
 
 _CORTE = "\x00"
 
+# La coma de estas frases **no** separa dos ideas: es una sola observación
+# ("la bomba está armada y no arranca", "la bomba está parada y en reserva").
+# Si se parte por la coma, el extractor se queda con "parada" (que además está
+# dentro de "disparada") y el equipo se clasifica como normal cuando es una
+# falla. Se protege la coma antes de cortar y se devuelve después.
+_UNIDO = "\x01"
+_FRASES_UNIDAS = re.compile(
+    r"\b(disparad[ao]|parad[ao])\s*,\s*"
+    r"(no arranca|no prende|no enciende|en reserva|por mantenimiento)\b",
+    re.IGNORECASE,
+)
+
 
 def clausulas(oracion: str) -> list[str]:
     """Divide una oración por comas que separan ideas, no decimales.
@@ -70,14 +82,17 @@ def clausulas(oracion: str) -> list[str]:
 
     resultado: list[str] = []
     for trozo in por_magnitud:
-        partes = re.split(r"(?<!\d),(?!\d)", trozo)
+        protegido = _FRASES_UNIDAS.sub(rf"\1{_UNIDO}\2", trozo)
+        partes = re.split(r"(?<!\d),(?!\d)", protegido)
         unidas: list[str] = []
         for parte in partes:
             if unidas and not _tiene_cifra(unidas[-1]) and _tiene_cifra(parte):
                 unidas[-1] = f"{unidas[-1]}, {parte}"
             else:
                 unidas.append(parte)
-        resultado.extend(parte.strip() for parte in unidas if parte.strip())
+        resultado.extend(
+            parte.replace(_UNIDO, ", ").strip() for parte in unidas if parte.strip()
+        )
     return resultado
 
 

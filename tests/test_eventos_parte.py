@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from planta_contrato import TipoEvento
 
 from deteccion.partes import clasificar_partes
-from planta.parte_extractor import Hallazgo
+from planta.parte_extractor import ExtractorParte, Hallazgo
 from planta.unidades import convertir
 
 TS = datetime(2026, 11, 4, 12, tzinfo=UTC)
@@ -132,6 +132,21 @@ def test_equipo_disparado_es_anomalia() -> None:
         [Hallazgo("B-102", "estado", None, None, "disparada, no arranca")]
     )
     assert eventos[0].tipo is TipoEvento.escalado
+
+
+def test_equipo_parado_en_reserva_no_es_anomalia_desde_la_nota(planta) -> None:
+    """La observación sale de la nota, no de una fila armada a mano."""
+    extraccion = ExtractorParte(planta).extraer("La 1 está disparada, no arranca.")
+    eventos = clasificar_partes(
+        nota_id="NOTA-14",
+        parte_id="parte-uuid",
+        ts=TS,
+        filas=extraccion.filas,
+        planta=_planta(),
+    )
+    assert len(eventos) == 1
+    assert eventos[0].tipo is TipoEvento.escalado
+    assert eventos[0].equipo == "B-101"
 
 
 def test_evento_escalado_lleva_el_contexto_del_parte() -> None:

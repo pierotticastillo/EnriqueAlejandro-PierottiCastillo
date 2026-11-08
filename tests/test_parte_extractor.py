@@ -166,6 +166,32 @@ def test_reserva_escuchada_como_reservoir(planta: dict) -> None:
     assert extraccion.preguntas[0].filas == [0]
 
 
+def test_equipo_disparado_que_no_arranca(planta: dict) -> None:
+    """"La 1 está disparada, no arranca" es una falla, no una bomba parada.
+
+    La coma de la frase no separa dos ideas y "parada" está dentro de
+    "disparada": sin cuidado, el equipo quedaba como una bomba parada (que no
+    es anomalía) y la orden no se escalaba nunca.
+    """
+    extraccion = ExtractorParte(planta).extraer("La 1 está disparada, no arranca.")
+    assert _filas(extraccion) == [("B-101", "estado", None, None, "disparada, no arranca")]
+    assert extraccion.preguntas == []
+
+
+def test_equipo_disparado_sin_coma(planta: dict) -> None:
+    """El ASR a veces no pone la coma: el equipo sigue siendo el mismo."""
+    extraccion = ExtractorParte(planta).extraer("La 1 está disparada no arranca.")
+    assert _filas(extraccion) == [("B-101", "estado", None, None, "disparada, no arranca")]
+    assert extraccion.preguntas == []
+
+
+def test_equipo_parado_en_reserva_no_es_falla(planta: dict) -> None:
+    """"Parada, en reserva" se queda en una sola observación."""
+    extraccion = ExtractorParte(planta).extraer("La 3 está parada, en reserva.")
+    assert _filas(extraccion) == [("B-103", "estado", None, None, "parada, en reserva")]
+    assert extraccion.preguntas == []
+
+
 def test_filtro_sin_la_palabra_diferencial(planta: dict) -> None:
     """Si el filtro tiene una sola variable en el catálogo, esa es la que se oyó."""
     extraccion = ExtractorParte(planta).extraer("el filtro a medio 1,3 de")

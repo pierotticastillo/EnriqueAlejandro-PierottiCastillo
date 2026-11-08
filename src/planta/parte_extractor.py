@@ -620,8 +620,11 @@ def _observacion(
         for dicho, canonica in _OBS_ESTADO.items():
             if dicho in norm:
                 return canonica
-        for palabra in ("parada", "parado", "disparada", "disparado", "mantenimiento"):
-            if palabra in norm:
+        # Las palabras se buscan **completas**: "parada" está dentro de
+        # "disparada" y, sin límite de palabra, una bomba que está armada y no
+        # arranca se clasificaría como una bomba parada (que no es una falla).
+        for palabra in ("disparada", "disparado", "parada", "parado", "mantenimiento"):
+            if re.search(rf"\b{palabra}\b", norm):
                 return palabra
     if variable == "nivel_aceite_visor":
         return "nivel de aceite bajo"
