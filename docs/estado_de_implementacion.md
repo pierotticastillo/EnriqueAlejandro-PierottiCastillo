@@ -456,6 +456,30 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Historial
 
+- **2026-11-08 (noche, corrida final y octavo defecto):** se corrieron los **7
+  escenarios** de la rúbrica con el sistema completo (Fase 7 incluida) y se
+  publicaron sus resultados: **88,9/100 — APRUEBA**, 93 de 93 puntos medidos
+  (82,7 de 93), 0 mensajes inválidos y `G1` (`orden_ejecutada`) en 100 %. La
+  progresión de las corridas fue `_fase7` 88,5 → `_fase7b` 87,6 → `_fase7c`
+  87,8 → `_fase7d` **88,9**: la nota **bajó** al corregir una cosa y volvió a
+  subir con la siguiente, porque `B1` y `D2` miden decisiones y un arreglo las
+  mueve en las dos direcciones. Al reLeer la corrida final apareció un
+  **octavo defecto**: en `ataque`, la nota `NOTA-00007` confirmó un goteo de
+  142 gotas/min («estaba en ciento cuarenta y dos gotas por minuto») y el
+  evento salió `SinNovedad`. La fila del goteo la había creado la corrección
+  del operador (la cláusula del goteo se la habían comido la foto y la
+  temperatura del rodamiento) y quedó **sin observación**: para el clasificador
+  de eventos, una lectura medida sin observación no es una anomalía. Peor: el
+  análisis ya había creado la orden del cambio de empaquetadura, así que la
+  misma nota producía una orden y un evento que decía que no había nada. El
+  arreglo usa el manual: TX350-D §8.4 («goteo por encima de 10 gotas/min» es
+  la firma en la recorrido de la falla F01; §8.3: el goteo normal es de hasta
+  10 gotas/min), de modo que la observación del goteo se deriva **del valor**,
+  en la misma tabla que el diferencial y la temperatura del rodamiento; y la
+  observación que salió del texto no se recalcula en una fila sin valor. La
+  suite quedó en **406 pruebas aprobadas** (381 aprobadas y 25 omitidas sin
+  base).
+
 - **2026-11-08 (Fase 7):** se implementó el **cierre de órdenes y la
   certificación**. El sistema se suscribe a `planta/cierres`, transcribe el
   audio del técnico con el ASR local **con el vocabulario de la planta** (sin
