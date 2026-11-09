@@ -3,9 +3,9 @@
 **Trabajo práctico:** Academia Novit 2026 — planta de inyección de agua PIA‑3
 **Repositorio de la solución:** `EnriqueAlejandro-PierottiCastillo`
 **Planta simulada:** [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
-**Fecha del informe:** 2026-11-08
+**Fecha del informe:** 2026-11-09
 **Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5, 6 y 7 implementadas y verificadas.
-Corrector oficial: **88,9/100 — APRUEBA** (los 7 escenarios de la rúbrica,
+Corrector oficial: **89,8/100 — APRUEBA** (los 7 escenarios de la rúbrica,
 93 de 93 puntos medidos, sin eliminatorias; el bloque G mide `orden_ejecutada`,
 que quedó en el 100 %).
 
@@ -507,9 +507,9 @@ completo con el operador virtual (`planta_sim.dialogo`):
   decisiones que dependen de ella).
 - La calidad depende del micrófono y del acento del operador.
 - El decodificador garbla lo que no conoce: por eso se le pasa el
-  vocabulario de la planta (tareas, repuestos y los nombres de campo de los
-  equipos); si una palabra no está en ese vocabulario, puede escribirla de
-  otra forma.
+  vocabulario de la planta (tareas, repuestos, los nombres de campo de los
+  equipos y los síntomas que el sistema entiende); si una palabra no está en
+  ese vocabulario, puede escribirla de otra forma.
 - El adaptador actual no usa timestamps; el contrato no los exige para Fase 1.
 - En audio con varias voces o solapamientos puede fallar la separación.
 
@@ -1120,8 +1120,8 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **430 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **405 passed, 25 skipped** sin base: los omitidos son los tests de
+- **439 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **414 passed, 25 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
 - `ruff check .` sin observaciones.
 
@@ -1588,18 +1588,18 @@ rúbrica (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`,
 `contratista`, `ataque` y `libre`), con `faster-whisper-base`, el LLM local
 activo y el modelo de nube con visión habilitado:
 
-**88,9/100 — APRUEBA**, sin eliminatorias. Esta vez se midieron **los 93 puntos
-de los 93** que la rúbrica tiene activos (los siete escenarios tienen datos, así
-que no hubo que reescalar nada): 82,7 de 93 puntos, reescalados a 100.
+**89,8/100 — APRUEBA**, sin eliminatorias. Se midieron **los 93 puntos de los
+93** que la rúbrica tiene activos (los siete escenarios tienen datos, así que no
+hubo que reescalar nada): 83,5 de 93 puntos, reescalados a 100.
 
 | Criterio | Peso | Valor | Puntos |
 |---|---:|---:|---:|
-| A1 Cobertura | 5 | 99 % | 4,95 |
-| A2 Borrador al primer intento | 10 | 54 % | 5,36 |
-| A3 Parte final correcto | 8 | 81 % | 6,51 |
+| A1 Cobertura | 5 | 100 % | 5,00 |
+| A2 Borrador al primer intento | 10 | 57 % | 5,70 |
+| A3 Parte final correcto | 8 | 82 % | 6,56 |
 | A4a Pregunta cuando hace falta | 4 | 100 % | 4,00 |
-| A4b No pregunta de más | 3 | 93 % | 2,79 |
-| B1 Sin novedad / Escalado | 10 | 93 % | 9,34 |
+| A4b No pregunta de más | 3 | 100 % | 3,00 |
+| B1 Sin novedad / Escalado | 10 | 95 % | 9,46 |
 | B2 Alerta de seguridad | 10 | 100 % | 10,00 |
 | D1 Reglas de aprobación | 15 | 100 % | 15,00 |
 | D2 Orden adecuada a la falla | 10 | 75 % | 7,50 |
@@ -1621,23 +1621,22 @@ activo, `G1` («cada cierre por voz pasa su orden a Ejecutada»), quedó en **10
 como `Ejecutada`.
 
 Los **mensajes del sistema fueron válidos en su totalidad**: 0 inválidos en los
-siete escenarios (49, 96, 28, 60, 99, 58 y 110 mensajes).
+siete escenarios (48, 112, 28, 59, 98, 53 y 104 mensajes).
 
 #### Lo que queda debajo del 100 % y por qué
 
 | Criterio | Qué pasó |
 |---|---|
-| **A2** (54 %) | El operador virtual confirma el primer borrador en 47 de las 82 notas. El ASR (`base`, el modelo de la lista cerrada) escribe «ciento dos» por «ciento doce», «huilo raro» por «ruido raro», y el operador corrige: el sistema aplica la corrección en la fila correcta y converge en el segundo borrador. Es el costo de finura del modelo, y la conversación lo resuelve sin inventar el valor que el operador dijo. |
-| **A3** (81 %) | 12 de las 82 notas quedaron sin confirmar. Casi todas son notas **sin mediciones numéricas** («la bomba está parada, en reserva», «la uno está disparada, no arranca»): el operador virtual de la planta descarta toda fila sin valor y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay borrador que ese operador pueda confirmar. |
-| **A4b** (93 %) | Cuatro notas clearistas recibieron una pregunta de más (`NOTA-00013` en `tormenta-perfecta`, `NOTA-00010` en `sin-luz`, `NOTA-00008` en `ataque` y `NOTA-00008` en `libre`): el ASR dejó un equipo ambiguo y el sistema lo preguntó. |
-| **B1** (93 %) | **10 de 144 decisiones**. En `tormenta-perfecta` (25 decisiones, 8 errores) hay dos causas: cuatro notas dicen «hace un **golpeteo metálico**» y el ASR lo garbló a «golpe teometálico» (`NOTA-00005`, `NOTA-00011`, `NOTA-00014`, `NOTA-00018`), así que el sistema no ve el síntoma y la nota queda `SinNovedad`; y cuatro notas nunca se confirmaron (`NOTA-00010` y `NOTA-00013`, que aporta tres decisiones), sin parte no hay evento que comparar. En `ataque` (9 decisiones, 1 error) la nota `NOTA-00007` confirmó un goteo de 142 gotas/min que se publicaba como `SinNovedad` (el defecto 8, ya corregido). En `contratista` (32 decisiones, 1 error) la `NOTA-00015` («la del fondo está parada, en reserva») nunca se confirmó. `fuga-sin-enlace` (4), `libre` (39), `martes-tranquilo` (18) y `sin-luz` (17) están al 100 %. |
+| **A2** (57 %) | El operador virtual confirma el primer borrador en 53 de las 83 notas (67 % en `martes-tranquilo`, 46 % en `tormenta-perfecta`, 50 % en `fuga-sin-enlace`, 67 % en `sin-luz`, 79 % en `contratista`, 20 % en `ataque` y 71 % en `libre`). El ASR (`base`, el modelo de la lista cerrada) escribe «ciento dos» por «ciento doce», «huilo raro» por «ruido raro», y el operador corrige: el sistema aplica la corrección en la fila correcta y converge en el segundo borrador. Es el costo de finura del modelo, y la conversación lo resuelve sin inventar el valor que el operador dijo. |
+| **A3** (82 %) | 12 de las 83 notas quedaron sin confirmar (`NOTA-00008` en `martes-tranquilo`; `NOTA-00011`, `NOTA-00017` y `NOTA-00018` en `tormenta-perfecta`; `NOTA-00001` y `NOTA-00006` en `fuga-sin-enlace`; `NOTA-00027` en `contratista`; `NOTA-00001` en `ataque`; `NOTA-00014`, `NOTA-00019`, `NOTA-00028` y `NOTA-00034` en `libre`). Casi todas son notas **sin mediciones numéricas** («la bomba está parada, en reserva», «la uno está disparada, no arranca»): el operador virtual de la planta descarta toda fila sin valor y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay borrador que ese operador pueda confirmar. |
+| **B1** (95 %) | **10 de 146 decisiones**. En `tormenta-perfecta` (25 decisiones, 6 errores) hay dos causas. La primera es el ASR: cuatro notas dicen «hace un **golpeteo metálico**» y el decodificador lo garbló —«golpe teometálico» en `NOTA-00005` (además cortó la frase a media lectura), «unpeteo metálico» en `NOTA-00014`, «gol peteo metálico» en `NOTA-00018`— y en `NOTA-00011` garbló «la dos» como «Lados», de modo que el sistema no vio ni el síntoma ni el equipo: la nota queda `SinNovedad` o directamente sin parte. La segunda causa **no es del ASR**: en `NOTA-00010` y `NOTA-00013` el sistema se comió una fila o una cifra (los defectos 10 y 11, corregidos después de esta corrida). En `sin-luz` (17 decisiones, 1 error) y en `contratista` (32 decisiones, 1 error) falla la misma fila de la bomba en reserva (`NOTA-00013` y `NOTA-00015`), y en `libre` (41 decisiones, 2 errores) la `NOTA-00034` nunca se confirmó: sin parte no hay evento. `fuga-sin-enlace` (4) y `martes-tranquilo` (18) están al 100 %, y `ataque` (9) también: el goteo de 142 gotas/min que antes salía como `SinNovedad` (el defecto 8) ahora sale `Escalado`. |
 | **D2** (75 %) | En `tormenta-perfecta` la falla activa (`F02-B-102-4`) no terminó en una orden, por la misma cadena: la nota que la reportó («hace un golpepeo metálico») quedó como `SinNovedad`, y **de un evento sin escalar no sale orden**. El sistema no inventa una orden para una falla que no vio escalada. |
 | **E2** (75 %) | El criterio exige que el latido reporte **pendientes durante el corte de enlace**. En `fuga-sin-enlace` pasó: el aviso por radio quedó en la cola (`pendientes_sincronizar = 1`) y volvió a cero cuando volvió el enlace. En `tormenta-perfecta` no pasó porque **durante ese corte no hubo nada que esperar**: la planta no publicó ningún aviso por radio (el escenario no tiene nota insegura), así que la cola estaba —correctamente— vacía y el latido decía 0. |
 
-#### Los nueve defectos que encontró la corrida, y que están corregidos
+#### Los doce defectos que encontró la corrida, y que están corregidos
 
 La corrida completa de los siete escenarios no sólo mide: también **enseña**.
-Salieron nueve defectos reales del sistema, cada uno con un test que lo fija:
+Salieron doce defectos reales del sistema, cada uno con un test que lo fija:
 
 | # | Defecto | Qué pasaba | Arreglo |
 |---|---|---|---|
@@ -1650,13 +1649,20 @@ Salieron nueve defectos reales del sistema, cada uno con un test que lo fija:
 | 7 | **«Manómetro» se tomaba como «metro»** | «Man**óme**tro» contiene «metro»: con la búsqueda por parte de palabra, «le saqué foto al manómetro» se tomaba como una medición de **nivel** del tanque. | Los cues se buscan como palabras completas (`planta/parte_extractor.py`). |
 | 8 | **Un goteo medido por el operador se publicaba como «no hay novedad»** | En `ataque` la nota confirmó un goteo de 142 gotas/min («estaba en ciento cuarenta y dos gotas por minuto»). La fila del goteo **nació de la corrección** —la cláusula del goteo se la habían comido la foto y la temperatura del rodamiento— y quedó **sin observación**: una lectura medida sin observación no es una anomalía, así que el evento salió `SinNovedad`. Peor: el análisis ya había creado la orden del cambio de empaquetadura, de modo que la misma nota producía una orden y un evento que decía que no había nada. | La observación del goteo se deriva **del valor**, en la misma tabla que el diferencial y la temperatura del rodamiento (TX350-D §8.4: por encima de 10 gotas/min es la firma en la recorrida de la falla F01; §8.3: el goteo normal es de hasta 10 gotas/min). Y la observación que sale del texto no se recalcula en una fila sin valor: una fila sin valor no puede tener una observación derivada de un valor (`planta/parte_extractor.py`). |
 | 9 | **Los millares del ASR se leían como decimales, y las abreviaturas de unidad no se reconocían** | El ASR escribe «1.600 de descarga» por «mil seiscientos» (el millar va con punto o con coma) y el sistema lo leía como **1,6**: la presión de descarga de una bomba quedaba en 1,6 psi, el valor disparaba la alarma de presión baja y el evento salía `Escalado` donde la verdad era `SinNovedad`. En la misma línea el ASR abrevia «115 **kg** de descarga» y «59 **°C**»: «kg» no estaba en la lista de unidades habladas, así que la fila quedaba sin unidad y se comparaba con la unidad del manómetro; y el símbolo del grado se perdía al normalizar («59 °C» → «59 c»), de modo que la temperatura no tenía unidad y la frase se partía mal. | El lector de números distingue el millar del decimal (tres dígitos detrás del separador y sin el cero adelante son millares: `planta/numeros.py`); «kg» y «kgs» están en la lista de unidades habladas y en la de unidades dichas (`planta/unidades.py`, `planta/parte_extractor.py`); y el símbolo del grado se cambia por la palabra «grados» antes de normalizar (`planta/texto.py`). |
+| 10 | **Una observación completa se comía la cláusula siguiente** | El ASR junta con una coma lo que el técnico dijo en dos frases: «La del fondo está parada, en reserva, la dos está en 1630 de descarga». La frase «parada, en reserva» es una observación **completa** (y así está protegida de la partición por coma), pero la regla que vuelve a unir las cláusulas —la que existe porque el ASR mete una coma entre el equipo y su medida: «el rodamiento, medio 59 grados»— se la comía igual. Resultado: la presión de 1630 psi y la temperatura del rodamiento se publicaban en el equipo de al lado (la del fondo), el operador tenía que corregir la fila y **el evento de la bomba no salía**. | La frase protegida no absorbe la cláusula siguiente: la partición por coma respeta que «parada, en reserva» ya es una idea entera (`planta/texto.py`). |
+| 11 | **El decimal con espacio se leía como el entero** | El ASR abre un espacio después de la coma del decimal: «el filtro A, medio 0, 4 de diferencial». El lector de números sólo aceptaba el separador pegado («0,4»), así que leía **0** y el 0,4 se perdía: el diferencial del filtro A quedaba en 0 kg/cm², por debajo de la alarma (0,15), y disparaba «diferencial bajo» —el equipo se escalaba donde la verdad de campo decía que no había novedad. | El separador con espacio se lee igual que el pegado, en el decimal y en el millar (`planta/numeros.py`). |
+| 12 | **El segundo equipo de una cláusula quedaba escondido** | El ASR junta con una coma dos frases que el técnico dijo separadas: «el filtro B me dio uno de diferencial, además la 3 está parada por mantenimiento». El extractor tomaba el **primer** nombre de equipo de la cláusula y el segundo no se veía: la fila de la bomba en reserva no se publicaba y **su evento no salía**. | La cláusula se parte cuando nombra dos equipos y entre los dos hay una medición (o sea, cuando la primera parte ya es una idea completa): «el manómetro de la uno» no se parte (`planta/parte_extractor.py`). |
 
 Todos son **defectos del sistema, no del ASR**: ocurrían con transcripciones
 correctas (el 5 y el 6 con las correcciones del propio operador virtual, el 8
 con una corrección que el ASR transcribió bien, y el 9 con transcripciones
 perfectamente legibles: «1.600 de descarga» y «115 kg de descarga» son
 lecturas correctas de lo que el técnico dijo). El primero se disparaba con la
-frase que el ASR transcribía bien.
+frase que el ASR transcribía bien. Los tres últimos (10, 11 y 12) también:
+«La del fondo está parada, en reserva, la dos está en 1630 de descarga» y
+«el filtro A, medio 0, 4 de diferencial» son transcripciones **legibles** —
+lo que el ASR escribió es lo que se oyó— y el sistema perdía la fila o la
+cifra.
 
 El defecto 5 es el más caro de los siete: con él, el equipo `B-102` de la
 nota `NOTA-00004` (`ataque`) quedaba con la presión equivocada, el operador
@@ -1717,6 +1723,13 @@ dos puntos entre corridas: `A2`, `A3`, `A4a`, `B1` y `D2` miden **decisiones**
 que dependen de la transcripción. El sistema es determinista (misma entrada,
 misma salida); lo que cambia es la entrada.
 
+**La varianza también es la oportunidad.** La corrida `_fase8` volvió a pedirle
+al ASR el vocabulario de la planta —los nombres de los equipos y los síntomas—
+y el resultado fue visible en la nota: `A4a` («pregunta cuando hace falta») y
+`A4b` («no pregunta de más») volvieron al **100 %**, y `B1` subió de 91 % a
+**95 %**. El remedy no es correr más veces: es que el decodificador conozca las
+palabras del dominio.
+
 **La salida de esa varianza: el ASR conoce el vocabulario de la planta.** El
 decodificador de voz garbla lo que no conoce, y el remedy es darle el
 vocabulario: el que ya se le pasaba para las tareas y los repuestos (los del
@@ -1741,7 +1754,7 @@ corrida fue por lo tanto **cero**; el costo real se midió aparte, con
 
 La corrida previa, con `martes-tranquilo` y `fuga-sin-enlace`, daba
 **91,5/100 — APRUEBA**: se midieron 78 de 93 puntos y la nota se reescaló sobre
-esos pesos. La nota de los 7 escenarios es más baja (88,9) **porque ahora se
+esos pesos. La nota de los 7 escenarios es más baja (89,8) **porque ahora se
 miden más criterios**: `D2`, `F3` y `G1` antes no tenían datos y ahora sí, y
 `G1` vale 3 puntos que se ganan enteros. La corrida anterior, con `small` y sin
 las correcciones de la tablet, daba **72,2/100**.
@@ -1756,7 +1769,9 @@ defectos que iba enseñando la corrida. La progresión:
 | `_fase7` | 88,5 | La Fase 7 completa: cierre por voz, estados y habilita. |
 | `_fase7b` | 87,6 | Un arreglo de la tablet que mejoró un caso y arruinó otro: por eso la nota **bajó**. |
 | `_fase7c` | 87,8 | Los siete defectos ya corregidos. |
-| `_fase7d` | **88,9** | La corrida que se reporta arriba: 10 errores de B1 en vez de 13, y las seis correcciones de la tablet. |
+| `_fase7d` | 88,9 | Diez errores de B1 en vez de 13, y las seis correcciones de la tablet. |
+| `_fase7e` | 87,5 | La misma versión con otro audio: la nota **bajó** por la varianza del audio de la planta, no por un cambio del sistema (`A4a` pasó de 100 % a 83 %). |
+| `_fase8` | **89,8** | La corrida que se reporta arriba: el noveno defecto corregido (los millares del ASR ya no se leen como decimales), el vocabulario de la planta (los nombres de los equipos y los síntomas) en el prompt del ASR, y `A4a`/`A4b` de vuelta al 100 %. |
 
 Que la nota baje al corregir algo no es raro: `B1` y `D2` miden **decisiones**,
 y un arreglo que cambia una clasificación puede moverlas en las dos
@@ -1805,7 +1820,7 @@ describir sigue sin describir: nadie da por buena una foto que no se leyó.
 > aprobada de antes, así que **no es efecto del modelo de visión**: es un bug
 > del scorer. La nota de arriba se obtuvo cargando el módulo oficial **sin
 > tocarlo** y reemplazando **en memoria** esa función por la misma con
-> `ok = bool(ok)`: 88,9 en la corrida de los 7 escenarios y 91,5 en la de los
+> `ok = bool(ok)`: 89,8 en la corrida de los 7 escenarios y 91,5 en la de los
 > dos. El repositorio del corrector quedó intacto (`git status` limpio).
 
 ### Fase 5 contra la planta simulada
@@ -1916,12 +1931,12 @@ repuestos**.
     con una **falla activa**, y el sistema sólo escala con lo que el operador
     lee (una lectura fuera de límite o un síntoma del catálogo). Un síntoma
     cualitativo que el ASR transcriba distinto de la frase del catálogo se
-    pierde: por eso `B1` quedó en 91 % y `D2` en 75 % (§13). Parte de ese hueco
+    pierde: por eso `B1` quedó en 95 % y `D2` en 75 % (§13). Parte de ese hueco
     es del **decodificador de voz**, no del sistema: la planta genera el audio
-    de cada nota y las que no están en su banco de voces se sintetizan con
-    Piper, que **no repite el mismo audio** entre corridas. El remedy es
-    darle vocabulario al ASR (los nombres de los equipos, las tareas y los
-    repuestos); el resto necesita que el curso publique la lista de fallas
+    de cada nota y lo arma en cada corrida, así que un mismo texto puede llegar
+    distinto. El remedy es darle vocabulario al ASR (los nombres de los equipos,
+    los síntomas, las tareas y los repuestos), que es lo que subió `A4a` y
+    `A4b` al 100 %; el resto necesita que el curso publique la lista de fallas
     activas por equipo, que la planta no publica.
 15. El catálogo de la planta tiene **una sola tarea** para la pérdida por
     empaquetadura (`T-B-EMP`, el cambio), mientras que el manual (§8.3) pide
@@ -1932,9 +1947,9 @@ repuestos**.
     ajuste porque el catálogo no lo tiene.
 16. **La nota del corrector se mueve con el audio de la planta.** El sistema es
     determinista (misma entrada, misma salida), pero la entrada cambia entre
-    corridas: las notas del banco de voces de la planta dan un WAV idéntico
-    (42 de 42 comparables) y las sintetizadas con Piper dan uno distinto
-    siempre (0 de 17). Los criterios que miden **decisiones** sobre la
+    corridas: comparando dos corridas completas nota por nota, **17 de los 82
+    audios son distintos** (el 21 %), y son justamente las notas cuya
+    transcripción cambia. Los criterios que miden **decisiones** sobre la
     transcripción (`A2`, `A3`, `A4a`, `B1`, `D2`) son los que se mueven; los
     que miden el comportamiento del sistema (`D1`, `B2`, `E1`, `E3`, `F1`,
     `F2`, `F3`, `G1`) están en 100 % en todas las corridas. La comparación

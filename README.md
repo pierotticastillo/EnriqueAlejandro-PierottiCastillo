@@ -42,7 +42,7 @@ de órdenes.
       `HAB-AAAA-NNNN` y el monto tomado de la orden y de la lista de precios
       del contrato.
 
-**Corrector oficial:** **88,9/100 — APRUEBA** sobre los 7 escenarios de la
+**Corrector oficial:** **89,8/100 — APRUEBA** sobre los 7 escenarios de la
 rúbrica (93 de 93 puntos medidos, sin eliminatorias, 0 mensajes inválidos).
 El bloque G mide `orden_ejecutada` y quedó en **100 %**: todos los cierres por
 voz pasaron su orden a `Ejecutada`.
@@ -292,10 +292,10 @@ cada equipo de la nota por separado. El escalado lleva el contexto del parte
 las últimas horas. Un equipo **parado en reserva o por mantenimiento** no es una
 anomalía.
 
-### Diez cosas que la corrida de corrección enseñó
+### Trece cosas que la corrida de corrección enseñó
 
 Las reglas de detección y de la tablet se afinaron con la corrida oficial de
-los 7 escenarios (los diez casos tienen test):
+los 7 escenarios (los trece casos tienen test):
 
 - **«La 1 está disparada, no arranca» es una falla**, no una bomba parada: la
   coma no parte la frase y «parada» se busca como palabra completa, no como
@@ -325,12 +325,24 @@ los 7 escenarios (los diez casos tienen test):
   «59 °C» se reconocen como las unidades que dijo el técnico. Antes, «1.600»
   se guardaba como 1,6 psi —una lectura plausible que disparaba la alarma de
   presión baja— y «kg» y «°C» no se reconocían como unidades.
-- **El ASR conoce los nombres de campo de los equipos**: el decodificador de
-  voz garbla lo que no conoce («el aboma» por «la bomba»), así que el
-  vocabulario que se le pasa incluye los nombres que la planta da para sus
-  equipos («la bomba», «el filtro A», «la del medio»), además de los nombres
-  de tareas y repuestos que salen del manual. Con eso el equipo se reconoce y
-  la pregunta de ambigüedad se hace.
+- **El ASR conoce los nombres de campo de los equipos y los síntomas**: el
+  decodificador de voz garbla lo que no conoce («el aboma» por «la bomba»,
+  «golpe teometálico» por «golpeteo metálico»), así que el vocabulario que se
+  le pasa incluye los nombres que la planta da para sus equipos («la bomba»,
+  «el filtro A», «la del medio»), los síntomas que el sistema entiende
+  («golpeteo metálico», «ruido raro de rodamiento») y los nombres de tareas y
+  repuestos que salen del manual. Con eso el equipo se reconoce, el síntoma se
+  ve y la pregunta de ambigüedad se hace.
+- **«Parada, en reserva» no se come la cláusula de al lado**: el ASR junta con
+  una coma lo que el técnico dijo en dos frases («La del fondo está parada, en
+  reserva, la dos está en 1630 de descarga»). La presión y la temperatura
+  terminaban en el equipo equivocado.
+- **«0, 4» es cero coma cuatro**: el ASR abre un espacio después de la coma
+  del decimal y el 0,4 se leía como 0, con lo que el diferencial disparaba la
+  alarma de presión baja y el filtro se escalaba sin motivo.
+- **Si una cláusula nombra dos equipos, son dos ideas**: el segundo equipo no
+  queda escondido detrás del primero, así que la fila de la bomba en reserva
+  también se publica.
 
 ## Tools y servidor MCP (Fase 3)
 
@@ -674,8 +686,8 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **430 passed** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose. Sin base quedan **405 passed, 25 skipped** (los de
+Resultado actual: **439 passed** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose. Sin base quedan **414 passed, 25 skipped** (los de
 idempotencia/constraints y los del índice RAG), porque necesitan la base
 levantada.
 
