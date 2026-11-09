@@ -104,6 +104,14 @@ def _menciona(norm: str, cues: tuple[str, ...]) -> bool:
 _OBSERVACION_POR_VALOR = {
     "temperatura_rodamiento_ir": (75.0, "rodamiento caliente", False),
     "presion_diferencial": (1.5, "diferencial alto", True),
+    # TX350-D §8.4: "Goteo por encima de 10 gotas/min en un prensaestopas" es
+    # la firma en la recorrida de la falla F01 (§8.3: por encima de 30
+    # gotas/min hay que cambiar la empaquetadura). El goteo normal es de hasta
+    # 10 gotas/min. Sin esta regla, una corrección del operador que **crea**
+    # la fila ("estaba en ciento cuarenta y dos gotas por minuto") quedaba
+    # sin observación y el evento salía como "no hay novedad": el goteo
+    # confirmado por el operador no escalaba.
+    "goteo_empaquetadura": (10.0, "goteo por empaquetadura", False),
 }
 
 # Muletillas y palabras de enlace que no son una observación por sí solas.
@@ -740,7 +748,11 @@ def recalcular_observacion(fila: Hallazgo) -> None:
     dejan como están.
     """
     derivadas = {texto for _, texto, _ in _OBSERVACION_POR_VALOR.values()}
-    if fila.observacion:
+    if fila.observacion and fila.valor is not None:
+        # Sólo se recalcula lo que salió del valor. Una fila sin valor no
+        # puede tener una observación derivada de un valor, y una observación
+        # que salió del texto ("chorrea por la empaquetadura") se queda: si el
+        # operador mueve el goteo a otro equipo, el goteo sigue siendo goteo.
         partes = [
             parte.strip()
             for parte in fila.observacion.split(",")

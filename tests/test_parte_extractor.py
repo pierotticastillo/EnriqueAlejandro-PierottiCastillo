@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from planta.parte_extractor import ExtractorParte
+from planta.parte_extractor import ExtractorParte, Hallazgo, recalcular_observacion
 
 CASOS = [
     (
@@ -292,6 +292,24 @@ def test_la_foto_no_se_traga_la_medicion_de_la_misma_clausula(planta: dict) -> N
         ("B-102", "temperatura_rodamiento_ir", 52.0, "degC", None),
         ("F-201A", "presion_diferencial", 1.5, "kg/cm2", "diferencial alto"),
     ]
+
+
+def test_la_observacion_del_texto_no_se_recalcula_en_una_fila_sin_valor() -> None:
+    """Una fila sin valor no puede tener una observación derivada de un valor.
+
+    El goteo que dijo el operador ("chorrea por la empaquetadura") no trae
+    número: su observación salió del texto y no se recalcula. Si se borrara,
+    el goteo dejaría de ser una anomalía.
+    """
+    fila = Hallazgo(
+        "B-102",
+        "goteo_empaquetadura",
+        None,
+        None,
+        "goteo por empaquetadura",
+    )
+    recalcular_observacion(fila)
+    assert fila.observacion == "goteo por empaquetadura"
 
 
 def test_el_manometro_no_es_un_nivel(planta: dict) -> None:

@@ -74,6 +74,29 @@ def test_hallazgo_textual_canonico_genera_evento_escalado() -> None:
     assert "pérdida importante" in eventos[0].resumen
 
 
+def test_un_goteo_medido_escala_el_equipo() -> None:
+    """El goteo que el operador midió escala el equipo.
+
+    La fila llega con la observación derivada del valor (142 gotas/min por
+    encima de los 10 del goteo normal, TX350-D §8.3). Sin esa observación el
+    evento salía como "no hay novedad" y el equipo no se escalaba.
+    """
+    eventos = _clasificar(
+        [
+            Hallazgo(
+                "B-102",
+                "goteo_empaquetadura",
+                142.0,
+                "gotas/min",
+                "goteo por empaquetadura",
+            )
+        ]
+    )
+    assert len(eventos) == 1
+    assert eventos[0].tipo is TipoEvento.escalado
+    assert "goteo por empaquetadura" in eventos[0].resumen
+
+
 def test_parte_vacio_no_falla_y_genera_evento() -> None:
     eventos = _clasificar([])
     assert len(eventos) == 1

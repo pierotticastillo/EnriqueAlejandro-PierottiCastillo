@@ -146,6 +146,50 @@ def test_una_correccion_en_gotas_por_minuto_no_pisa_la_presion(planta: dict) -> 
     assert presion.unidad == "psi"
 
 
+def test_una_correccion_que_crea_el_goteo_lo_deja_con_observacion(planta: dict) -> None:
+    """El goteo que el operador corrige se escala, no se pierde.
+
+    TX350-D §8.4: un goteo por encima de 10 gotas/min es la firma en la
+    recorrida de la falla F01 (§8.3: por encima de 30 gotas/min hay que
+    cambiar la empaquetadura; el goteo normal es de hasta 10 gotas/min).
+
+    Si la fila del goteo **nace** de la corrección ("estaba en ciento cuarenta
+    y dos gotas por minuto") y queda sin observación, el evento sale como "no
+    hay novedad": el operador confirmó un goteo de 142 gotas/min y el sistema
+    lo publicó como si nada. Peor: el análisis ya había creado la orden del
+    cambio de empaquetadura, así que la misma nota producía una orden y un
+    evento que decía que no había nada.
+    """
+    resolver = desde_api(planta)
+    filas = [
+        Hallazgo("B-102", "temperatura_rodamiento_ir", 66.0, "degC"),
+        Hallazgo("F-201A", "presion_diferencial", 0.2, "kg/cm2"),
+    ]
+    respuesta = (
+        "No. La dos estaba en ciento cuarenta y dos gotas por minuto, no en "
+        "sesenta y seis. Te faltó la dos, que estaba en sesenta y seis grados."
+    )
+    correcciones = interpretar(respuesta, resolver).correcciones
+    aplicar_correcciones(filas, correcciones, planta, resolver)
+    goteo = next(f for f in filas if f.variable == "goteo_empaquetadura")
+    assert goteo.tag == "B-102"
+    assert goteo.valor == 142.0
+    assert goteo.unidad == "gotas/min"
+    assert goteo.observacion == "goteo por empaquetadura"
+
+
+def test_un_goteo_de_diez_gotas_no_es_anomalia(planta: dict) -> None:
+    """El goteo normal es de hasta 10 gotas/min (TX350-D §8.3)."""
+    resolver = desde_api(planta)
+    filas = [Hallazgo("B-102", "temperatura_rodamiento_ir", 66.0, "degC")]
+    respuesta = "La dos estaba en diez gotas por minuto."
+    correcciones = interpretar(respuesta, resolver).correcciones
+    aplicar_correcciones(filas, correcciones, planta, resolver)
+    goteo = next(f for f in filas if f.variable == "goteo_empaquetadura")
+    assert goteo.valor == 10.0
+    assert goteo.observacion is None
+
+
 def test_la_correccion_toma_el_valor_que_no_se_nega(planta: dict) -> None:
     """"Mil seiscientos cuarenta psi, no en cien" vale 1640.
 
