@@ -93,6 +93,42 @@ CASOS = [
             ("B-101", "presion_descarga_local", 112.0, "kg/cm2", None),
         ],
     ),
+    (
+        # El ASR abre un espacio después de la coma del decimal y garbló "me
+        # dio" por "medio": el diferencial del filtro A es 0,4, no 0. Con 0
+        # el filtro se escalaba donde la verdad era que no había novedad.
+        "El filtro A, medio 0, 4 de diferencial, el filtro B, medio 1, 1 de "
+        "diferencial, la del fondo está parada por mantenimiento.",
+        [
+            ("F-201A", "presion_diferencial", 0.4, "kg/cm2", None),
+            ("F-201B", "presion_diferencial", 1.1, "kg/cm2", None),
+            ("B-103", "estado", None, None, "parada por mantenimiento"),
+        ],
+    ),
+    (
+        # "Parada, en reserva" no se come la cláusula siguiente: la medición
+        # de "la dos" es de la dos, no de la del fondo.
+        "La del fondo está parada, en reserva, la dos está en 1630 de descarga, "
+        "el rodamiento me dio 49 grados con la pistola, el filtro B me dio 1,4 "
+        "de diferencial.",
+        [
+            ("B-103", "estado", None, None, "parada, en reserva"),
+            ("B-102", "presion_descarga_local", 1630.0, "psi", None),
+            ("B-102", "temperatura_rodamiento_ir", 49.0, "degC", None),
+            ("F-201B", "presion_diferencial", 1.4, "kg/cm2", None),
+        ],
+    ),
+    (
+        # Dos equipos en la misma cláusula: el segundo no queda escondido
+        # detrás del primero.
+        "Bien, el filtro B me dio uno de diferencial, además la 3 está parada "
+        "por mantenimiento, el pulmón está en 5 metros.",
+        [
+            ("F-201B", "presion_diferencial", 1.0, "kg/cm2", None),
+            ("B-103", "estado", None, None, "parada por mantenimiento"),
+            ("TK-301", "nivel", 5.0, "m", None),
+        ],
+    ),
 ]
 
 

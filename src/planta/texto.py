@@ -100,7 +100,17 @@ def clausulas(oracion: str) -> list[str]:
         partes = re.split(r"(?<!\d),(?!\d)", protegido)
         unidas: list[str] = []
         for parte in partes:
-            if unidas and not _tiene_cifra(unidas[-1]) and _tiene_cifra(parte):
+            # La frase protegida ("parada, en reserva") es una observación
+            # **completa**: no se come la cláusula siguiente. Si la comiera,
+            # el equipo de la medición siguiente ("la dos está en 1630 de
+            # descarga") quedaba escondido detrás del equipo anterior y la
+            # medición se publicaba en el equipo equivocado.
+            if (
+                unidas
+                and not _tiene_cifra(unidas[-1])
+                and _tiene_cifra(parte)
+                and _UNIDO not in unidas[-1]
+            ):
                 unidas[-1] = f"{unidas[-1]}, {parte}"
             else:
                 unidas.append(parte)

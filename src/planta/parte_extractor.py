@@ -278,6 +278,8 @@ class ExtractorParte:
                 self._abrir_generico(mencion)
             else:
                 self._fijar_equipo(mencion.tag or "")
+            if self._partir_por_equipo(resto):
+                return
 
         if _es_foto(resto):
             # La cláusula puede traer la foto **y** la medición ("le saqué
@@ -311,6 +313,27 @@ class ExtractorParte:
         self._tag = tag
         self._tipo = self._tipo_de(tag)
         self._pendiente = None
+
+    def _partir_por_equipo(self, resto: str) -> bool:
+        """Parte la cláusula cuando nombra **dos** equipos.
+
+        El ASR junta con una coma lo que el técnico dijo en dos frases ("el
+        filtro B me dio uno de diferencial, además la 3 está parada por
+        mantenimiento"). El extractor tomaba el primer nombre de equipo y
+        perdía el segundo: la fila del equipo que quedó detrás no se
+        publicaba y el evento de ese equipo no salía. Se parte sólo cuando
+        entre los dos nombres hay una medición (o sea, cuando la primera
+        parte ya es una idea completa): "el manómetro de la uno" no se parte.
+        """
+        otra = self.resolver.resolver(resto)
+        if otra is None or otra.inicio <= 0 or otra.es_ambigua:
+            return False
+        primera = resto[: otra.inicio]
+        if not _tiene_medicion(primera):
+            return False
+        self._procesar_clausula(primera)
+        self._procesar_clausula(resto[otra.inicio :])
+        return True
 
     def _abrir_generico(self, mencion: Mencion) -> None:
         candidatos = self.resolver.candidatos(mencion.generico or "")
@@ -711,6 +734,31 @@ def _parece_observacion(norm: str) -> bool:
         return False
     palabras = [p for p in norm.replace(",", " ").split() if p]
     return any(palabra not in _STOPWORDS for palabra in palabras)
+
+
+# Las palabras que delatan una medición (o una lectura). Se usan para saber
+# si una parte de la cláusula ya es una idea completa.
+_CUE_MEDICION = (
+    _CUE_DIFERENCIAL
+    + _CUE_DESCARGA
+    + _CUE_RODAMIENTO
+    + _CUE_MOTOR
+    + _CUE_NIVEL
+    + _CUE_CAUDAL
+    + _CUE_GOTEO
+    + _CUE_ACEITE
+    + _CUE_CORREAS
+    + _CUE_RUIDO
+)
+
+
+def _tiene_medicion(norm: str) -> bool:
+    """Si el texto trae una cifra o una palabra de medición."""
+    if any(caracter.isdigit() for caracter in norm):
+        return True
+    if parsear_numero(norm) is not None:
+        return True
+    return _menciona(norm, _CUE_MEDICION)
 
 
 def _observacion(

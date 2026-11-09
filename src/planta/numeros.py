@@ -86,7 +86,12 @@ DIGITOS = {
     "nueve",
 }
 MARCADORES_DECIMALES = {"coma", "con", "punto"}
-TOKEN = re.compile(r"\d+(?:[.,]\d+)?|[a-z]+")
+# El ASR a veces abre un espacio después de la coma del decimal: "0, 4 de
+# diferencial" por "cero coma cuatro". Sin contemplarlo, el cero se leía
+# como el número y el 0,4 se perdía: el diferencial quedaba en 0 y disparaba
+# la alarma de presión baja (el equipo se escalaba donde la verdad era que no
+# había novedad). El separador con espacio se lee igual que el pegado.
+TOKEN = re.compile(r"\d+(?:[.,]\s?\d+)?|[a-z]+")
 
 # El ASR a veces escribe el decimal con un guion: "1-3 de diferencial" por
 # "uno coma tres". Sólo se toma un dígito de cada lado: "1600-1620" es un
@@ -98,7 +103,7 @@ _DECIMAL_CON_GUION = re.compile(r"(?<!\d)(\d)-(\d)(?!\d)")
 # ("uno coma tres", "cero nueve"), así que un número con **tres** dígitos
 # detrás del separador es un millar, no un decimal. El "0" adelante se
 # excluye: "0.900" es cero coma nueve.
-_MILLARES = re.compile(r"^([1-9]\d{0,2})[.,](\d{3})$")
+_MILLARES = re.compile(r"^([1-9]\d{0,2})[.,]\s?(\d{3})$")
 
 
 @dataclass(frozen=True)
@@ -162,7 +167,7 @@ def parsear_numero(texto: str) -> NumeroDicho | None:
     tokens = TOKEN.findall(_DECIMAL_CON_GUION.sub(r"\1,\2", normalizar(texto)))
 
     for i, token in enumerate(tokens):
-        if re.fullmatch(r"\d+(?:[.,]\d+)?", token):
+        if re.fullmatch(r"\d+(?:[.,]\s?\d+)?", token):
             millares = _MILLARES.match(token)
             if millares:
                 # "1.600" es mil seiscientos, no uno con seiscientos.
@@ -171,8 +176,11 @@ def parsear_numero(texto: str) -> NumeroDicho | None:
                     decimal=False,
                     dijo=token,
                 )
-            valor = float(token.replace(",", "."))
-            return NumeroDicho(valor, decimal="," in token or "." in token, dijo=token)
+            compacto = token.replace(" ", "")
+            valor = float(compacto.replace(",", "."))
+            return NumeroDicho(
+                valor, decimal="," in compacto or "." in compacto, dijo=token
+            )
 
         # "cero nueve", "uno ocho", "uno dos": decimal dígito a dígito.
         if i + 1 < len(tokens) and token in DIGITOS and tokens[i + 1] in DIGITOS:

@@ -34,6 +34,12 @@ from planta.numeros import parsear_numero
         ("1.610", 1610, False),
         # Un decimal de tres decimales con el cero adelante no son millares.
         ("0.900", 0.9, True),
+        # El ASR abre un espacio después de la coma del decimal: "0, 4" es
+        # cero coma cuatro, no cero.
+        ("0, 4", 0.4, True),
+        ("1, 1", 1.1, True),
+        ("5, 2", 5.2, True),
+        ("1. 600", 1600, False),
     ],
 )
 def test_parsear_numero(texto: str, valor: float, decimal: bool) -> None:
