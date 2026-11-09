@@ -40,6 +40,11 @@ from planta.numeros import parsear_numero
         ("1, 1", 1.1, True),
         ("5, 2", 5.2, True),
         ("1. 600", 1600, False),
+        # El ASR escribe la parte entera en dígitos y la fracción en
+        # palabras: "0 con 3" es cero coma tres.
+        ("0 con 3", 0.3, True),
+        ("1 coma 2", 1.2, True),
+        ("1 punto 5", 1.5, True),
     ],
 )
 def test_parsear_numero(texto: str, valor: float, decimal: bool) -> None:

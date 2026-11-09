@@ -178,6 +178,20 @@ def parsear_numero(texto: str) -> NumeroDicho | None:
                 )
             compacto = token.replace(" ", "")
             valor = float(compacto.replace(",", "."))
+            # "0 con 3": el ASR escribe el decimal con la parte entera en
+            # dígitos y la fracción en palabras ("cero con tres" -> "0 con
+            # 3"). Sin esto se leía 0 y el diferencial de 0,3 quedaba por
+            # debajo de la alarma: el filtro se escalaba sin motivo.
+            if " " not in compacto and i + 2 < len(tokens):
+                if tokens[i + 1] in MARCADORES_DECIMALES:
+                    fraccion, fin = _fraccion(tokens, i + 2)
+                    if fraccion is not None:
+                        digitos = len(str(int(fraccion)))
+                        return NumeroDicho(
+                            valor + fraccion / (10**digitos),
+                            decimal=True,
+                            dijo=" ".join(tokens[i:fin]),
+                        )
             return NumeroDicho(
                 valor, decimal="," in compacto or "." in compacto, dijo=token
             )
