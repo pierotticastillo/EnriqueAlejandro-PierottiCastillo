@@ -42,10 +42,10 @@ de órdenes.
       `HAB-AAAA-NNNN` y el monto tomado de la orden y de la lista de precios
       del contrato.
 
-**Corrector oficial:** **90,3/100 — APRUEBA** sobre los 7 escenarios de la
+**Corrector oficial:** **93,1/100 — APRUEBA** sobre los 7 escenarios de la
 rúbrica (93 de 93 puntos medidos, sin eliminatorias, 0 mensajes inválidos).
-El bloque G mide `orden_ejecutada` y quedó en **100 %**: todos los cierres por
-voz pasaron su orden a `Ejecutada`.
+`D2` («orden adecuada a la falla») y el bloque G (`orden_ejecutada`) quedaron
+en **100 %**: todos los cierres por voz pasaron su orden a `Ejecutada`.
 
 ## Requisitos
 
