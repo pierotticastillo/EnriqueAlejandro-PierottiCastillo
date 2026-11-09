@@ -407,15 +407,16 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
   **G1 100 %** (`G2` y `G3` están `activo: false` en la rúbrica).
   - La corrida anterior (`_fase7d`) dio **88,9/100 — APRUEBA**. La diferencia
     está en **A4a** (100 % → 83 %) y es **varianza del audio de la planta**, no
-    un cambio del sistema: en `contratista` la `NOTA-00014` («En la bomba, el
-    rodamiento me dio noventa y seis grados…») la planta la generó con una voz
-    nueva y el ASR garbló «la bomba» como «el aboma»; el sistema no preguntó
-    porque no reconoció el equipo. La causa está medida (§ «Por qué dos
-    corridas del mismo código dan notas distintas» del INFORME): las notas
-    cuyo texto está en el **banco de voces** de la planta dan un WAV idéntico
-    entre corridas (42 de 42) y las que se sintetizan con **Piper** dan un WAV
-    distinto siempre (0 de 17). El texto verdadero de la nota es idéntico en
-    las dos corridas: lo que cambia es el audio.
+    un cambio del sistema: en `contratista` la `NOTA-00014` («En la uno, el
+    rodamiento me dio noventa y seis grados…») se generó con un audio distinto
+    (361.530 bytes en una corrida y 368.960 en la otra) y el ASR garbló «la
+    uno» como «el aboma»; el sistema no preguntó porque no reconoció el
+    equipo. La causa está medida (§ «Por qué dos corridas del mismo código
+    dan notas distintas» del INFORME): comparando las dos corridas
+    completas, **17 de los 82 audios son distintos** (65 son el mismo
+    archivo) y son justamente las notas cuya transcripción cambia. El texto
+    verdadero de la nota es idéntico en las dos corridas: lo que cambia es el
+    audio.
   - El defecto 8 (el goteo medido) quedó **verificado por el corrector oficial**
     en `ataque`: la fila del goteo pasó de `observacion: null` a
     «goteo por empaquetadura» y el evento de `SinNovedad` a **`Escalado`**
@@ -472,26 +473,27 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 3. **Medir la calidad del modelo de visión con fotos de campo reales**: con los *placeholders* del simulador sólo se midió tráfico, formato, tiempo y tokens.
 4. **Conectar el habilita con la facturación**: el sistema emite el número y el monto (CT-SVP-2025 §3.4), pero la factura la emite la planta; falta el puente.
 5. **Pedir al curso el registro de ingreso y egreso** (§3.1/§3.2): mientras la planta no lo publique, la diferencia de horas no puede ser bloqueante.
-6. **Cerrar el hueco de `B1`/`D2`**: el corrector espera «Escalado» en cualquier nota que mencione un equipo con una falla activa, y el sistema sólo escala con lo que el operador lee. El camino corto es reconocer más síntomas cualitativos del catálogo (ruido, golpepeo, no arranca) como anomalía; el camino largo es pedirle al curso la lista de fallas activas por equipo, que la planta no publica.
+6. **Cerrar el hueco de `B1`/`D2`**: el corrector espera «Escalado» en cualquier nota que mencione un equipo con una falla activa, y el sistema sólo escala con lo que el operador lee. El camino corto es reconocer más síntomas cualitativos del catálogo (ruido, golpepeo, no arranca) como anomalía —y que el decodificador escriba esas frases: los síntomas ya están en el prompt del ASR—; el camino largo es pedirle al curso la lista de fallas activas por equipo, que la planta no publica.
 
 ## Historial
 
 - **2026-11-09 (noveno defecto y varianza del audio):** la corrida `_fase7e`
   (los 7 escenarios) dio **87,5/100 — APRUEBA**, un punto menos que
   `_fase7d` (88,9). La diferencia **no es del sistema**: está medida. La
-  planta genera el audio de cada nota y lo hace de dos maneras —las notas
-  cuyo texto está en su **banco de voces** dan un WAV idéntico en cada
-  corrida (42 de 42) y las que sintetiza con **Piper** dan un WAV distinto
-  siempre (0 de 17)—; en la corrida nueva el ASR garbló «la bomba» como
-  «el aboma» y el sistema no reconoció el equipo. El texto verdadero de las
-  notas es el mismo en las dos corridas: lo que cambia es la entrada. De ahí
-  salieron dos arreglos: (a) el **noveno defecto** —el ASR escribe «1.600 de
-  descarga» por «mil seiscientos» y el sistema lo leía como 1,6 psi, una
-  lectura plausible que dispara la alarma de presión baja— y (b) el
-  **vocabulario del ASR**, que ahora incluye los nombres que la planta da
-  para sus equipos («la bomba», «el filtro A», «la del medio») y no sólo las
-  tareas y los repuestos del manual. La suite quedó en **428 pruebas
-  aprobadas** (403 aprobadas y 25 omitidas sin base).
+  planta arma el audio de cada nota en el momento y **el archivo no es
+  siempre el mismo**: comparando las dos corridas completas, **17 de los 82
+  audios son distintos** (los otros 65 son el mismo archivo) y son
+  justamente las notas cuya transcripción cambia; en la corrida nueva el ASR
+  garbló «la uno» como «el aboma» y el sistema no reconoció el equipo. El
+  texto verdadero de las notas es el mismo en las dos corridas: lo que cambia
+  es la entrada. De ahí salieron dos arreglos: (a) el **noveno defecto** —el
+  ASR escribe «1.600 de descarga» por «mil seiscientos» y el sistema lo leía
+  como 1,6 psi, una lectura plausible que dispara la alarma de presión baja—
+  y (b) el **vocabulario del ASR**, que ahora incluye los nombres que la
+  planta da para sus equipos («la bomba», «el filtro A», «la del medio») y los
+  síntomas que el sistema entiende, y no sólo las tareas y los repuestos del
+  manual. La suite quedó en **430 pruebas aprobadas** (405 aprobadas y 25
+  omitidas sin base).
 
 - **2026-11-08 (noche, corrida final y octavo defecto):** se corrieron los **7
   escenarios** de la rúbrica con el sistema completo (Fase 7 incluida) y se

@@ -1679,24 +1679,27 @@ medir, porque los logs registran el tamaño de cada WAV que el sistema
 descargó.
 
 - La planta tiene un **banco de voces** (`datos/voces/indice.json`, 102 textos
-  grabados). Cuando el texto de la nota está en el banco, el audio es esa
-  grabación con el ruido de planta mezclado con la semilla de la nota: sale
-  **byte a byte igual** en cada corrida.
-- Las notas cuyo texto **no** está en el banco las sintetiza Piper en el
-  momento, y Piper **no reproduce el mismo audio** entre corridas.
+  grabados) y, para las notas cuyo texto **no** está en el banco, sintetiza el
+  audio en el momento. En ambos casos el archivo que llega al sistema **no es
+  siempre el mismo**: la planta mezcla el audio con el ruido de planta y lo
+  arma en cada corrida.
 
-Comparando las dos corridas completas (`_fase7d` y `_fase7e`), nota por nota:
+Comparando las dos corridas completas (`_fase7d` y `_fase7e`), nota por nota,
+con el tamaño del WAV que el sistema descargó (el log lo registra en bytes):
 
-| Origen del audio | Notas comparables | WAV idéntico entre corridas |
-|---|---:|---:|
-| Banco de voces de la planta | 42 | **42 (100 %)** |
-| Síntesis de Piper | 17 | **0 (0 %)** |
+| Audio | Notas comparables | Mismo WAV entre corridas | WAV distinto |
+|---|---:|---:|---:|
+| Banco de voces de la planta | 79 | **63 (80 %)** | **16 (20 %)** |
+| Síntesis de Piper | 3 | 2 | 1 |
+| **Total** | **82** | **65 (79 %)** | **17 (21 %)** |
 
-El texto verdadero de la nota —la verdad de campo— es **exactamente el mismo**
-en las dos corridas: lo que cambia es el audio, y con él la transcripción. Un
-ejemplo, la nota `NOTA-00014` de `contratista` («El filtro A me dio uno con tres
-de diferencial. **En la bomba**, el rodamiento me dio noventa y seis grados con
-la pistola…»):
+O sea: **uno de cada cinco audios cambia entre corridas**, y el que cambia es
+precisamente el que el decodificador oye distinto. El texto verdadero de la
+nota —la verdad de campo— es **exactamente el mismo** en las dos corridas: lo
+que cambia es el archivo de audio, y con él la transcripción. Un ejemplo, la
+nota `NOTA-00014` de `contratista` («El filtro A me dio uno con tres de
+diferencial. **En la uno**, el rodamiento me dio noventa y seis grados con la
+pistola…»): el WAV pesaba 361.530 bytes en `_fase7d` y 368.960 en `_fase7e`:
 
 | Corrida | Transcripción del ASR | Qué pasó |
 |---|---|---|
@@ -1706,7 +1709,7 @@ la pistola…»):
 Lo mismo pasó con el síntoma del ruido en `tormenta-perfecta`: «golpeteo
 metálico» salió «golpe teometálico» en una corrida y «competeo metálico» en la
 otra. En los dos casos la frase del catálogo es la misma y el sistema no la
-reconoce.
+reconoce: el audio era otro.
 
 Esto explica por qué la misma versión del sistema da notas que se mueven uno o
 dos puntos entre corridas: `A2`, `A3`, `A4a`, `B1` y `D2` miden **decisiones**
@@ -1949,8 +1952,9 @@ repuestos**.
 4. Pedir al curso el **registro de ingreso y egreso** (§3.1/§3.2): mientras la
    planta no lo publique, la diferencia de horas no puede ser bloqueante.
 5. Cerrar el hueco de `B1`/`D2`: reconocer más síntomas cualitativos del
-   catálogo como anomalía, o pedirle al curso la lista de fallas activas por
-   equipo, que la planta no publica.
+   catálogo como anomalía (los síntomas ya están en el prompt del ASR, para
+   que el decodificador los escriba bien), o pedirle al curso la lista de
+   fallas activas por equipo, que la planta no publica.
 6. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
    cuando cambie la planta.
 
