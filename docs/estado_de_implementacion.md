@@ -91,7 +91,7 @@ contratista con diferencias.
 
 ## Lista cerrada de modelos — qué quedó hecho
 
-La lista publicada (`Lista_de_Modelos_Locales.md` del material del curso) tiene
+La lista publicada (`docs/Lista_de_Modelos.md`) tiene
 tres modelos locales y un modelo de nube con visión. Quedó implementada así:
 
 | Clave | Modelo | Qué se hizo |

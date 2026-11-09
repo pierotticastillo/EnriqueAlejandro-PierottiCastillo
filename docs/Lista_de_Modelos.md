@@ -1,0 +1,4 @@
+1. ASR: `faster-whisper-base` (CTranslate2) para transcripción local rápida y de bajo consumo en CPU.
+2. Embeddings: `paraphrase-multilingual-MiniLM-L12-v2` (384 dim) operando sobre PostgreSQL + pgvector para RAG local eficiente.
+3. LLM de Planta: `Qwen2.5-3B-Instruct` (cuantización Q4_K_M vía Ollama/llama.cpp) para la estructuración y razonamiento auxiliar local sin requerir enlace a la nube.
+4. LLM de Nube (Percepción/Contexto): `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (API de NVIDIA, nube) para tareas de percepción multimodal y razonamiento auxiliar cuando se requiera mayor capacidad. Invocado vía `https://integrate.api.nvidia.com/v1/chat/completions` con `temperature=0`, `max_tokens=800`, timeout de 8 s y salida validada.

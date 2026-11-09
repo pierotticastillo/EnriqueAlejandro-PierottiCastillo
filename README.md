@@ -546,7 +546,8 @@ Las principales están documentadas en `.env.example`:
 ├── docs/
 │   ├── estado_de_implementacion.md
 │   ├── evidencia_fase4_retrieval.json
-│   └── evidencia_fase4_pgvector.json
+│   ├── evidencia_fase4_pgvector.json
+│   └── Lista_de_Modelos.md
 ├── docker-compose.yml
 ├── Dockerfile
 ├── .env.example
@@ -676,13 +677,10 @@ corrector responde `403`).
 
 ## Modelos: la lista cerrada (restricción 04)
 
-> «Modelos. Solo los de la lista cerrada que publicamos. Incluye modelos de
-> transcripción y de lenguaje que entran en la PC de planta, y modelos en la
-> nube de NVIDIA con visión. Los modelos locales corren con la versión y la
-> configuración que fijamos.»
-
-La lista vive en un solo lugar: [`src/modelos_lista.py`](src/modelos_lista.py).
-Ni el `.env` ni el código eligen modelos: los comparan contra esa lista.
+La lista publicada está en [`docs/Lista_de_Modelos.md`](docs/Lista_de_Modelos.md)
+y la que usa el sistema vive en un solo lugar:
+[`src/modelos_lista.py`](src/modelos_lista.py). Ni el `.env` ni el código eligen
+modelos: los comparan contra esa lista.
 
 | Clave | Modelo | Motor | Dónde | Configuración fijada |
 |---|---|---|---|---|

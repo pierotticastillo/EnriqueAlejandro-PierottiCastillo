@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # puede trabajar con local_files_only=True, sin salir a internet.
 #
 # El modelo es `base`: es el de la lista cerrada de modelos del curso
-# (`Plan_de_implementación/Lista_de_Modelos_Locales.md`) y el que fija la
+# (`docs/Lista_de_Modelos.md`) y el que fija la
 # restricción 04. `scripts/verificar_modelos.py` lo comprueba.
 ARG ASR_MODELO=base
 ENV ASR_MODELO=${ASR_MODELO} \

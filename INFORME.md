@@ -759,14 +759,9 @@ seis reglas quedan auditadas en la base:
 
 ### 9.8 La lista cerrada de modelos (restricción 04)
 
-> «Modelos. Solo los de la lista cerrada que publicamos. Incluye modelos de
-> transcripción y de lenguaje que entran en la PC de planta, y modelos en la
-> nube de NVIDIA con visión. Los modelos locales corren con la versión y la
-> configuración que fijamos.»
-
-La lista publicada (`Lista_de_Modelos_Locales.md` del material del curso) tiene
-tres modelos locales. El sistema los usa **exactos**, con la configuración
-fijada, y eso es comprobable:
+La lista publicada está en [`docs/Lista_de_Modelos.md`](docs/Lista_de_Modelos.md)
+y tiene tres modelos locales más el de nube con visión. El sistema los usa
+**exactos**, con la configuración fijada, y eso es comprobable:
 
 | Clave | Modelo | Motor | Dónde | Configuración fijada |
 |---|---|---|---|---|
@@ -827,11 +822,11 @@ directa (`OLLAMA_PROXY` vacío).
 
 #### El modelo de nube con visión
 
-La lista publicada (`Lista_de_Modelos_Locales.md`) nombra los tres modelos
-locales y dice que hay "modelos en la nube de NVIDIA con visión", pero **no dice
-cuál**: el identificador exacto no está en el material del curso. Quedaban dos
-caminos: dejar el modelo de visión deshabilitado (fail-safe, sin llamar a la
-nube) o fijar uno con la evidencia de que el publicado ya no existe.
+El material del curso publicaba tres modelos locales y decía que hay "modelos
+en la nube de NVIDIA con visión", pero **no decía cuál**: el identificador
+exacto no estaba. Quedaban dos caminos: dejar el modelo de visión
+deshabilitado (fail-safe, sin llamar a la nube) o fijar uno con la evidencia de
+que el publicado ya no existe.
 
 **El modelo que la lista podía querer ya no existe.** La API de NVIDIA
 responde:
@@ -871,14 +866,14 @@ Nemotron 3.5 Super VL es igual de rápido pero **nunca** devuelve `content`
 (sólo `reasoning_content`, y el `/no_think` no lo desactiva): sin `content` no
 hay salida que validar, así que queda descartado.
 
-> **Desviación de la lista cerrada, asumida y documentada.** El modelo de
-> visión no está en la lista publicada, porque la lista publicada no lo
-> identifica. Se elige el vigente del catálogo de NVIDIA con la evidencia de
-> arriba, y el verificador de modelos lo deja escrito en el arranque
-> (`vision | Nemotron 3 Nano Omni 30B A3B | ok`). Si el curso responde con otro
-> identificador, se cambia en `src/modelos_lista.py` y en el `.env`: el
-> verificador rechaza cualquier modelo que no sea el de la lista, así que
-> ningún modelo fuera de la lista puede entrar sin que se note.
+> **Desviación de la lista cerrada, asumida y documentada.** El material del
+> curso no identificaba el modelo de visión, así que el elegido se fijó con la
+> evidencia de arriba. La lista publicada ya lo nombra
+> (`docs/Lista_de_Modelos.md`, punto 4) y el verificador de modelos lo deja
+> escrito en el arranque (`vision | Nemotron 3 Nano Omni 30B A3B | ok`). Si el
+> curso responde con otro identificador, se cambia en `src/modelos_lista.py` y
+> en el `.env`: el verificador rechaza cualquier modelo que no sea el de la
+> lista, así que ningún modelo fuera de la lista puede entrar sin que se note.
 
 **Medición del modelo elegido, en el camino real** (dentro del contenedor, por
 el proxy del enlace; 20 llamadas, 4 fotos de la planta, 5 por foto):
