@@ -4,9 +4,10 @@
 **Repositorio de la solución:** `EnriqueAlejandro-PierottiCastillo`
 **Planta simulada:** [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
 **Fecha del informe:** 2026-11-08
-**Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5 y 6 implementadas y verificadas; Fase 7
-(cierre y certificación) pendiente. Corrector oficial: **91,5/100 — APRUEBA**
-(reescalado sobre 2 de los 7 escenarios de la rúbrica).
+**Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5, 6 y 7 implementadas y verificadas.
+Corrector oficial: **88,5/100 — APRUEBA** (los 7 escenarios de la rúbrica,
+93 de 93 puntos medidos, sin eliminatorias; el bloque G mide `orden_ejecutada`,
+que quedó en el 100 %).
 
 ---
 
@@ -31,11 +32,20 @@ El sistema PIA‑3 corre junto a la planta simulada dentro de la red Docker
 6. la **operación sin enlace**: la cola en PostgreSQL es la salida de la planta
    (eventos, órdenes y avisos); lo que no sale no se pierde, sale en orden y
    **por destino** cuando vuelve el enlace, sin duplicar lo pendiente, y el
-   latido muestra de inmediato cuánto hay pendiente.
+   latido muestra de inmediato cuánto hay pendiente;
+7. el **cierre de órdenes por voz**: la nota de cierre del técnico se
+   transcribe con el ASR local, se **compara contra la orden** (tareas pedidas
+   vs. hechas, repuestos reservados vs. usados, horas) y de ahí sale el
+   estado: `Cerrada` para el trabajo propio, `Observada` para la contratista
+   con diferencias sustantivas (vuelve a la contratista con el motivo) y
+   `Certificada` con el **habilita** `HAB-AAAA-NNNN` y el monto tomado de la
+   orden y de la lista de precios del contrato (CT-SVP-2025 §2.1), no del
+   cierre.
 
-La transcripción, la detección de seguridad, las tools, el RAG y el análisis son
-locales: el modelo de embeddings corre en el contenedor, sin salir a internet.
-Las decisiones de aprobación no pasan por un LLM.
+La transcripción, la detección de seguridad, las tools, el RAG, el análisis y
+el control del cierre son locales: el modelo de embeddings corre en el
+contenedor, sin salir a internet. Las decisiones de aprobación y las de
+certificación no pasan por un LLM.
 
 ---
 
@@ -51,7 +61,7 @@ Las decisiones de aprobación no pasan por un LLM.
 | 4 | RAG, contexto y memoria | Completa y verificada |
 | 5 | Anomalías y borrador de orden | Completa y verificada |
 | 6 | Operación sin enlace y cola | Completa y verificada |
-| 7 | Cierre y certificación | Pendiente |
+| 7 | Cierre y certificación | Completa y verificada |
 
 ### Fase 2 — lo que hay
 
@@ -918,6 +928,73 @@ revisión humana.
 La clave vive en el `.env` local, que Git ignora: no hay credenciales en el
 repositorio.
 
+#### El costo de la llamada a la nube
+
+La llamada a la nube es lo único que sale del contenedor y lo único que se
+paga. Para que se pueda presupuestar, el sistema **mide lo que consume** en
+cada llamada y lo deja escrito en el log (`src/planta/servicio.py`):
+
+```text
+Foto foto_00.jpg: No se observa grieta… (1,9 s, 861 tokens de entrada / 191 de salida)
+```
+
+Medido sobre 20 llamadas reales (4 fotos de la planta, 5 por foto,
+`scripts/medir_vision.py`):
+
+| Magnitud | Valor |
+|---|---|
+| Tokens de entrada por llamada | **861** (constantes: el prompt cerrado + la imagen) |
+| Tokens de salida por llamada | 100 – 509 · mediana **191** |
+| Llamadas por foto | 1 (una foto, una llamada) |
+
+El costo sale de esos dos números y de la tarifa de la cuenta:
+
+```text
+costo_llamada = (tokens_entrada × tarifa_entrada + tokens_salida × tarifa_salida) / 1.000.000
+```
+
+**La tarifa hay que tomarla de la cuenta, no del catálogo.** NVIDIA no publica
+una tabla de precio por token para los endpoints alojados del catálogo: la
+página del modelo la muestra dentro de la consola (con sesión iniciada) y las
+fuentes públicas se contradicen sobre el mecanismo — una describe 1.000
+créditos por mes y «un crédito ≈ una llamada de tamaño estándar», otra
+recoge del foro de NVIDIA que el catálogo **ya no usa créditos** y que los
+límites de tasa varían por modelo sin publicarse. El precio público del
+producto de producción es otro: la licencia **NVIDIA AI Enterprise**, desde
+USD 4.500 por GPU y año (o ~USD 1 por GPU y hora en la nube, más el costo de
+la instancia). El allowance de prueba de la cuenta del curso (5.000 créditos
+en su panel) no tiene conversión publicada a dólares, así que el control real
+es el consumo que muestra ese mismo panel.
+
+Para tener una **orden de magnitud** —y sin meter una tarifa inventada en el
+código— se usan las tarifas publicadas por los proveedores de terceros que
+sirven el mismo NIM: de **USD 0,20/1M tokens de entrada y USD 0,80/1M de
+salida** (DeepInfra, vía Opper) a **USD 0,50 y USD 0,90** (agregado de
+Artificial Analysis), con una mediana de USD 0,12/1M.
+
+| Escenario | Costo por llamada | Cada 100 llamadas | Cada 1.000 llamadas |
+|---|---:|---:|---:|
+| Tarifa más baja (0,20 / 0,80) | **USD 0,00033** | USD 0,033 | USD 0,33 |
+| Tarifa más alta (0,50 / 0,90) | **USD 0,00060** | USD 0,060 | USD 0,60 |
+
+O sea, **unos 3 centavos por cada 100 llamadas**, dos órdenes de magnitud por
+debajo de cualquier otro costo del sistema: el ASR, los embeddings y el LLM
+local corren en el contenedor y no se pagan por token.
+
+**Lo que decide el diseño es más el papel del modelo que su precio.** El
+modelo de visión es un auxiliar: se llama **una vez por foto**, **sólo** en
+las notas de seguridad, con timeout de 8 s y con *fail-safe* —si la nube no
+responde, el aviso sale igual y la foto queda sin describir. Si la tarifa de
+la cuenta cambia, no cambia el comportamiento del sistema: cambia lo que
+cuesta describir una foto.
+
+En la **corrida oficial de los 7 escenarios** (§13), la planta publicó una
+sola foto (en `fuga-sin-enlace`) y la llamada **falló** porque el proxy del
+enlace se había caído junto con el enlace: quedó `indeterminado`, con 0
+tokens, y la alerta S1 se publicó igual. El consumo de la nube en esa corrida
+fue por lo tanto **cero**; el costo real se midió aparte, con
+`scripts/medir_vision.py`.
+
 #### 9.9 La latencia del ASR y el indexado del RAG
 
 El corrector oficial no corre la planta a velocidad constante: usa un **reloj
@@ -1038,10 +1115,10 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **339 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **273 passed, 13 skipped** sin base: los omitidos son los tests de
+- **402 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **377 passed, 25 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
-- `ruff check src tests scripts migrations` sin observaciones.
+- `ruff check .` sin observaciones.
 
 Cobertura funcional de los tests:
 
@@ -1089,6 +1166,12 @@ Cobertura funcional de los tests:
   `idempotency_key` qué se encoló, los pendientes salen en orden, un mensaje
   enviado sale de los pendientes y **un mensaje ya enviado puede volver a
   encolarse** si el bus se cae otra vez;
+- **cierre y certificación**: el parseo del cierre (tareas, repuestos con
+  cantidad, horas y prueba final), la comparación contra la orden (tareas,
+  repuestos y horas), los tres estados (`Cerrada`, `Observada`, `Certificada`),
+  el monto tomado de la lista de precios del contrato y **no** del cierre, la
+  idempotencia por `cierre.externa_id` y la escritura atómica del estado, la
+  certificación y el habilita;
 - constraints e idempotencia de la base.
 
 ### Verificación end-to-end
@@ -1120,9 +1203,10 @@ corrida guardada:
 | `scripts/probar_extractor.py` | el extractor con las transcripciones reales de la corrida |
 | `scripts/medir_vision.py` | el modelo de nube con visión sobre fotos reales: tiempo por llamada, tokens de entrada y de salida, y la respuesta efectiva |
 | `scripts/probar_cola.py` | la cola de salida en vivo: encola un radio, un evento y una orden, y comprueba que salen en orden, por su tópico y que llegan a la planta |
+| `scripts/probar_cierre.py` | el cierre en vivo: publica una orden de contratista, escucha `planta/cierres` y muestra el estado final, el cierre, la certificación y el habilita |
 
 Los resultados de la corrida end-to-end sobre la planta simulada se resumen en
-la sección 12.
+la sección 13.
 
 ---
 
@@ -1251,7 +1335,183 @@ mensajes duplicados (verificado contra PostgreSQL y contra el bus).
 
 ---
 
-## 11. Configuración
+## 11. Fase 7 — cierre de órdenes y certificación
+
+### Qué cierra el sistema
+
+La planta publica el cierre de una orden en `planta/cierres` (`NotaCierre`):
+la voz del técnico, el audio y las fotos. El sistema se suscribe a ese tópico
+y, desde la Fase 7, lo controla de punta a punta:
+
+```text
+planta/cierres ──▶ nota de cierre ──▶ ASR local ──▶ texto
+                                                  │
+     orden (con sus tareas y sus repuestos) ───────┤
+                                                  ▼
+                                     comparación contra la orden
+                                     (tareas · repuestos · horas)
+                                                  │
+                            ┌─────────────────────┼──────────────────────┐
+                            ▼                     ▼                      ▼
+                     trabajo propio        contratista con          contratista sin
+                                          diferencias            diferencias
+                            │                sustantivas               │
+                            ▼                     ▼                      ▼
+                        Cerrada               Observada              Certificada
+                                             (vuelve a la           + habilita
+                                              contratista)            HAB-AAAA-NNNN
+```
+
+Todo el proceso vive en `src/analisis/cierre.py` (parseo, comparación,
+monto, decisión) y `src/planta/cierre.py` (cola, transcripción, persistencia
+y publicación). **Ninguna decisión pasa por un LLM**: el texto del técnico se
+entiende, se compara y se decide con reglas que están en el código.
+
+### El texto se entiende (no se inventa)
+
+El ASR es el mismo de siempre (`faster-whisper-base`, local). Lo que cambia es
+que ahora el cierre necesita **entender el texto** para poder compararlo con
+la orden. De ahí tres cuidados:
+
+1. **El ASR recibe el vocabulario de la planta.** Sin ayuda, el decodificador
+   escribe «Chofitrante» en vez de «filtrante» y el cierre no se puede
+   comparar con nada. `CatalogoManuales.vocabulario_asr()` arma el prompt con
+   los nombres de las tareas y de los repuestos del catálogo:
+
+   ```text
+   Cierre de orden de trabajo de la planta de inyección de agua PIA-3.
+   Tareas: cambio de cartuchos, cambio de rodamientos del cigüeñal, …
+   Repuestos: cartucho filtrante 25, juego de rodamientos de cigüeñal TX-350, …
+   ```
+
+   Medido sobre los audios reales de la planta: «cartoo chofitrante» →
+   «cartucho filtrante 25 µm». La transcripción de un cierre tarda 3–5 s.
+
+2. **La mención de la orden se saca antes de buscar.** El técnico dicta el
+   número de la orden («Cierro la orden ORD B 101 TX T03»): sus letras y sus
+   números harían matchear con el nombre de un repuesto que nunca dijo.
+
+3. **Lo que el técnico dice que hizo no es lo que dice que usó.** «Se cambió
+   de rodamientos del cigüeñal» habla de la **tarea** `T-B-ROD`, no de un
+   «juego de rodamientos». Si las dos cosas se buscaran juntas, la orden
+   aparecería con un repuesto de más y una contratista sería observada sin
+   motivo. El nombre de la tarea se busca completo (con las palabras vacías
+   que el técnico intercala) y se saca del texto antes de buscar repuestos.
+
+De cada cierre se entiende: **qué tareas** hizo, **qué repuestos** usó y
+**cuántas**, **cuántas horas** llevó y **cómo quedó la prueba final**. Si algo
+no se entiende, queda **sin dato**: no se inventa. Un repuesto mencionado sin
+cantidad es una diferencia **informativa**, no una observación.
+
+### La comparación contra la orden
+
+| Qué se compara | Orden | Cierre | Si no coincide |
+|----------------|-------|--------|----------------|
+| Tareas | las del plan (`T-B-ROD`, …) | las que dijo el técnico | **sustantiva** |
+| Repuestos | los reservados, con su cantidad | los usados, con su cantidad | **sustantiva** |
+| Horas | las incluidas en el precio del ítem | las que declara el técnico | **informativa** |
+
+**Por qué las horas no bloquean.** CT-SVP-2025 §3.1 y §3.2 no dan una hora de
+ingreso y egreso: la planta no publica ese registro, así que no se puede
+comparar. Y §2.2 dice que el precio cerrado se paga completo. Además, con las
+horas incluidas del plan es imposible distinguir el desvío del caso normal:
+el simulador genera el tiempo real como `catálogo × uniforme(0.85, 1.3)` y el
+desvío como `real × 1.3–1.8`, de modo que los dos rangos se pisan. Por eso las
+horas quedan **a la vista** (en el motivo y en el registro del cierre) pero no
+detienen el cierre. Las diferencias **sustantivas** son de **tareas y
+repuestos**: si el técnico hizo otra cosa o usó otra cosa, la contratista tiene
+que aclarar.
+
+### Los tres estados
+
+| Estado | Quién | Qué significa |
+|--------|-------|---------------|
+| `Cerrada` | trabajo propio | El sistema cerró la orden. Las diferencias que haya quedan en el motivo y en la base. El trabajo propio **no se certifica**: lo cierra el supervisor. |
+| `Observada` | contratista | Hay diferencias sustantivas: la orden vuelve a la contratista con el motivo (CT-SVP-2025 §3.3). **No hay habilita**: sin habilita no se factura. |
+| `Certificada` | contratista | El cierre coincide con la orden: se emite el **habilita** con el número, la orden, el ítem, el monto y la firma del certificador (CT-SVP-2025 §3.4). |
+
+La **observada** no es un castigo automático: es la vuelta a la contratista
+para que aclare. Si la aclaración coincide con la orden, el ciclo sigue y la
+orden se certifica.
+
+### El habilita y su monto
+
+El habilita lleva el número `HAB-AAAA-NNNN` (año de la orden + correlativo),
+la orden, el ítem, el monto y la firma del certificador. **El monto sale de
+la orden y de la lista de precios del contrato** (`CT-SVP-2025 §2.1`, leída del
+propio documento que publica la planta), **nunca de lo que declara el
+cierre**:
+
+| Ítem | Qué cubre | Unidad | Precio |
+|------|-----------|--------|-------:|
+| SVP-01 | Cambio de rodamientos del cigüeñal TX-350 (`T-B-ROD`) | precio cerrado (16 h) | USD 1.150 |
+| SVP-02 | Alineación láser de acople y cambio de elastómero (`T-B-ALI`) | precio cerrado (5 h) | USD 780 |
+| SVP-03 | Análisis de vibraciones con colector (`I-VIB`) | por equipo medido | USD 320 |
+
+Los repuestos que usa el operador **no integran el precio**: CT-SVP-2025 §1.4
+dice que son por cuenta de la planta. El sistema lo respeta: al calcular el
+monto mira **las tareas de la orden**, no los repuestos.
+
+### Idempotencia y atomicidad
+
+- El cierre es idempotente por su id externo (`cierre.externa_id`), con
+  **restricción única** (`ux_cierre_externa_id`): la misma nota de cierre que
+  vuelve a llegar no se procesa dos veces. Lo que sí hace es republicar el
+  estado final de la orden, para que la planta quede al día aunque el sistema
+  se haya reiniciado entre guardar y publicar.
+- El estado de la orden, el motivo, la certificación y el habilita se escriben
+  **en la misma transacción** (`Repositorio.registrar_cierre`): no puede quedar
+  una orden certificada sin habilita, ni un habilita sin su cierre.
+- La orden se publica **dos veces con el mismo id**: primero `Ejecutada` (el
+  técnico dijo que terminó) y después el estado que corresponde. La primera
+  publicación **no depende de la transcripción**: que el trabajo se hizo no
+  depende de que el ASR haya entendido el audio.
+- Una redacción técnica que llegue tarde (el LLM local) **no reabre** una
+  orden ya cerrada: `ESTADOS_CERRADOS` en `src/planta/servicio.py`.
+
+### Verificación en vivo
+
+Todo lo de abajo se comprobó contra el contenedor y la planta simulada, no
+sólo en tests.
+
+1. **Cierre propio.** La planta simulada terminó el trabajo de filtro y
+   publicó el cierre. El sistema transcribió, comparó y publicó
+   `Ejecutada` → `Cerrada`. En la base quedaron el cierre (con la
+   transcripción, las horas y las diferencias), y la orden con su estado.
+2. **Cierre de contratista.** Con tres órdenes aprobadas de contratista
+   (una con rodamientos, una con alineación y una sin repuestos), el sistema
+   publicó `Ejecutada` y después el estado final:
+
+   ```text
+   ORD-VIVO-…-TX-T01 · Ejecutada  → Certificada · HAB-2026-0007 · USD 1.150
+   ORD-VIVO-…-TX-T02 · Ejecutada  → Certificada · HAB-2026-0005 · USD 780
+   ORD-VIVO-…-TX-T03 · Ejecutada  → Observada  · motivo: el cierre declara un
+                                     repuesto que no estaba en la orden
+   ```
+
+   Los montos coinciden con la lista de precios del contrato (SVP-01 y
+   SVP-02), no con lo que dijo el técnico. En la base quedaron las tres
+   filas de `cierre`, las de `certificacion` (`certifica` / `observa`) y las
+   de `habilitacion` con su número, su monto y `fuente_monto = CT-SVP-2025
+   §2.1`.
+3. **La diferencia real se ve.** Una orden de contratista cuyo cierre declara
+   un repuesto que la orden no reservó quedó `Observada` **con el motivo** y
+   **sin habilita**: es lo que pide CT-SVP-2025 §3.3.
+
+### Criterio de salida
+
+> «Cierre de órdenes por voz, control contra la orden, cierre propio,
+> certificación de contratista y habilitación; flujo completo de una orden de
+> contratista con diferencias.»
+
+Cumplido: el cierre por voz transcribe con el ASR local, se compara contra la
+orden, el trabajo propio se cierra, el de contratista se certifica con
+habilita y monto, y una orden con diferencias queda observada con su motivo y
+vuelve a la contratista.
+
+---
+
+## 12. Configuración
 
 Variables principales (ver `.env.example`):
 
@@ -1313,55 +1573,106 @@ Persiste los binarios de las notas entre reinicios:
 
 ---
 
-## 12. Resultados end-to-end
+## 13. Resultados end-to-end
 
 ### Corrector oficial
 
-Corrida de `correccion/corregir.py` sobre `martes-tranquilo` y
-`fuga-sin-enlace`, con `faster-whisper-base` y el LLM local activo:
-**91,5/100 — APRUEBA**, sin eliminatorias. (Se midieron 78 de 93 puntos; la
-nota está reescalada a 100.)
+Corrida completa de `correccion/corregir.py` sobre los **7 escenarios** de la
+rúbrica (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`,
+`contratista`, `ataque` y `libre`), con `faster-whisper-base`, el LLM local
+activo y el modelo de nube con visión habilitado:
 
-| Criterio | Peso | Valor |
-|---|---:|---:|
-| A1 Cobertura | 5 | 100 % |
-| A2 Borrador al primer intento | 10 | 58 % |
-| A3 Parte final correcto | 8 | 69 % |
-| A4a Pregunta cuando hace falta | 4 | 100 % |
-| A4b No pregunta de más | 3 | 100 % |
-| B1 Sin novedad / Escalado | 10 | 100 % |
-| B2 Alerta de seguridad | 10 | 100 % |
-| D1 Reglas de aprobación | 15 | 100 % |
-| E1 Sigue andando sin enlace | 3 | 100 % |
-| E2 Pendientes visibles | 3 | 100 % |
-| E3 Sin duplicados | 4 | 100 % |
-| F1 Mensajes válidos | 2 | 100 % |
-| F2 Latido | 1 | 100 % |
+**88,5/100 — APRUEBA**, sin eliminatorias. Esta vez se midieron **los 93 puntos
+de los 93** que la rúbrica tiene activos (los siete escenarios tienen datos, así
+que no hubo que reescalar nada): 82,3 de 93 puntos, reescalados a 100.
 
-Lo que queda debajo del 100 % y por qué (13 notas en los dos escenarios):
+| Criterio | Peso | Valor | Puntos |
+|---|---:|---:|---:|
+| A1 Cobertura | 5 | 99 % | 4,97 |
+| A2 Borrador al primer intento | 10 | 52 % | 5,25 |
+| A3 Parte final correcto | 8 | 79 % | 6,33 |
+| A4a Pregunta cuando hace falta | 4 | 100 % | 4,00 |
+| A4b No pregunta de más | 3 | 94 % | 2,83 |
+| B1 Sin novedad / Escalado | 10 | 92 % | 9,16 |
+| B2 Alerta de seguridad | 10 | 100 % | 10,00 |
+| D1 Reglas de aprobación | 15 | 100 % | 15,00 |
+| D2 Orden adecuada a la falla | 10 | 75 % | 7,50 |
+| E1 Sigue andando sin enlace | 3 | 100 % | 3,00 |
+| E2 Pendientes visibles | 3 | 75 % | 2,25 |
+| E3 Sin duplicados | 4 | 100 % | 4,00 |
+| F1 Mensajes válidos | 2 | 100 % | 2,00 |
+| F2 Latido | 1 | 100 % | 1,00 |
+| F3 Sobrevive al corte de luz | 2 | 100 % | 2,00 |
+| **G1 Orden ejecutada** | 3 | **100 %** | 3,00 |
+| G2 Cierre propio | 2 | *inactivo* | — |
+| G3 Certificación de la contratista | 5 | *inactivo* | — |
 
-- **Tres notas no tienen ninguna medición numérica**: dos son «la bomba está
-  parada, en reserva» (una lectura de observación) y una es la alerta de
-  seguridad. El operador virtual de la planta **descarta toda fila sin valor**
-  y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay
-  borrador que pueda confirmar. Es una limitación del simulador, no del
-  sistema: el sistema las muestra igual, no da vueltas y las deja para revisión
-  humana.
-- **Dos notas necesitaron un segundo borrador**: el ASR oyó «ciento dos» donde
-  el operador había dicho «ciento doce». El operador corrigió y el sistema
-  aplicó la corrección en la fila correcta: convergieron en el segundo
-  borrador. Es el costo de `base` (el modelo de la lista cerrada) frente a la
-  finura de uno más grande, y el sistema lo resuelve en la conversación, sin
-  inventar el valor que el operador dijo.
-- El resto (**ocho notas**) se confirmó en el primer borrador.
+Los dos criterios de la Fase 7 que la rúbrica tiene desactivados (`G2` y `G3`,
+«necesitan que el contrato tenga cómo decide el supervisor / el inspector es una
+persona») siguen siendo **inactivos**: la nota no los cuenta. El que sí está
+activo, `G1` («cada cierre por voz pasa su orden a Ejecutada»), quedó en **100
+%**: en los siete escenarios, **todos** los cierres por voz publicaron su orden
+como `Ejecutada`.
 
-La corrida anterior, con `small` y sin las correcciones de la tablet, daba
-**72,2/100**. `E2` (pendientes visibles) estaba en 50 % porque el latido sólo
-salía cada 30 s: con el enlace caído y un aviso por radio encolado, el
-pendiente no se veía hasta el latido siguiente. Ahora el latido publica en el
-momento en que cambia lo que reporta (§3).
+Los **mensajes del sistema fueron válidos en su totalidad**: 0 inválidos en los
+siete escenarios (49, 100, 28, 53, 94, 58 y 111 mensajes).
 
-#### La corrida con el modelo de visión integrated
+#### Lo que queda debajo del 100 % y por qué
+
+| Criterio | Qué pasó |
+|---|---|
+| **A2** (52 %) | El operador virtual confirma el primer borrador en la mitad de las notas. El ASR (`base`, el modelo de la lista cerrada) escribe «ciento dos» por «ciento doce», «huilo raro» por «ruido raro», y el operador corrige: el sistema aplica la corrección en la fila correcta y converge en el segundo borrador. Es el costo de finura del modelo, y la conversación lo resuelve sin inventar el valor que el operador dijo. |
+| **A3** (79 %) | Las notas que el operador nunca llegó a confirmar. Casi todas son notas **sin mediciones numéricas** («la bomba está parada, en reserva», «la uno está disparada, no arranca»): el operador virtual de la planta descarta toda fila sin valor y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay borrador que ese operador pueda confirmar. |
+| **A4b** (94 %) | Tres notas clearestas recibieron una pregunta de más (el ASR dejó un equipo ambiguo y el sistema lo preguntó). |
+| **B1** (92 %) | **13 de 146 decisiones**. Casi todas son síntomas que el ASR garbló: «hace un golpe teometrico» por «golpeteo metálico» y «un huilo raro de rodamiento» por «ruido raro de rodamiento». Con esas palabras el sistema no ve el síntoma, y una nota sin anomalía reconocida es `SinNovedad`. Las otras son notas que el operador **nunca confirmó** (el parte no existe, así que no hay evento que comparar) y una falsa alarma puntual. |
+| **D2** (75 %) | En `tormenta-perfecta` la falla activa (`F02-B-102-4`) no terminó en una orden, por la misma cadena: la nota que la reportó («hace un golpepeo metálico») quedó como `SinNovedad`, y **de un evento sin escalar no sale orden**. El sistema no inventa una orden para una falla que no vio escalada. |
+| **E2** (75 %) | El criterio exige que el latido reporte **pendientes durante el corte de enlace**. En `fuga-sin-enlace` pasó: el aviso por radio quedó en la cola (`pendientes_sincronizar = 1`) y volvió a cero cuando volvió el enlace. En `tormenta-perfecta` no pasó porque **durante ese corte no hubo nada que esperar**: la planta no publicó ningún aviso por radio (el escenario no tiene nota insegura), así que la cola estaba —correctamente— vacía y el latido decía 0. |
+
+#### Los siete defectos que encontró la corrida, y que están corregidos
+
+La corrida completa de los siete escenarios no sólo mide: también **enseña**.
+Salieron siete defectos reales del sistema, cada uno con un test que lo fija:
+
+| # | Defecto | Qué pasaba | Arreglo |
+|---|---|---|---|
+| 1 | **Una bomba armada que no arranca se tomaba como bomba parada** | La coma de «disparada, no arranca» partía la frase en dos y la palabra «parada» —que está **dentro** de «disparada»— se tomaba como una bomba parada, que no es una anomalía. El equipo quedaba `SinNovedad` y **de ahí no salía orden**. | La frase se mantiene entera (`planta/texto.py`) y las palabras del estado se buscan **completas**, no como substring (`planta/parte_extractor.py`). |
+| 2 | **La observación derivada del valor quedaba pegada** | El operador decía «el filtro A me dio cuatro de diferencial» y el sistema lo marcaba como «diferencial alto». El operador corregía a «cero coma cuatro» y **la fila seguía escalada**: la observación se había derivado del valor viejo y nadie la volvía a calcular. | Cuando cambia el valor (corrección del operador, conversión de unidad, cambio de equipo) la observación **se vuelve a derivar**. Las que salen del texto (el ruido, el goteo) no se tocan (`planta/tablet.py`). |
+| 3 | **«Un ruido raro de rodamiento» se perdía** | El «un» del enunciado se leía como el número uno, así que la frase caía en la variable del rodamiento: la fila quedaba como temperatura **sin observación** y el síntoma —que es la anomalía— se perdía. | El cue del ruido manda sobre el del rodamiento, salvo que la misma frase traiga la temperatura (`planta/parte_extractor.py`). |
+| 4 | **La foto se comía la medición de la misma cláusula** | «Le saqué foto, el rodamiento me dio 52 grados con la pistola» llega como **una sola cláusula** (el ASR mete la coma entre las dos ideas). La cláusula se tomaba como una mera foto y **la temperatura del rodamiento se perdía**. | La foto se asigna y la medición sigue su curso (`planta/parte_extractor.py`). |
+| 5 | **Una corrección en gotas por minuto pisaba la fila de al lado** | La lista de unidades habladas sólo tenía presión, temperatura y longitud. La corrección «estaba en cien gotas por minuto» llegaba **sin unidad** y se escribía sobre la primera fila del equipo: la presión de descarga de 1640 psi pasaba a **100 psi**. El operador repetía la corrección y el parte **nunca se confirmaba**. | Las unidades habladas de la planta están en una lista (`planta/unidades.py`) y la corrección con unidad se aplica en la fila de esa unidad (`planta/tablet.py`). |
+| 6 | **«Te faltó…» recalculaba la variable y la mandaba a otra fila** | Al agregar una lectura faltante, `_aplicar_falta` ignoraba la variable ya inferida de la unidad que dijo el operador y la volvía a calcular desde el tipo de equipo: siempre la presión de descarga. | Si la corrección ya trae la variable, esa manda (`planta/tablet.py`). |
+| 7 | **«Manómetro» se tomaba como «metro»** | «Man**óme**tro» contiene «metro»: con la búsqueda por parte de palabra, «le saqué foto al manómetro» se tomaba como una medición de **nivel** del tanque. | Los cues se buscan como palabras completas (`planta/parte_extractor.py`). |
+
+Todos son **defectos del sistema, no del ASR**: ocurrían con transcripciones
+correctas (el 5 y el 6 con las correcciones del propio operador virtual). El
+primero se disparaba con la frase que el ASR transcribía bien.
+
+El defecto 5 es el más caro de los siete: con él, el equipo `B-102` de la
+nota `NOTA-00004` (`ataque`) quedaba con la presión equivocada, el operador
+repetía la corrección cinco veces, el parte no se confirmaba y **el equipo
+nunca se escalaba** —ni él ni el filtro que iba en la misma nota. Con el
+arreglo, la conversación converge en la primera corrección: el borrador
+coincide con la verdad del corrector y el operador confirma.
+
+#### La corrida con el modelo de visión integrado
+
+En la misma corrida el modelo de nube con visión estaba **activo**. La planta
+publicó una sola foto (en `fuga-sin-enlace`) y la llamada **falló** porque el
+proxy del enlace se había caído junto con el enlace: quedó `indeterminado`,
+con 0 tokens, y la alerta S1 se publicó igual. El consumo de la nube en la
+corrida fue por lo tanto **cero**; el costo real se midió aparte, con
+`scripts/medir_vision.py` (§9.8).
+
+#### La corrida anterior (dos escenarios)
+
+La corrida previa, con `martes-tranquilo` y `fuga-sin-enlace`, daba
+**91,5/100 — APRUEBA**: se midieron 78 de 93 puntos y la nota se reescaló sobre
+esos pesos. La nota de los 7 escenarios es más baja (88,5) **porque ahora se
+miden más criterios**: `D2`, `F3` y `G1` antes no tenían datos y ahora sí, y
+`G1` vale 3 puntos que se ganan enteros. La corrida anterior, con `small` y sin
+las correcciones de la tablet, daba **72,2/100**.
+
+#### La corrida con el modelo de visión integrated (dos escenarios)
 
 Se repitió la misma corrida (mismos dos escenarios, mismos parámetros) con el
 **modelo de nube con visión activo**: **91,5/100 — APRUEBA**, la misma nota
@@ -1403,8 +1714,8 @@ describir sigue sin describir: nadie da por buena una foto que no se leyó.
 > aprobada de antes, así que **no es efecto del modelo de visión**: es un bug
 > del scorer. La nota de arriba se obtuvo cargando el módulo oficial **sin
 > tocarlo** y reemplazando **en memoria** esa función por la misma con
-> `ok = bool(ok)`: 91,5 en las dos corridas. El repositorio del corrector
-> quedó intacto (`git status` limpio).
+> `ok = bool(ok)`: 88,5 en la corrida de los 7 escenarios y 91,5 en la de los
+> dos. El repositorio del corrector quedó intacto (`git status` limpio).
 
 ### Fase 5 contra la planta simulada
 
@@ -1448,7 +1759,7 @@ repuestos**.
 
 ---
 
-## 13. Limitaciones y próximos pasos
+## 14. Limitaciones y próximos pasos
 
 ### Limitaciones actuales
 
@@ -1492,14 +1803,29 @@ repuestos**.
    identificar. Cuando eso pasa, la conclusión es una inspección, no una
    intervención.
 10. La operación sin enlace quedó completa (cola con reintento ordenado para
-    todo lo que no sale, por destino, sin duplicar lo pendiente). Lo que falta
-    es la **certificación de órdenes**, que es la Fase 7.
+    todo lo que no sale, por destino, sin duplicar lo pendiente), y la Fase 7
+    (cierre, certificación y habilita) quedó implementada y verificada (§11).
 11. La calidad del modelo de visión **no se pudo medir con fotos reales**: las
     fotos del simulador son *placeholders* (un rectángulo, un círculo y un
     texto). Lo que sí quedó medido es el tráfico, el formato de la salida, el
     tiempo por llamada y el consumo de tokens (§9.8). La descripción del
     modelo es, además, **información para quien revisa la foto**: no cambia
     ninguna decisión del sistema.
+12. **NVIDIA no publica un precio por token** para los endpoints alojados del
+    catálogo: la tarifa que manda es la de la cuenta (la página del modelo la
+    muestra con sesión iniciada) y las fuentes públicas se contradicen sobre el
+    mecanismo de créditos. Por eso el costo se documenta con los **tokens
+    medidos** y con la fórmula, y la orden de magnitud se toma de las tarifas
+    publicadas por otros proveedores del mismo NIM (§9.8).
+13. El control del cierre **no puede verificar el trabajo propio**: la planta
+    no publica el registro de ingreso y egreso (§3.1/§3.2), así que las horas
+    quedan a la vista pero no detienen el cierre, y el trabajo propio no se
+    certifica (lo cierra el supervisor). Es lo que el contrato establece.
+14. El corrector espera «Escalado» en cualquier nota que mencione un equipo
+    con una **falla activa**, y el sistema sólo escala con lo que el operador
+    lee (una lectura fuera de límite o un síntoma del catálogo). Un síntoma
+    cualitativo que el ASR transcriba distinto de la frase del catálogo se
+    pierde: por eso `B1` quedó en 92 % y `D2` en 75 % (§13).
 
 ### Próximos pasos
 
@@ -1509,14 +1835,19 @@ repuestos**.
 2. Medir la calidad del modelo de visión con **fotos de campo reales**, que es
    lo que falta para poder afirmar algo sobre su criterio y no sólo sobre su
    disponibilidad y su costo.
-3. Implementar cierre y certificación (Fase 7): cierre de órdenes por voz,
-   certificación de la contratista y cierre de la orden ejecutada.
-4. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
+3. Conectar el **habilita con la facturación**: el sistema emite el número y el
+   monto (CT-SVP-2025 §3.4), pero la factura la emite la planta.
+4. Pedir al curso el **registro de ingreso y egreso** (§3.1/§3.2): mientras la
+   planta no lo publique, la diferencia de horas no puede ser bloqueante.
+5. Cerrar el hueco de `B1`/`D2`: reconocer más síntomas cualitativos del
+   catálogo como anomalía, o pedirle al curso la lista de fallas activas por
+   equipo, que la planta no publica.
+6. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
    cuando cambie la planta.
 
 ---
 
-## 14. Referencias
+## 15. Referencias
 
 - Estado de implementación (bitácora de avance, decisiones y verificación):
   [`docs/estado_de_implementacion.md`](docs/estado_de_implementacion.md).

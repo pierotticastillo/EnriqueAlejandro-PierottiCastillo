@@ -34,7 +34,18 @@ de órdenes.
       **por destino** (el radio espera al enlace, los eventos no), sin
       duplicar lo pendiente, con `pendientes_sincronizar` visible en el
       latido.
-- [ ] Fase 7 — cierre y certificación.
+- [x] Fase 7 — cierre y certificación: el cierre por voz se transcribe con el
+      ASR local (con el vocabulario de la planta), se **compara contra la
+      orden** (tareas, repuestos y horas) y sale el estado: `Cerrada` para el
+      trabajo propio, `Observada` para la contratista con diferencias
+      sustantivas (vuelve con el motivo) y `Certificada` con el habilita
+      `HAB-AAAA-NNNN` y el monto tomado de la orden y de la lista de precios
+      del contrato.
+
+**Corrector oficial:** **88,5/100 — APRUEBA** sobre los 7 escenarios de la
+rúbrica (93 de 93 puntos medidos, sin eliminatorias, 0 mensajes inválidos).
+El bloque G mide `orden_ejecutada` y quedó en **100 %**: todos los cierres por
+voz pasaron su orden a `Ejecutada`.
 
 ## Requisitos
 
@@ -276,6 +287,29 @@ cada equipo de la nota por separado. El escalado lleva el contexto del parte
 las últimas horas. Un equipo **parado en reserva o por mantenimiento** no es una
 anomalía.
 
+### Siete cosas que la corrida de corrección enseñó
+
+Las reglas de detección y de la tablet se afinaron con la corrida oficial de
+los 7 escenarios (los siete casos tienen test):
+
+- **«La 1 está disparada, no arranca» es una falla**, no una bomba parada: la
+  coma no parte la frase y «parada» se busca como palabra completa, no como
+  parte de «disparada».
+- **La observación que sale del valor se vuelve a calcular**: si el operador
+  corrige «cuatro de diferencial» por «cero coma cuatro», la fila deja de
+  estar marcada como «diferencial alto». Las observaciones que salen del texto
+  (el ruido, el goteo) no se tocan.
+- **«Tiene un ruido raro de rodamiento» es ruido, no temperatura**: el «un» del
+  enunciado es un artículo, no el número uno.
+- **La foto no se come la medición**: «le saqué foto, el rodamiento me dio 52
+  grados» es una sola cláusula y las dos cosas se leen.
+- **Una corrección con su unidad va a su fila**: «estaba en cien gotas por
+  minuto» es del goteo, no de la presión de descarga. Antes esa corrección
+  pisaba la presión (1640 psi → 100 psi) y el parte no se confirmaba nunca.
+- **«Te faltó…» respeta la variable de la unidad que dijo el operador.**
+- **«Manómetro» no es «metro»**: una foto al manómetro no es un nivel del
+  tanque.
+
 ## Tools y servidor MCP (Fase 3)
 
 Las tools son de **solo lectura**: leen la API de la planta y los manuales que
@@ -404,11 +438,42 @@ Mientras el enlace está caído, **la planta sigue trabajando**: detecta,
 arma el parte, responde al operador en la tablet y encola lo que no puede
 mandar.
 
+## Cierre de órdenes y certificación (Fase 7)
+
+La planta publica el cierre de una orden en `planta/cierres` (la voz del
+técnico). El sistema lo transcribe con el ASR local, lo **compara contra la
+orden** y decide el estado:
+
+| Estado | Quién | Qué pasa |
+|--------|-------|----------|
+| `Ejecutada` | cualquiera | La orden pasa a ejecutada en el momento en que llega el cierre, **antes** de transcribir. |
+| `Cerrada` | trabajo propio | El sistema cierra la orden. Lo cierra el supervisor: el trabajo propio **no se certifica**. |
+| `Observada` | contratista | Hay diferencias **sustantivas** (tareas o repuestos): la orden vuelve a la contratista con el motivo y **sin habilita**. |
+| `Certificada` | contratista | El cierre coincide con la orden: se emite el habilita `HAB-AAAA-NNNN` con el monto. |
+
+- **El texto no inventa nada.** Se entienden las tareas, los repuestos (con su
+  cantidad), las horas y la prueba final. Lo que no se entiende queda sin
+  dato, y la diferencia es *informativa* (no bloquea).
+- **Lo que el técnico dice que hizo no es lo que dice que usó**: «se cambió de
+  rodamientos del cigüeñal» es la tarea, no un «juego de rodamientos». Si se
+  mezclaran, una contratista sería observada sin motivo.
+- **Las horas no bloquean** (son informativas): la planta no publica el
+  registro de ingreso y egreso (§3.1/§3.2) y el precio cerrado se paga
+  completo (§2.2). Las diferencias sustantivas son de tareas y repuestos.
+- **El monto sale de la orden y de la lista de precios del contrato**
+  (`CT-SVP-2025 §2.1`, leída del documento que publica la planta), nunca de lo
+  que declara el cierre: SVP-01 `T-B-ROD` USD 1.150, SVP-02 `T-B-ALI` USD
+  780, SVP-03 `I-VIB` USD 320. Los repuestos del operador no integran el
+  precio (§1.4).
+- **Idempotente y atómico**: el cierre se identifica por su id externo
+  (restricción única) y el estado de la orden, la certificación y el habilita
+  se escriben en la misma transacción.
+
 ## Qué corre en la planta y qué en la nube
 
 | Dónde | Qué corre |
 |-------|-----------|
-| **Planta** (contenedor `sistema`) | ASR (`faster-whisper-base`), extracción determinista, detección S1–S4, reglas de aprobación, RAG con embeddings locales (`paraphrase-multilingual-MiniLM-L12-v2`), redacción con el LLM local (`Qwen2.5-3B-Instruct` en Ollama), cola en PostgreSQL, latido y publicación al bus. |
+| **Planta** (contenedor `sistema`) | ASR (`faster-whisper-base`), extracción determinista, detección S1–S4, reglas de aprobación, control del cierre y del habilita, RAG con embeddings locales (`paraphrase-multilingual-MiniLM-L12-v2`), redacción con el LLM local (`Qwen2.5-3B-Instruct` en Ollama), cola en PostgreSQL, latido y publicación al bus. |
 | **Nube** (por el proxy del enlace) | **sólo** la descripción de la foto con el modelo de visión de NVIDIA. Es un **auxiliar**: describe, no decide ni aprueba. |
 
 - El sistema **no depende de la nube**: con el enlace caído o sin clave, la
@@ -417,6 +482,13 @@ mandar.
 - La única salida a la nube es la llamada de visión, y sale por
   `NVIDIA_PROXY=http://enlace:3128`. La clave va en el `.env` local (Git lo
   ignora) y nunca aparece en el log.
+- **Costo medido de esa llamada**: una foto por llamada, **861 tokens de
+  entrada** y **~191 de salida** (medido sobre 20 llamadas reales). Con las
+  tarifas publicadas para este NIM (USD 0,20–0,50 por 1M tokens de entrada y
+  USD 0,80–0,90 por 1M de salida) salen **USD 0,0003–0,0006 por llamada**:
+  unos 3 centavos por cada 100 llamadas. La tarifa que manda es la de la
+  cuenta, porque NVIDIA no publica un precio por token para el catálogo
+  alojado (ver [`INFORME.md`](INFORME.md), §9.8).
 
 ## Variables de entorno
 
@@ -470,6 +542,7 @@ Las principales están documentadas en `.env.example`:
 .
 ├── README.md
 ├── INFORME.md
+├── LICENSE
 ├── docs/
 │   ├── estado_de_implementacion.md
 │   ├── evidencia_fase4_retrieval.json
@@ -486,9 +559,17 @@ Las principales están documentadas en `.env.example`:
 │       ├── 0002_nota_externa.py
 │       ├── 0003_cola_outbox.py
 │       ├── 0004_rag_pgvector.py
-│       └── 0005_outbox_topico.py
+│       ├── 0005_outbox_topico.py
+│       └── 0006_cierre_fase7.py
 ├── scripts/
+│   ├── analizar_borradores.py
+│   ├── analizar_corrida.py
+│   ├── analizar_notas.py
 │   ├── medir_vision.py
+│   ├── probar_cierre.py
+│   ├── probar_cola.py
+│   ├── probar_extractor.py
+│   ├── probar_mcp.py
 │   └── verificar_modelos.py
 ├── src/
 │   ├── config.py
@@ -498,6 +579,8 @@ Las principales están documentadas en `.env.example`:
 │   │   ├── aprobacion.py
 │   │   ├── catalogo.py
 │   │   ├── causas.py
+│   │   ├── cierre.py
+│   │   ├── estado.py
 │   │   ├── evidencia.py
 │   │   ├── fallas.py
 │   │   ├── historial.py
@@ -536,11 +619,13 @@ Las principales están documentadas en `.env.example`:
 │   │   ├── inventario.py
 │   │   ├── manuales.py
 │   │   ├── modelos.py
+│   │   ├── precios.py
 │   │   ├── rag.py
 │   │   ├── registro.py
 │   │   └── tareas.py
 │   └── planta/
 │       ├── almacenamiento.py
+│       ├── cierre.py
 │       ├── cola.py
 │       ├── heartbeat.py
 │       ├── historial.py
@@ -566,8 +651,8 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **339 passed** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose. Sin base quedan **273 passed, 13 skipped** (los de
+Resultado actual: **402 passed** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose. Sin base quedan **377 passed, 25 skipped** (los de
 idempotencia/constraints y los del índice RAG), porque necesitan la base
 levantada.
 
