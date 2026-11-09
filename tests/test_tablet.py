@@ -122,6 +122,55 @@ def test_la_observacion_que_sale_del_texto_no_se_toca_al_corregir(planta: dict) 
     assert ruido.observacion == "tiene un ruido raro de rodamiento"
 
 
+def test_una_correccion_en_gotas_por_minuto_no_pisa_la_presion(planta: dict) -> None:
+    """"Cien gotas por minuto" es del goteo, no de la presión de descarga.
+
+    La corrección llega con su unidad ("gotas por minuto"). Si esa unidad no
+    se reconoce, la corrección queda sin fila propia y se escribe sobre la
+    primera del equipo: la presión de 1640 psi pasaba a ser 100 psi y el
+    operador no lograba confirmar el parte.
+    """
+    resolver = desde_api(planta)
+    filas = [
+        Hallazgo("B-102", "presion_descarga_local", 1640.0, "psi"),
+        Hallazgo("B-102", "goteo_empaquetadura", None, None, "goteo por empaquetadura"),
+    ]
+    respuesta = "No. Te faltó la dos, que estaba en cien gotas por minuto."
+    correcciones = interpretar(respuesta, resolver).correcciones
+    aplicar_correcciones(filas, correcciones, planta, resolver)
+    goteo = next(f for f in filas if f.variable == "goteo_empaquetadura")
+    presion = next(f for f in filas if f.variable == "presion_descarga_local")
+    assert goteo.valor == 100.0
+    assert goteo.unidad == "gotas/min"
+    assert presion.valor == 1640.0
+    assert presion.unidad == "psi"
+
+
+def test_la_correccion_toma_el_valor_que_no_se_nega(planta: dict) -> None:
+    """"Mil seiscientos cuarenta psi, no en cien" vale 1640.
+
+    La frase trae los dos números: el que el operador dice y el que niega.
+    El que manda es el primero.
+    """
+    resolver = desde_api(planta)
+    filas = [
+        Hallazgo("B-102", "presion_descarga_local", 100.0, "psi"),
+        Hallazgo("B-102", "goteo_empaquetadura", 100.0, "gotas/min"),
+    ]
+    respuesta = (
+        "No. La dos estaba en mil seiscientos cuarenta psi, no en cien. "
+        "La dos estaba en cien gotas por minuto, no en cincuenta y dos."
+    )
+    correcciones = interpretar(respuesta, resolver).correcciones
+    aplicar_correcciones(filas, correcciones, planta, resolver)
+    presion = next(f for f in filas if f.variable == "presion_descarga_local")
+    goteo = next(f for f in filas if f.variable == "goteo_empaquetadura")
+    assert presion.valor == 1640.0
+    assert presion.unidad == "psi"
+    assert goteo.valor == 100.0
+    assert goteo.unidad == "gotas/min"
+
+
 def test_agrega_faltante(planta: dict) -> None:
     resolver = desde_api(planta)
     filas = _filas()

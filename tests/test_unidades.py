@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from planta.unidades import convertir, normalizar_unidad, unidad_canonica, unidad_manometro
+from planta.unidades import (
+    convertir,
+    normalizar_unidad,
+    unidad_canonica,
+    unidad_de_frase,
+    unidad_manometro,
+)
 
 
 @pytest.mark.parametrize(
@@ -26,6 +32,24 @@ from planta.unidades import convertir, normalizar_unidad, unidad_canonica, unida
 )
 def test_normalizar_unidad(dicho: str, esperado: str) -> None:
     assert normalizar_unidad(dicho) == esperado
+
+
+@pytest.mark.parametrize(
+    ("dicho", "esperado"),
+    [
+        ("mil seiscientos cuarenta psi", "psi"),
+        ("cien gotas por minuto", "gotas/min"),
+        ("ciento dos grados", "degC"),
+        ("cinco metros", "m"),
+        ("dos metros cubicos por dia", "m3/d"),
+        # "mil" no es un metro: el "m" no alcanza para decir que hay unidad.
+        ("mil seiscientos cuarenta psi", "psi"),
+        ("la del medio", None),
+        ("al manometro", None),
+    ],
+)
+def test_unidad_de_frase(dicho: str, esperado: str | None) -> None:
+    assert unidad_de_frase(dicho) == esperado
 
 
 def test_unidad_del_manometro(planta: dict) -> None:

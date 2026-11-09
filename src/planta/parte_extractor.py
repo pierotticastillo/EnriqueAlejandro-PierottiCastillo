@@ -82,6 +82,18 @@ _CUE_ESTADO = (
 )
 _CUE_REBALSE = ("rebals", "rebalse")
 
+
+def _menciona(norm: str, cues: tuple[str, ...]) -> bool:
+    """Si el texto dice alguna de las palabras, **completa**.
+
+    "manometro" no es un "metro": el manómetro es el instrumento, no la
+    altura del tanque. Con la búsqueda por substring, "le saqué foto al
+    manómetro" se tomaba como una medición de nivel.
+    """
+    return any(
+        re.search(rf"(?<!\w){re.escape(cue)}(?!\w)", norm) for cue in cues
+    )
+
 # Observaciones que se derivan del VALOR de la fila y no de lo que dijo el
 # operador. Viven en una tabla para que la regla sea una sola: si el operador
 # corrige el valor en la tablet, la observación se vuelve a derivar (si no, un
@@ -237,7 +249,20 @@ class ExtractorParte:
                 self._fijar_equipo(mencion.tag or "")
 
         if _es_foto(resto):
+            # La cláusula puede traer la foto **y** la medición ("le saqué
+            # foto, el rodamiento me dio 52 grados"). Si la foto se come
+            # toda la cláusula, la temperatura se pierde: la foto se asigna y
+            # la medición sigue su curso.
             self._asignar_foto(resto)
+            resto = _sin_foto(resto)
+            norm = _sin_foto(norm)
+            if not resto:
+                return
+            numero = parsear_numero(resto)
+            variable = self._variable(norm, resto, numero)
+            if variable is None:
+                return
+            self._agregar_medicion(variable, resto, numero)
             return
 
         numero = parsear_numero(resto)
@@ -285,38 +310,38 @@ class ExtractorParte:
         resto: str,
         numero: NumeroDicho | None,
     ) -> str | None:
-        if any(cue in norm for cue in _CUE_DIFERENCIAL):
+        if _menciona(norm, _CUE_DIFERENCIAL):
             return "presion_diferencial"
-        if any(cue in norm for cue in _CUE_DESCARGA):
+        if _menciona(norm, _CUE_DESCARGA):
             return "presion_descarga_local"
         # El ruido manda sobre el rodamiento: "un ruido raro de rodamiento"
         # habla del ruido, no de la temperatura del rodamiento. Sin esto, la
         # frase se tomaba como una temperatura y el síntoma se perdía. Si la
         # misma frase trae la temperatura ("60 grados con la pistola"), la
         # temperatura es lo que se midió y manda ella.
-        if any(cue in norm for cue in _CUE_RUIDO) and not (
+        if _menciona(norm, _CUE_RUIDO) and not (
             "grado" in norm or "pistola" in norm
         ):
             return "ruido"
-        if any(cue in norm for cue in _CUE_RODAMIENTO) and (
+        if _menciona(norm, _CUE_RODAMIENTO) and (
             "grado" in norm or "pistola" in norm or numero is not None
         ):
             return "temperatura_rodamiento_ir"
-        if any(cue in norm for cue in _CUE_MOTOR) and "grado" in norm:
+        if _menciona(norm, _CUE_MOTOR) and "grado" in norm:
             return "temperatura_motor_ir"
-        if any(cue in norm for cue in _CUE_CAUDAL):
+        if _menciona(norm, _CUE_CAUDAL):
             return "caudal"
-        if any(cue in norm for cue in _CUE_GOTEO):
+        if _menciona(norm, _CUE_GOTEO):
             return "goteo_empaquetadura"
-        if any(cue in norm for cue in _CUE_ACEITE):
+        if _menciona(norm, _CUE_ACEITE):
             return "nivel_aceite_visor"
-        if any(cue in norm for cue in _CUE_CORREAS):
+        if _menciona(norm, _CUE_CORREAS):
             return "estado_correas"
-        if any(cue in norm for cue in _CUE_RUIDO):
+        if _menciona(norm, _CUE_RUIDO):
             return "ruido"
-        if any(cue in norm for cue in _CUE_ESTADO):
+        if _menciona(norm, _CUE_ESTADO):
             return "estado"
-        if any(cue in norm for cue in _CUE_NIVEL) or (
+        if _menciona(norm, _CUE_NIVEL) or (
             self._tipo == "tanque" and numero is not None
         ):
             return "nivel"
@@ -589,6 +614,28 @@ def _es_foto(norm: str) -> bool:
         and any(palabra in norm for palabra in ("saque", "saco", "saqué", "saca", "tomé", "tome"))
         or norm in {"foto", "le saque foto", "saque foto"}
     )
+
+
+# La mención de la foto dentro de la cláusula: "le saqué foto", "saque una
+# foto", "te mando la foto". Se busca del verbo hacia la foto para no comerse
+# lo que viene después ("le saqué foto al manómetro").
+_FRASE_FOTO = re.compile(
+    r"\b(?:le|te|una|dos|tres)?\s*"
+    r"(?:saco|saque|sacas|saques|saca|tome|tomes|toma|mando)\b"
+    r"[^,;]*?\bfotos?\b"
+    r"|\bfotos?\b"
+)
+
+
+def _sin_foto(norm: str) -> str:
+    """La cláusula sin la mención de la foto.
+
+    "le saqué foto, el rodamiento me dio 52 grados" son dos cosas: la foto
+    y la medición. Si la foto se come la cláusula entera, la medición se
+    pierde.
+    """
+    limpio = _FRASE_FOTO.sub(" ", norm)
+    return re.sub(r"\s+", " ", limpio).strip(" ,;")
 
 
 def _unidad_dicha(norm: str) -> str | None:

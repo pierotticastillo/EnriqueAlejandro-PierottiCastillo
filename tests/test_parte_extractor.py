@@ -274,6 +274,40 @@ def test_fotos_se_asocian_a_la_fila_correcta(planta: dict) -> None:
     ]
 
 
+def test_la_foto_no_se_traga_la_medicion_de_la_misma_clausula(planta: dict) -> None:
+    """"Le saqué foto, el rodamiento me dio 52 grados" son dos cosas.
+
+    La foto y la medición llegan en la misma cláusula (el ASR mete la coma
+    entre las dos). Si la foto se come la cláusula entera, la temperatura del
+    rodamiento se pierde y el equipo queda sin ese dato.
+    """
+    extraccion = ExtractorParte(planta).extraer(
+        "La del medio está en 1640 PSI de descarga, sigue goteando por la "
+        "empaquetadura, le saqué foto, el rodamiento me dio 52 grados con la "
+        "pistola, el filtro A me dio uno cinco de diferencial"
+    )
+    assert _filas(extraccion) == [
+        ("B-102", "presion_descarga_local", 1640.0, "psi", None),
+        ("B-102", "goteo_empaquetadura", None, None, "goteo por empaquetadura"),
+        ("B-102", "temperatura_rodamiento_ir", 52.0, "degC", None),
+        ("F-201A", "presion_diferencial", 1.5, "kg/cm2", "diferencial alto"),
+    ]
+
+
+def test_el_manometro_no_es_un_nivel(planta: dict) -> None:
+    """"Le saqué foto al manómetro" no es una altura del tanque.
+
+    "manómetro" contiene "metro": con la búsqueda por parte de palabra, la
+    foto al manómetro se tomaba como una medición de nivel del tanque.
+    """
+    extraccion = ExtractorParte(planta).extraer(
+        "El filtro A me dio uno coma seis de diferencial, le saqué foto al manómetro."
+    )
+    assert _filas(extraccion) == [
+        ("F-201A", "presion_diferencial", 1.6, "kg/cm2", "diferencial alto"),
+    ]
+
+
 def test_foto_del_manometro(planta: dict) -> None:
     fotos = ["/media/fotos/manometro_diferencial/03.jpg"]
     extraccion = ExtractorParte(planta).extraer(

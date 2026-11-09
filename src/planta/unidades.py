@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from planta.texto import normalizar
@@ -47,6 +48,33 @@ SINONIMOS = {
     "gotas/min": "gotas/min",
 }
 
+# Unidades que el operador puede **decir** en voz alta, de la más larga a la
+# más corta. Al leer una frase hay que buscar primero la más larga: "gotas por
+# minuto" antes que "gotas", "metros cubicos por dia" antes que "metros". Si
+# una unidad no está en esta lista, la corrección del operador llega sin
+# unidad y aterriza sobre la fila equivocada (una corrección en gotas/min
+# pisaba la presión de descarga).
+UNIDADES_HABLADAS = (
+    "metros cubicos por dia",
+    "milimetros por segundo",
+    "gotas por minuto",
+    "kilogramos",
+    "kilogramo",
+    "bares",
+    "grados",
+    "metros",
+    "kilos",
+    "libras",
+    "libra",
+    "kilo",
+    "psi",
+    "bar",
+    "m3/d",
+    "mm/s",
+    "gotas/min",
+    "m",
+)
+
 # Variables que siempre se expresan en una unidad fija.
 UNIDAD_FIJA = {
     "presion_diferencial": "kg/cm2",
@@ -65,6 +93,22 @@ def normalizar_unidad(texto: str | None) -> str | None:
         return None
     clave = normalizar(texto)
     return SINONIMOS.get(clave)
+
+
+def unidad_de_frase(texto: str | None) -> str | None:
+    """La unidad que el operador dijo en una frase, si dijo alguna.
+
+    Se buscan las unidades habladas de la más larga a la más corta y con
+    límites de palabra: "5 m" es un nivel, pero "mil seiscientos" no es un
+    metro ni medio kilo.
+    """
+    if not texto:
+        return None
+    norm = normalizar(texto)
+    for frase in UNIDADES_HABLADAS:
+        if re.search(rf"(?<!\w){re.escape(frase)}(?!\w)", norm):
+            return SINONIMOS.get(frase)
+    return None
 
 
 def unidad_manometro(tag: str, planta: dict[str, Any]) -> str | None:

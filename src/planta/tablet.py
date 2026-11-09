@@ -17,7 +17,7 @@ from planta.nombre_resolver import ResolutorNombres
 from planta.numeros import parsear_numero
 from planta.parte_extractor import Hallazgo, Pregunta, recalcular_observacion
 from planta.texto import normalizar, oraciones
-from planta.unidades import convertir, normalizar_unidad, unidad_canonica
+from planta.unidades import convertir, unidad_canonica, unidad_de_frase
 
 TipoCorreccion = Literal["valor", "unidad", "equipo", "falta", "sobra"]
 
@@ -250,6 +250,10 @@ def _variable_de_unidad(
         return "temperatura_rodamiento_ir"
     if unidad == "m":
         return "nivel"
+    if unidad == "gotas/min":
+        return "goteo_empaquetadura"
+    if unidad == "m3/d":
+        return "caudal"
     if planta is None or not tag:
         return "presion_descarga_local"
     return _inferir_variable(Correccion(tipo="valor", tag=tag, unidad=unidad), planta, tag)
@@ -262,23 +266,13 @@ def _valor_y_unidad(texto: str, *, desde: str = "") -> tuple[float | None, str |
 
 
 def _unidad_de_texto(texto: str) -> str | None:
-    norm = normalizar(texto)
-    for palabra in (
-        "psi",
-        "libras",
-        "libra",
-        "bar",
-        "bares",
-        "kilos",
-        "kilo",
-        "kilogramos",
-        "kilogramo",
-        "grados",
-        "metros",
-    ):
-        if palabra in norm:
-            return normalizar_unidad(palabra)
-    return None
+    """La unidad que el operador dijo en el fragmento.
+
+    Se leen todas las unidades de la planta, no sólo las de presión: si una
+    corrección en gotas por minuto llega sin unidad, el sistema no sabe qué
+    fila corregir y la escribe sobre la presión de descarga.
+    """
+    return unidad_de_frase(texto)
 
 
 def aplicar_correcciones(
@@ -400,7 +394,10 @@ def _aplicar_falta(
 ) -> Hallazgo | None:
     if correccion.tag is None:
         return None
-    variable = _inferir_variable(correccion, planta, correccion.tag)
+    # Si la corrección ya trae la variable (la inferida de la unidad que dijo
+    # el operador), esa manda: inferirla otra vez desde el equipo caía la
+    # lectura en la fila de la presión de descarga.
+    variable = correccion.variable or _inferir_variable(correccion, planta, correccion.tag)
     canonica = unidad_canonica(variable, correccion.tag, planta) or correccion.unidad
     valor = (
         convertir(correccion.valor, correccion.unidad, canonica)
@@ -590,6 +587,10 @@ def _inferir_variable(
         return "temperatura_rodamiento_ir"
     if correccion.unidad == "m":
         return "nivel"
+    if correccion.unidad == "gotas/min":
+        return "goteo_empaquetadura"
+    if correccion.unidad == "m3/d":
+        return "caudal"
     tipo = _tipo_de(planta, tag)
     if tipo == "filtro":
         return "presion_diferencial"
