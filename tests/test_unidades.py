@@ -19,12 +19,18 @@ from planta.unidades import (
         ("kilos", "kg/cm2"),
         ("kilogramos", "kg/cm2"),
         ("kg/cm²", "kg/cm2"),
+        # El ASR abrevia los kilogramos: "115 kg de descarga".
+        ("kg", "kg/cm2"),
+        ("kgs", "kg/cm2"),
         ("psi", "psi"),
         ("libras", "psi"),
         # El ASR a veces escribe "1600 preses y de descarga".
         ("preses", "psi"),
         ("bar", "bar"),
         ("grados", "degC"),
+        # Y la temperatura con el símbolo del grado: "59 °C".
+        ("°C", "degC"),
+        ("ºC", "degC"),
         ("metros", "m"),
         ("gotas por minuto", "gotas/min"),
         ("mm/s", "mm/s"),
@@ -42,6 +48,12 @@ def test_normalizar_unidad(dicho: str, esperado: str) -> None:
         ("ciento dos grados", "degC"),
         ("cinco metros", "m"),
         ("dos metros cubicos por dia", "m3/d"),
+        # El ASR abrevia los kilogramos y pone el símbolo del grado.
+        ("la 1 esta en 115 kg de descarga", "kg/cm2"),
+        ("la 1 esta en 115 kgs de descarga", "kg/cm2"),
+        ("el rodamiento me dio 59 grados con la pistola", "degC"),
+        ("el rodamiento me dio 59 °C con la pistola", "degC"),
+        ("el rodamiento me dio 59 ºC con la pistola", "degC"),
         # "mil" no es un metro: el "m" no alcanza para decir que hay unidad.
         ("mil seiscientos cuarenta psi", "psi"),
         ("la del medio", None),

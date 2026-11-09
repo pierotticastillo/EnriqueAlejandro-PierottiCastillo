@@ -661,6 +661,9 @@ def _unidad_dicha(norm: str) -> str | None:
         "kilo",
         "kilogramos",
         "kilogramo",
+        # El ASR abrevia los kilogramos: "115 kg de descarga".
+        "kgs",
+        "kg",
     ):
         if re.search(rf"\b{re.escape(palabra)}\b", norm):
             return normalizar_unidad(palabra)

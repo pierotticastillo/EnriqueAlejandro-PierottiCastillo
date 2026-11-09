@@ -27,6 +27,13 @@ from planta.numeros import parsear_numero
         ("cinco y medio", 5.5, True),
         ("1,5", 1.5, True),
         ("1610", 1610, False),
+        # El ASR escribe los millares con punto o coma: "1.600" es mil
+        # seiscientos, no uno con seiscientos.
+        ("1.600", 1600, False),
+        ("1,600", 1600, False),
+        ("1.610", 1610, False),
+        # Un decimal de tres decimales con el cero adelante no son millares.
+        ("0.900", 0.9, True),
     ],
 )
 def test_parsear_numero(texto: str, valor: float, decimal: bool) -> None:
@@ -34,6 +41,14 @@ def test_parsear_numero(texto: str, valor: float, decimal: bool) -> None:
     assert numero is not None
     assert numero.valor == pytest.approx(valor)
     assert numero.decimal is decimal
+
+
+def test_los_millares_no_se_confunden_con_un_decimal() -> None:
+    """"1.600 de descarga" son mil seiscientos psi, no 1,6."""
+    numero = parsear_numero("lados está en 1.600 de descarga")
+    assert numero is not None
+    assert numero.valor == pytest.approx(1600)
+    assert numero.decimal is False
 
 
 def test_sin_numero() -> None:

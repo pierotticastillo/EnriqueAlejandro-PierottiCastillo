@@ -11,11 +11,25 @@ _RUIDO_ASR = {
 }
 
 
+# El ASR escribe la temperatura con el símbolo del grado: "59 °C", "59 ºC",
+# "59°". Al normalizar, el símbolo se perdía y quedaba "59 c" / "59 oc", que
+# no es ninguna unidad. Se cambia por la palabra que el técnico dice
+# ("grados") antes de borrar los símbolos sueltos.
+_GRADO_CELSIUS = re.compile(r"[°º]\s*c(?![a-z])", re.IGNORECASE)
+# El grado suelto detrás de un número ("59°") también son grados: el "º"
+# suelto no, porque en español es el ordinal ("el 2º filtro").
+_GRADO_SUELTO = re.compile(r"(?<=\d)\s*°(?![a-zº])")
+
+
 def normalizar(texto: str) -> str:
-    """Minúsculas, sin tildes y con espacios colapsados."""
-    descompuesto = unicodedata.normalize("NFKD", texto)
+    """Minúsculas, sin tiltes y con espacios colapsados."""
+    # El símbolo del grado se busca **antes** de descomponer: el NFKD
+    # convierte "º" en "o" y "59 ºC" quedaría "59 oc".
+    limpio = _GRADO_CELSIUS.sub(" grados ", texto.lower())
+    descompuesto = unicodedata.normalize("NFKD", limpio)
     sin_tildes = "".join(c for c in descompuesto if not unicodedata.combining(c))
-    limpio = sin_tildes.lower().replace("°", "").replace("º", "")
+    limpio = _GRADO_SUELTO.sub(" grados ", sin_tildes)
+    limpio = limpio.replace("°", "")
     limpio = re.sub(r"\s+", " ", limpio).strip()
     for ruido, correccion in _RUIDO_ASR.items():
         limpio = re.sub(rf"(?<!\w){ruido}(?!\w)", correccion, limpio)

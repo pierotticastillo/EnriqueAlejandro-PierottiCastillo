@@ -93,6 +93,13 @@ TOKEN = re.compile(r"\d+(?:[.,]\d+)?|[a-z]+")
 # rango, no un decimal.
 _DECIMAL_CON_GUION = re.compile(r"(?<!\d)(\d)-(\d)(?!\d)")
 
+# El ASR escribe los millares con punto o coma: "1.600 de descarga" por
+# "mil seiscientos". En la planta los decimales se dicen con un solo dígito
+# ("uno coma tres", "cero nueve"), así que un número con **tres** dígitos
+# detrás del separador es un millar, no un decimal. El "0" adelante se
+# excluye: "0.900" es cero coma nueve.
+_MILLARES = re.compile(r"^([1-9]\d{0,2})[.,](\d{3})$")
+
 
 @dataclass(frozen=True)
 class NumeroDicho:
@@ -156,6 +163,14 @@ def parsear_numero(texto: str) -> NumeroDicho | None:
 
     for i, token in enumerate(tokens):
         if re.fullmatch(r"\d+(?:[.,]\d+)?", token):
+            millares = _MILLARES.match(token)
+            if millares:
+                # "1.600" es mil seiscientos, no uno con seiscientos.
+                return NumeroDicho(
+                    float(int(millares.group(1) + millares.group(2))),
+                    decimal=False,
+                    dijo=token,
+                )
             valor = float(token.replace(",", "."))
             return NumeroDicho(valor, decimal="," in token or "." in token, dijo=token)
 
