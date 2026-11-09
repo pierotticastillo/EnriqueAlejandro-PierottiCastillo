@@ -87,6 +87,10 @@ class CatalogoManuales:
         parte por voz, y sin ellas el ASR las garbla ("el aboma" por "la
         bomba", "competeo metálico" por "golpeteo metálico") y el sistema no
         reconoce ni el equipo ni el síntoma.
+
+        Los nombres de los equipos van **al final** del prompt: se midió que
+        es donde el decodificador los toma, y es lo que decide el equipo y la
+        fila del parte.
         """
         tareas: list[str] = []
         for tarea in self.tareas:
@@ -99,13 +103,14 @@ class CatalogoManuales:
             if nombre and nombre not in repuestos:
                 repuestos.append(nombre)
         partes = [
-            "Parte de campo de la planta de inyección de agua PIA-3.",
-            f"Equipos: {', '.join(self.nombres_equipos)}." if self.nombres_equipos else "",
+            "Cierre de orden de trabajo de la planta de inyección de agua PIA-3.",
             f"Tareas: {', '.join(tareas)}." if tareas else "",
             f"Repuestos: {', '.join(repuestos)}." if repuestos else "",
-            "El técnico dice qué midió, qué síntoma notó y, al cerrar la orden, "
-            "qué hizo, qué repuestos usó, cuántas horas tardó y cómo quedó la "
-            "prueba final.",
+            "El técnico dice qué hizo, qué repuestos usó, cuántas horas tardó "
+            "y cómo quedó la prueba final.",
+            f"Equipos de la planta: {', '.join(self.nombres_equipos)}."
+            if self.nombres_equipos
+            else "",
         ]
         return " ".join(parte for parte in partes if parte)
 
