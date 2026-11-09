@@ -1,6 +1,6 @@
 # Estado de implementación
 
-**Actualizado:** 2026-11-08  
+**Actualizado:** 2026-11-09  
 **Plan de referencia:** documento interno del curso (no se publica en este
 repositorio). El detalle de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
 
@@ -16,14 +16,17 @@ La **restricción 04 (lista cerrada de modelos)** quedó atendida: el ASR pasó 
 
 La **conversación de tablet** quedó cerrada: la corrección del operador se aplica a la lectura que está corrigiendo (no a la última del equipo), al mover una lectura a otro equipo el valor se convierte, la negación saca una sola lectura y la conversación tiene tope (`PARTE_MAX_CORRECCIONES=5`): si no converge, la nota queda para revisión humana en vez de dar vueltas.
 
-El **corrector oficial** da **88,9/100 — APRUEBA** sobre los **7 escenarios** de
+El **corrector oficial** da **87,5/100 — APRUEBA** sobre los **7 escenarios** de
 la rúbrica (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`,
 `sin-luz`, `contratista`, `ataque` y `libre`), con `faster-whisper-base`, el LLM
 local activo y el modelo de nube con visión habilitado: **93 de 93 puntos
-medidos** (82,7 de 93, reescalados a 100), sin eliminatorias y con **0 mensajes
+medidos** (81,4 de 93, reescalados a 100), sin eliminatorias y con **0 mensajes
 inválidos** en los siete escenarios. El bloque G mide `orden_ejecutada` y quedó
-en **100 %**: todos los cierres por voz pasaron su orden a `Ejecutada`. La nota
-es más baja que los 91,5 de la corrida de dos escenarios porque ahora se miden
+en **100 %**: todos los cierres por voz pasaron su orden a `Ejecutada`. La corrida
+anterior dio 88,9 y la diferencia es **varianza del audio de la planta**, no del
+sistema: el ASR garbló el nombre de un equipo en una nota y el sistema no lo
+reconoció (la causa está medida en el historial). La nota es más baja que los
+91,5 de la corrida de dos escenarios porque ahora se miden
 más criterios (`D2`, `F3` y `G1` antes no tenían datos).
 
 La **Fase 6 (operación sin enlace y cola)** quedó cerrada: la cola
@@ -394,16 +397,31 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Última verificación
 
-- `python -m pytest`: **406 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **381 pasaron, 25 omitidas**.
+- `python -m pytest`: **428 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **403 pasaron, 25 omitidas**.
 - `ruff check .`: **sin errores**.
-- **Corrector oficial, corrida completa (7 escenarios)**: **88,9/100 — APRUEBA**,
-  sin eliminatorias, 93 de 93 puntos medidos (82,7 de 93, reescalados a 100) y
-  **0 mensajes inválidos** (49, 96, 28, 60, 99, 58 y 110 mensajes). Por
-  criterio: A1 99 %, A2 54 %, A3 81 %, A4a 100 %, A4b 93 %, B1 93 %, B2 100 %,
-  D1 100 %, D2 75 %, E1 100 %, E2 75 %, E3 100 %, F1 100 %, F2 100 %, F3 100 %,
+- **Corrector oficial, corrida completa (7 escenarios)**: **87,5/100 — APRUEBA**
+  (`_fase7e`, la corrida vigente), sin eliminatorias, 93 de 93 puntos medidos
+  (81,4 de 93, reescalados a 100) y **0 mensajes inválidos**. Por criterio:
+  A1 99 %, A2 52 %, A3 77 %, A4a 83 %, A4b 93 %, B1 91 %, B2 100 %, D1 100 %,
+  D2 75 %, E1 100 %, E2 75 %, E3 100 %, F1 100 %, F2 100 %, F3 100 %,
   **G1 100 %** (`G2` y `G3` están `activo: false` en la rúbrica).
+  - La corrida anterior (`_fase7d`) dio **88,9/100 — APRUEBA**. La diferencia
+    está en **A4a** (100 % → 83 %) y es **varianza del audio de la planta**, no
+    un cambio del sistema: en `contratista` la `NOTA-00014` («En la bomba, el
+    rodamiento me dio noventa y seis grados…») la planta la generó con una voz
+    nueva y el ASR garbló «la bomba» como «el aboma»; el sistema no preguntó
+    porque no reconoció el equipo. La causa está medida (§ «Por qué dos
+    corridas del mismo código dan notas distintas» del INFORME): las notas
+    cuyo texto está en el **banco de voces** de la planta dan un WAV idéntico
+    entre corridas (42 de 42) y las que se sintetizan con **Piper** dan un WAV
+    distinto siempre (0 de 17). El texto verdadero de la nota es idéntico en
+    las dos corridas: lo que cambia es el audio.
+  - El defecto 8 (el goteo medido) quedó **verificado por el corrector oficial**
+    en `ataque`: la fila del goteo pasó de `observacion: null` a
+    «goteo por empaquetadura» y el evento de `SinNovedad` a **`Escalado`**
+    (`ataque` al 100 %, 9 de 9 decisiones).
   - Lo que queda debajo del 100 % y por qué: el operador virtual confirma el primer borrador en 47 de las 82 notas (el ASR de `base` escribe «ciento dos» por «ciento doce» y el operador corrige); quedan sin confirmar 12 notas, casi todas **sin mediciones numéricas**, que ese operador no puede validar; `B1` falla en **10 de 144 decisiones**: cuatro por **síntomas que el ASR garbló** («golpe teometálico» por «golpeteo metálico»), cuatro por notas que el operador nunca confirmó (sin parte no hay evento), una por el goteo de 142 gotas/min de `ataque` (que ya está corregido: la fila la creaba la corrección y quedaba sin observación) y una más en `contratista` por una nota sin confirmar; `D2` falla en un caso por la misma cadena (de un evento sin escalar no sale orden); `E2` falla en `tormenta-perfecta` porque **durante ese corte no hubo nada que esperar** (la planta no publicó ningún aviso por radio), así que la cola estaba —correctamente— vacía.
-  - La progresión de las corridas de los 7 escenarios: `_fase7` 88,5 → `_fase7b` 87,6 → `_fase7c` 87,8 → `_fase7d` **88,9**. Que la nota baje al corregir algo no es raro: `B1` y `D2` miden decisiones, y un arreglo puede moverlas en las dos direcciones.
+  - La progresión de las corridas de los 7 escenarios: `_fase7` 88,5 → `_fase7b` 87,6 → `_fase7c` 87,8 → `_fase7d` 88,9 → `_fase7e` **87,5**. Que la nota baje al corregir algo no es raro: `B1` y `D2` miden decisiones, y un arreglo puede moverlas en las dos direcciones. En este caso la bajada es de **varianza del audio de la planta** (ver arriba), no del sistema.
   - Nota sobre la herramienta: el `puntuar.py` del corrector, tal como está hoy,
     **no puede calcular el puntaje** — `TypeError: int + str` en `bien += ok`
     (`ok` puede ser el texto del motivo). El crash se reproduce igual con la
@@ -429,6 +447,8 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
   4. **El ASR con vocabulario**: sin el prompt del catálogo, «cartucho filtrante 25» se transcribe «cartoo chofitrante»; con él, el nombre sale bien y el cierre se puede comparar. Transcripción de 3–5 s.
   5. **Lo que el técnico dice que hizo no es lo que dice que usó**: «se cambió de rodamientos del cigüeñal» (la tarea `T-B-ROD`) se cuenta como tarea, no como «juego de rodamientos». Sin esa separación, una contratista quedaba observada sin motivo.
 - **Defectos corregidos en la detección y en la tablet (Fases 2 y 7), encontrados al medir la corrida completa de los 7 escenarios**: (1) la coma de «disparada, no arranca» partía la frase en dos y la palabra «parada» —que está **dentro** de «disparada»— se tomaba como una bomba parada, que no es una anomalía; con la frase entera y las palabras buscadas completas el equipo se escala como corresponde. (2) La observación que se deriva del **valor** («diferencial alto») quedaba pegada cuando el operador corregía el valor en la tablet: el filtro seguía escalada después de que el operador dijera «cero coma cuatro»; ahora la observación se vuelve a derivar del valor nuevo. (3) «Tiene un ruido raro de rodamiento» se perdía: el «un» del enunciado se leía como el número uno y la frase caía en la variable del rodamiento, sin observación; ahora el cue del ruido manda. (4) La foto se comía la medición de la misma cláusula: «le saqué foto, el rodamiento me dio 52 grados con la pistola» llegaba como una sola cláusula y la temperatura se perdía; ahora la foto se asigna y la medición sigue. (5) Una corrección en gotas por minuto llegaba sin unidad y se escribía sobre la primera fila del equipo (la presión de descarga de 1640 psi pasaba a 100 psi): el operador repetía la corrección y el parte nunca se confirmaba, así que el equipo no se escalaba; ahora las unidades habladas de la planta están en una lista y la corrección va a su fila. (6) «Te faltó…» recalculaba la variable desde el tipo de equipo e ignoraba la variable inferida de la unidad. (7) «Manómetro» se tomaba como «metro» (una foto al manómetro se leía como un nivel del tanque); los cues se buscan ahora como palabras completas. (8) Un goteo **medido** por el operador se publicaba como «no hay novedad»: en `ataque` la nota confirmó 142 gotas/min, la fila la creó la corrección del operador (la cláusula del goteo se la habían comido la foto y la temperatura) y quedó **sin observación**, que para el clasificador de eventos no es una anomalía; la orden del cambio de empaquetadura ya estaba creada, así que la misma nota producía una orden y un evento que decía que no había nada. Ahora la observación del goteo se deriva del valor, en la misma tabla que el diferencial y la temperatura (TX350-D §8.4: por encima de 10 gotas/min es la firma en la recorrida de F01; §8.3: el goteo normal es de hasta 10 gotas/min), y la observación que sale del texto no se recalcula en una fila sin valor. Los ocho con tests (`tests/test_parte_extractor.py`, `tests/test_eventos_parte.py`, `tests/test_tablet.py`, `tests/test_unidades.py`).
+- **Defecto 9 — los millares del ASR se leían como decimales**: «1.600 de descarga» (mil seiscientos) se guardaba como 1,6 psi: una lectura plausible que dispara la alarma de presión baja y hacía salir el evento `Escalado` donde la verdad era `SinNovedad`. En la misma línea el ASR abrevia «115 kg de descarga» («kg» no estaba en la lista de unidades habladas, así que la fila quedaba sin unidad) y escribe «59 °C» (el símbolo del grado se perdía al normalizar: «59 c» no es ninguna unidad). Ahora el lector de números distingue el millar del decimal (tres dígitos detrás del separador y sin el cero adelante), «kg» y «kgs» están en la lista de unidades habladas y de las dichas, y el símbolo del grado se cambia por la palabra «grados» antes de normalizar. Con tests en `tests/test_numeros.py`, `tests/test_unidades.py` y `tests/test_texto.py`.
+- **El ASR conoce los nombres de campo de los equipos**: el decodificador de voz garbla lo que no conoce («el aboma» por «la bomba», «competeo metálico» por «golpeteo metálico»), y con el nombre garblado el sistema no reconocía ni el equipo ni el síntoma: no preguntaba y la nota quedaba sin parte. El vocabulario que se le pasa al ASR —que ya incluía las tareas y los repuestos del manual— ahora incluye **los nombres que la planta da para sus equipos** («la bomba», «el filtro A», «la del medio»): `analisis/catalogo.py` (`vocabulario_asr`) y `planta/main.py`. Con tests en `tests/test_analisis.py`.
 - **Costo de la llamada a la nube medido y documentado**: una foto por llamada, **861 tokens de entrada** y **~191 de salida** (medido sobre 20 llamadas reales). NVIDIA **no publica un precio por token** para el catálogo alojado (la tarifa real es la de la cuenta), así que la orden de magnitud se toma de las tarifas publicadas por otros proveedores del mismo NIM: **USD 0,0003–0,0006 por llamada** (unos 3 centavos por cada 100 llamadas). En la corrida oficial la planta publicó una sola foto y la llamada falló con el enlace caído (`indeterminado`, 0 tokens): el consumo de la nube fue cero y la alerta de seguridad salió igual.
 
 ## Pruebas en vivo que deja el repo
@@ -455,6 +475,23 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 6. **Cerrar el hueco de `B1`/`D2`**: el corrector espera «Escalado» en cualquier nota que mencione un equipo con una falla activa, y el sistema sólo escala con lo que el operador lee. El camino corto es reconocer más síntomas cualitativos del catálogo (ruido, golpepeo, no arranca) como anomalía; el camino largo es pedirle al curso la lista de fallas activas por equipo, que la planta no publica.
 
 ## Historial
+
+- **2026-11-09 (noveno defecto y varianza del audio):** la corrida `_fase7e`
+  (los 7 escenarios) dio **87,5/100 — APRUEBA**, un punto menos que
+  `_fase7d` (88,9). La diferencia **no es del sistema**: está medida. La
+  planta genera el audio de cada nota y lo hace de dos maneras —las notas
+  cuyo texto está en su **banco de voces** dan un WAV idéntico en cada
+  corrida (42 de 42) y las que sintetiza con **Piper** dan un WAV distinto
+  siempre (0 de 17)—; en la corrida nueva el ASR garbló «la bomba» como
+  «el aboma» y el sistema no reconoció el equipo. El texto verdadero de las
+  notas es el mismo en las dos corridas: lo que cambia es la entrada. De ahí
+  salieron dos arreglos: (a) el **noveno defecto** —el ASR escribe «1.600 de
+  descarga» por «mil seiscientos» y el sistema lo leía como 1,6 psi, una
+  lectura plausible que dispara la alarma de presión baja— y (b) el
+  **vocabulario del ASR**, que ahora incluye los nombres que la planta da
+  para sus equipos («la bomba», «el filtro A», «la del medio») y no sólo las
+  tareas y los repuestos del manual. La suite quedó en **428 pruebas
+  aprobadas** (403 aprobadas y 25 omitidas sin base).
 
 - **2026-11-08 (noche, corrida final y octavo defecto):** se corrieron los **7
   escenarios** de la rúbrica con el sistema completo (Fase 7 incluida) y se

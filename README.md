@@ -287,10 +287,10 @@ cada equipo de la nota por separado. El escalado lleva el contexto del parte
 las últimas horas. Un equipo **parado en reserva o por mantenimiento** no es una
 anomalía.
 
-### Ocho cosas que la corrida de corrección enseñó
+### Diez cosas que la corrida de corrección enseñó
 
 Las reglas de detección y de la tablet se afinaron con la corrida oficial de
-los 7 escenarios (los ocho casos tienen test):
+los 7 escenarios (los diez casos tienen test):
 
 - **«La 1 está disparada, no arranca» es una falla**, no una bomba parada: la
   coma no parte la frase y «parada» se busca como palabra completa, no como
@@ -314,6 +314,18 @@ los 7 escenarios (los ocho casos tienen test):
   gotas/min, muy por encima de los 10 del goteo normal (TX350-D §8.3), y se
   escala. Antes esa fila quedaba sin observación y el evento salía como «no
   hay novedad», con la orden del cambio de empaquetadura ya creada.
+- **«1.600 de descarga» son mil seiscientos, no 1,6**: el ASR escribe los
+  millares con punto o con coma, y el lector de números los distingue del
+  decimal (tres dígitos detrás del separador). También «115 kg de descarga» y
+  «59 °C» se reconocen como las unidades que dijo el técnico. Antes, «1.600»
+  se guardaba como 1,6 psi —una lectura plausible que disparaba la alarma de
+  presión baja— y «kg» y «°C» no se reconocían como unidades.
+- **El ASR conoce los nombres de campo de los equipos**: el decodificador de
+  voz garbla lo que no conoce («el aboma» por «la bomba»), así que el
+  vocabulario que se le pasa incluye los nombres que la planta da para sus
+  equipos («la bomba», «el filtro A», «la del medio»), además de los nombres
+  de tareas y repuestos que salen del manual. Con eso el equipo se reconoce y
+  la pregunta de ambigüedad se hace.
 
 ## Tools y servidor MCP (Fase 3)
 

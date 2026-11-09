@@ -1623,10 +1623,10 @@ siete escenarios (49, 96, 28, 60, 99, 58 y 110 mensajes).
 | **D2** (75 %) | En `tormenta-perfecta` la falla activa (`F02-B-102-4`) no terminó en una orden, por la misma cadena: la nota que la reportó («hace un golpepeo metálico») quedó como `SinNovedad`, y **de un evento sin escalar no sale orden**. El sistema no inventa una orden para una falla que no vio escalada. |
 | **E2** (75 %) | El criterio exige que el latido reporte **pendientes durante el corte de enlace**. En `fuga-sin-enlace` pasó: el aviso por radio quedó en la cola (`pendientes_sincronizar = 1`) y volvió a cero cuando volvió el enlace. En `tormenta-perfecta` no pasó porque **durante ese corte no hubo nada que esperar**: la planta no publicó ningún aviso por radio (el escenario no tiene nota insegura), así que la cola estaba —correctamente— vacía y el latido decía 0. |
 
-#### Los ocho defectos que encontró la corrida, y que están corregidos
+#### Los nueve defectos que encontró la corrida, y que están corregidos
 
 La corrida completa de los siete escenarios no sólo mide: también **enseña**.
-Salieron ocho defectos reales del sistema, cada uno con un test que lo fija:
+Salieron nueve defectos reales del sistema, cada uno con un test que lo fija:
 
 | # | Defecto | Qué pasaba | Arreglo |
 |---|---|---|---|
@@ -1638,10 +1638,13 @@ Salieron ocho defectos reales del sistema, cada uno con un test que lo fija:
 | 6 | **«Te faltó…» recalculaba la variable y la mandaba a otra fila** | Al agregar una lectura faltante, `_aplicar_falta` ignoraba la variable ya inferida de la unidad que dijo el operador y la volvía a calcular desde el tipo de equipo: siempre la presión de descarga. | Si la corrección ya trae la variable, esa manda (`planta/tablet.py`). |
 | 7 | **«Manómetro» se tomaba como «metro»** | «Man**óme**tro» contiene «metro»: con la búsqueda por parte de palabra, «le saqué foto al manómetro» se tomaba como una medición de **nivel** del tanque. | Los cues se buscan como palabras completas (`planta/parte_extractor.py`). |
 | 8 | **Un goteo medido por el operador se publicaba como «no hay novedad»** | En `ataque` la nota confirmó un goteo de 142 gotas/min («estaba en ciento cuarenta y dos gotas por minuto»). La fila del goteo **nació de la corrección** —la cláusula del goteo se la habían comido la foto y la temperatura del rodamiento— y quedó **sin observación**: una lectura medida sin observación no es una anomalía, así que el evento salió `SinNovedad`. Peor: el análisis ya había creado la orden del cambio de empaquetadura, de modo que la misma nota producía una orden y un evento que decía que no había nada. | La observación del goteo se deriva **del valor**, en la misma tabla que el diferencial y la temperatura del rodamiento (TX350-D §8.4: por encima de 10 gotas/min es la firma en la recorrida de la falla F01; §8.3: el goteo normal es de hasta 10 gotas/min). Y la observación que sale del texto no se recalcula en una fila sin valor: una fila sin valor no puede tener una observación derivada de un valor (`planta/parte_extractor.py`). |
+| 9 | **Los millares del ASR se leían como decimales, y las abreviaturas de unidad no se reconocían** | El ASR escribe «1.600 de descarga» por «mil seiscientos» (el millar va con punto o con coma) y el sistema lo leía como **1,6**: la presión de descarga de una bomba quedaba en 1,6 psi, el valor disparaba la alarma de presión baja y el evento salía `Escalado` donde la verdad era `SinNovedad`. En la misma línea el ASR abrevia «115 **kg** de descarga» y «59 **°C**»: «kg» no estaba en la lista de unidades habladas, así que la fila quedaba sin unidad y se comparaba con la unidad del manómetro; y el símbolo del grado se perdía al normalizar («59 °C» → «59 c»), de modo que la temperatura no tenía unidad y la frase se partía mal. | El lector de números distingue el millar del decimal (tres dígitos detrás del separador y sin el cero adelante son millares: `planta/numeros.py`); «kg» y «kgs» están en la lista de unidades habladas y en la de unidades dichas (`planta/unidades.py`, `planta/parte_extractor.py`); y el símbolo del grado se cambia por la palabra «grados» antes de normalizar (`planta/texto.py`). |
 
 Todos son **defectos del sistema, no del ASR**: ocurrían con transcripciones
-correctas (el 5 y el 6 con las correcciones del propio operador virtual, y el 8
-con una corrección que el ASR transcribió bien). El primero se disparaba con la
+correctas (el 5 y el 6 con las correcciones del propio operador virtual, el 8
+con una corrección que el ASR transcribió bien, y el 9 con transcripciones
+perfectamente legibles: «1.600 de descarga» y «115 kg de descarga» son
+lecturas correctas de lo que el técnico dijo). El primero se disparaba con la
 frase que el ASR transcribía bien.
 
 El defecto 5 es el más caro de los siete: con él, el equipo `B-102` de la
@@ -1650,6 +1653,66 @@ repetía la corrección cinco veces, el parte no se confirmaba y **el equipo
 nunca se escalaba** —ni él ni el filtro que iba en la misma nota. Con el
 arreglo, la conversación converge en la primera corrección: el borrador
 coincide con la verdad del corrector y el operador confirma.
+
+El defecto 9 es el más silencioso: no pierde la fila, la **mala**. El ASR
+transcribió «la del medio está en 1.600 de descarga» y el sistema guardó 1,6
+psi —la lectura es plausible, la fila existe, el borrador se ve bien— pero
+1,6 psi dispara la alarma de presión baja y el evento sale `Escalado` donde
+la verdad era `SinNovedad`. Pasa por lo mismo con «kg»: la fila quedaba sin
+la unidad que dijo el técnico y se comparaba con la del manómetro.
+
+#### Por qué dos corridas del mismo código dan notas distintas
+
+Las corridas no son idénticas aunque el sistema sea el mismo, y la causa **no
+está en el sistema**: está en el audio que produce la planta simulada. Se puede
+medir, porque los logs registran el tamaño de cada WAV que el sistema
+descargó.
+
+- La planta tiene un **banco de voces** (`datos/voces/indice.json`, 102 textos
+  grabados). Cuando el texto de la nota está en el banco, el audio es esa
+  grabación con el ruido de planta mezclado con la semilla de la nota: sale
+  **byte a byte igual** en cada corrida.
+- Las notas cuyo texto **no** está en el banco las sintetiza Piper en el
+  momento, y Piper **no reproduce el mismo audio** entre corridas.
+
+Comparando las dos corridas completas (`_fase7d` y `_fase7e`), nota por nota:
+
+| Origen del audio | Notas comparables | WAV idéntico entre corridas |
+|---|---:|---:|
+| Banco de voces de la planta | 42 | **42 (100 %)** |
+| Síntesis de Piper | 17 | **0 (0 %)** |
+
+El texto verdadero de la nota —la verdad de campo— es **exactamente el mismo**
+en las dos corridas: lo que cambia es el audio, y con él la transcripción. Un
+ejemplo, la nota `NOTA-00014` de `contratista` («El filtro A me dio uno con tres
+de diferencial. **En la bomba**, el rodamiento me dio noventa y seis grados con
+la pistola…»):
+
+| Corrida | Transcripción del ASR | Qué pasó |
+|---|---|---|
+| `_fase7d` | «En la **bomba** el rodamiento medio 96 grados con la pistola tiene un cubilo raro de rodamiento.» | El sistema preguntó **cuál** bomba (A4a ✓) y el operador confirmó el parte. |
+| `_fase7e` | «El fito a medio 1,3 de diferencial, el **aboma** el rodamiento a medio 96 grados con la pistola tiene un ruido acolar de rodamiento.» | «aboma» no es un equipo de la planta: el parte quedó vacío y **no hubo pregunta** (A4a ✗). |
+
+Lo mismo pasó con el síntoma del ruido en `tormenta-perfecta`: «golpeteo
+metálico» salió «golpe teometálico» en una corrida y «competeo metálico» en la
+otra. En los dos casos la frase del catálogo es la misma y el sistema no la
+reconoce.
+
+Esto explica por qué la misma versión del sistema da notas que se mueven uno o
+dos puntos entre corridas: `A2`, `A3`, `A4a`, `B1` y `D2` miden **decisiones**
+que dependen de la transcripción. El sistema es determinista (misma entrada,
+misma salida); lo que cambia es la entrada.
+
+**La salida de esa varianza: el ASR conoce el vocabulario de la planta.** El
+decodificador de voz garbla lo que no conoce, y el remedy es darle el
+vocabulario: el que ya se le pasaba para las tareas y los repuestos (los del
+manual) ahora incluye **los nombres que la planta da para sus equipos** («la
+bomba», «el filtro A», «la del medio», «el pulmón»), que son las palabras que
+el técnico dice en el parte por voz. Con «el aboma» escrito así, el equipo no
+se reconocía, el sistema no preguntaba y la nota quedaba sin parte; con los
+nombres en el prompt, la pregunta de ambigüedad se hace y el parte se
+confirma. Queda en `analisis/catalogo.py` (`vocabulario_asr`) y en
+`planta/main.py` (los nombres salen de `/api/planta`).
 
 #### La corrida con el modelo de visión integrado
 
