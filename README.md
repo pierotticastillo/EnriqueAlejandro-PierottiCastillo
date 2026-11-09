@@ -42,7 +42,7 @@ de órdenes.
       `HAB-AAAA-NNNN` y el monto tomado de la orden y de la lista de precios
       del contrato.
 
-**Corrector oficial:** **88,5/100 — APRUEBA** sobre los 7 escenarios de la
+**Corrector oficial:** **88,9/100 — APRUEBA** sobre los 7 escenarios de la
 rúbrica (93 de 93 puntos medidos, sin eliminatorias, 0 mensajes inválidos).
 El bloque G mide `orden_ejecutada` y quedó en **100 %**: todos los cierres por
 voz pasaron su orden a `Ejecutada`.
@@ -287,10 +287,10 @@ cada equipo de la nota por separado. El escalado lleva el contexto del parte
 las últimas horas. Un equipo **parado en reserva o por mantenimiento** no es una
 anomalía.
 
-### Siete cosas que la corrida de corrección enseñó
+### Ocho cosas que la corrida de corrección enseñó
 
 Las reglas de detección y de la tablet se afinaron con la corrida oficial de
-los 7 escenarios (los siete casos tienen test):
+los 7 escenarios (los ocho casos tienen test):
 
 - **«La 1 está disparada, no arranca» es una falla**, no una bomba parada: la
   coma no parte la frase y «parada» se busca como palabra completa, no como
@@ -309,6 +309,11 @@ los 7 escenarios (los siete casos tienen test):
 - **«Te faltó…» respeta la variable de la unidad que dijo el operador.**
 - **«Manómetro» no es «metro»**: una foto al manómetro no es un nivel del
   tanque.
+- **Un goteo medido es una anomalía, aunque la fila la cree la corrección**:
+  «estaba en ciento cuarenta y dos gotas por minuto» es un goteo de 142
+  gotas/min, muy por encima de los 10 del goteo normal (TX350-D §8.3), y se
+  escala. Antes esa fila quedaba sin observación y el evento salía como «no
+  hay novedad», con la orden del cambio de empaquetadura ya creada.
 
 ## Tools y servidor MCP (Fase 3)
 
@@ -652,8 +657,8 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **402 passed** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose. Sin base quedan **377 passed, 25 skipped** (los de
+Resultado actual: **406 passed** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose. Sin base quedan **381 passed, 25 skipped** (los de
 idempotencia/constraints y los del índice RAG), porque necesitan la base
 levantada.
 

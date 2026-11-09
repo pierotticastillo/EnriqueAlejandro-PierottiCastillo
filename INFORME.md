@@ -5,7 +5,7 @@
 **Planta simulada:** [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
 **Fecha del informe:** 2026-11-08
 **Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5, 6 y 7 implementadas y verificadas.
-Corrector oficial: **88,5/100 — APRUEBA** (los 7 escenarios de la rúbrica,
+Corrector oficial: **88,9/100 — APRUEBA** (los 7 escenarios de la rúbrica,
 93 de 93 puntos medidos, sin eliminatorias; el bloque G mide `orden_ejecutada`,
 que quedó en el 100 %).
 
@@ -1110,8 +1110,8 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **402 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **377 passed, 25 skipped** sin base: los omitidos son los tests de
+- **406 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **381 passed, 25 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
 - `ruff check .` sin observaciones.
 
@@ -1577,18 +1577,18 @@ rúbrica (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`,
 `contratista`, `ataque` y `libre`), con `faster-whisper-base`, el LLM local
 activo y el modelo de nube con visión habilitado:
 
-**88,5/100 — APRUEBA**, sin eliminatorias. Esta vez se midieron **los 93 puntos
+**88,9/100 — APRUEBA**, sin eliminatorias. Esta vez se midieron **los 93 puntos
 de los 93** que la rúbrica tiene activos (los siete escenarios tienen datos, así
-que no hubo que reescalar nada): 82,3 de 93 puntos, reescalados a 100.
+que no hubo que reescalar nada): 82,7 de 93 puntos, reescalados a 100.
 
 | Criterio | Peso | Valor | Puntos |
 |---|---:|---:|---:|
-| A1 Cobertura | 5 | 99 % | 4,97 |
-| A2 Borrador al primer intento | 10 | 52 % | 5,25 |
-| A3 Parte final correcto | 8 | 79 % | 6,33 |
+| A1 Cobertura | 5 | 99 % | 4,95 |
+| A2 Borrador al primer intento | 10 | 54 % | 5,36 |
+| A3 Parte final correcto | 8 | 81 % | 6,51 |
 | A4a Pregunta cuando hace falta | 4 | 100 % | 4,00 |
-| A4b No pregunta de más | 3 | 94 % | 2,83 |
-| B1 Sin novedad / Escalado | 10 | 92 % | 9,16 |
+| A4b No pregunta de más | 3 | 93 % | 2,79 |
+| B1 Sin novedad / Escalado | 10 | 93 % | 9,34 |
 | B2 Alerta de seguridad | 10 | 100 % | 10,00 |
 | D1 Reglas de aprobación | 15 | 100 % | 15,00 |
 | D2 Orden adecuada a la falla | 10 | 75 % | 7,50 |
@@ -1610,23 +1610,23 @@ activo, `G1` («cada cierre por voz pasa su orden a Ejecutada»), quedó en **10
 como `Ejecutada`.
 
 Los **mensajes del sistema fueron válidos en su totalidad**: 0 inválidos en los
-siete escenarios (49, 100, 28, 53, 94, 58 y 111 mensajes).
+siete escenarios (49, 96, 28, 60, 99, 58 y 110 mensajes).
 
 #### Lo que queda debajo del 100 % y por qué
 
 | Criterio | Qué pasó |
 |---|---|
-| **A2** (52 %) | El operador virtual confirma el primer borrador en la mitad de las notas. El ASR (`base`, el modelo de la lista cerrada) escribe «ciento dos» por «ciento doce», «huilo raro» por «ruido raro», y el operador corrige: el sistema aplica la corrección en la fila correcta y converge en el segundo borrador. Es el costo de finura del modelo, y la conversación lo resuelve sin inventar el valor que el operador dijo. |
-| **A3** (79 %) | Las notas que el operador nunca llegó a confirmar. Casi todas son notas **sin mediciones numéricas** («la bomba está parada, en reserva», «la uno está disparada, no arranca»): el operador virtual de la planta descarta toda fila sin valor y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay borrador que ese operador pueda confirmar. |
-| **A4b** (94 %) | Tres notas clearestas recibieron una pregunta de más (el ASR dejó un equipo ambiguo y el sistema lo preguntó). |
-| **B1** (92 %) | **13 de 146 decisiones**. Casi todas son síntomas que el ASR garbló: «hace un golpe teometrico» por «golpeteo metálico» y «un huilo raro de rodamiento» por «ruido raro de rodamiento». Con esas palabras el sistema no ve el síntoma, y una nota sin anomalía reconocida es `SinNovedad`. Las otras son notas que el operador **nunca confirmó** (el parte no existe, así que no hay evento que comparar) y una falsa alarma puntual. |
+| **A2** (54 %) | El operador virtual confirma el primer borrador en 47 de las 82 notas. El ASR (`base`, el modelo de la lista cerrada) escribe «ciento dos» por «ciento doce», «huilo raro» por «ruido raro», y el operador corrige: el sistema aplica la corrección en la fila correcta y converge en el segundo borrador. Es el costo de finura del modelo, y la conversación lo resuelve sin inventar el valor que el operador dijo. |
+| **A3** (81 %) | 12 de las 82 notas quedaron sin confirmar. Casi todas son notas **sin mediciones numéricas** («la bomba está parada, en reserva», «la uno está disparada, no arranca»): el operador virtual de la planta descarta toda fila sin valor y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay borrador que ese operador pueda confirmar. |
+| **A4b** (93 %) | Cuatro notas clearistas recibieron una pregunta de más (`NOTA-00013` en `tormenta-perfecta`, `NOTA-00010` en `sin-luz`, `NOTA-00008` en `ataque` y `NOTA-00008` en `libre`): el ASR dejó un equipo ambiguo y el sistema lo preguntó. |
+| **B1** (93 %) | **10 de 144 decisiones**. En `tormenta-perfecta` (25 decisiones, 8 errores) hay dos causas: cuatro notas dicen «hace un **golpeteo metálico**» y el ASR lo garbló a «golpe teometálico» (`NOTA-00005`, `NOTA-00011`, `NOTA-00014`, `NOTA-00018`), así que el sistema no ve el síntoma y la nota queda `SinNovedad`; y cuatro notas nunca se confirmaron (`NOTA-00010`, `NOTA-00013`), sin parte no hay evento que comparar. En `ataque` (9 decisiones, 1 error) la nota `NOTA-00007` confirmó un goteo de 142 gotas/min que se publicaba como `SinNovedad` (el defecto 8, ya corregido). En `contratista` (32 decisiones, 1 error) la `NOTA-00015` («la del fondo está parada, en reserva») nunca se confirmó. `fuga-sin-enlace` (4), `libre` (39), `martes-tranquilo` (18) y `sin-luz` (17) están al 100 %. |
 | **D2** (75 %) | En `tormenta-perfecta` la falla activa (`F02-B-102-4`) no terminó en una orden, por la misma cadena: la nota que la reportó («hace un golpepeo metálico») quedó como `SinNovedad`, y **de un evento sin escalar no sale orden**. El sistema no inventa una orden para una falla que no vio escalada. |
 | **E2** (75 %) | El criterio exige que el latido reporte **pendientes durante el corte de enlace**. En `fuga-sin-enlace` pasó: el aviso por radio quedó en la cola (`pendientes_sincronizar = 1`) y volvió a cero cuando volvió el enlace. En `tormenta-perfecta` no pasó porque **durante ese corte no hubo nada que esperar**: la planta no publicó ningún aviso por radio (el escenario no tiene nota insegura), así que la cola estaba —correctamente— vacía y el latido decía 0. |
 
-#### Los siete defectos que encontró la corrida, y que están corregidos
+#### Los ocho defectos que encontró la corrida, y que están corregidos
 
 La corrida completa de los siete escenarios no sólo mide: también **enseña**.
-Salieron siete defectos reales del sistema, cada uno con un test que lo fija:
+Salieron ocho defectos reales del sistema, cada uno con un test que lo fija:
 
 | # | Defecto | Qué pasaba | Arreglo |
 |---|---|---|---|
@@ -1637,10 +1637,12 @@ Salieron siete defectos reales del sistema, cada uno con un test que lo fija:
 | 5 | **Una corrección en gotas por minuto pisaba la fila de al lado** | La lista de unidades habladas sólo tenía presión, temperatura y longitud. La corrección «estaba en cien gotas por minuto» llegaba **sin unidad** y se escribía sobre la primera fila del equipo: la presión de descarga de 1640 psi pasaba a **100 psi**. El operador repetía la corrección y el parte **nunca se confirmaba**. | Las unidades habladas de la planta están en una lista (`planta/unidades.py`) y la corrección con unidad se aplica en la fila de esa unidad (`planta/tablet.py`). |
 | 6 | **«Te faltó…» recalculaba la variable y la mandaba a otra fila** | Al agregar una lectura faltante, `_aplicar_falta` ignoraba la variable ya inferida de la unidad que dijo el operador y la volvía a calcular desde el tipo de equipo: siempre la presión de descarga. | Si la corrección ya trae la variable, esa manda (`planta/tablet.py`). |
 | 7 | **«Manómetro» se tomaba como «metro»** | «Man**óme**tro» contiene «metro»: con la búsqueda por parte de palabra, «le saqué foto al manómetro» se tomaba como una medición de **nivel** del tanque. | Los cues se buscan como palabras completas (`planta/parte_extractor.py`). |
+| 8 | **Un goteo medido por el operador se publicaba como «no hay novedad»** | En `ataque` la nota confirmó un goteo de 142 gotas/min («estaba en ciento cuarenta y dos gotas por minuto»). La fila del goteo **nació de la corrección** —la cláusula del goteo se la habían comido la foto y la temperatura del rodamiento— y quedó **sin observación**: una lectura medida sin observación no es una anomalía, así que el evento salió `SinNovedad`. Peor: el análisis ya había creado la orden del cambio de empaquetadura, de modo que la misma nota producía una orden y un evento que decía que no había nada. | La observación del goteo se deriva **del valor**, en la misma tabla que el diferencial y la temperatura del rodamiento (TX350-D §8.4: por encima de 10 gotas/min es la firma en la recorrida de la falla F01; §8.3: el goteo normal es de hasta 10 gotas/min). Y la observación que sale del texto no se recalcula en una fila sin valor: una fila sin valor no puede tener una observación derivada de un valor (`planta/parte_extractor.py`). |
 
 Todos son **defectos del sistema, no del ASR**: ocurrían con transcripciones
-correctas (el 5 y el 6 con las correcciones del propio operador virtual). El
-primero se disparaba con la frase que el ASR transcribía bien.
+correctas (el 5 y el 6 con las correcciones del propio operador virtual, y el 8
+con una corrección que el ASR transcribió bien). El primero se disparaba con la
+frase que el ASR transcribía bien.
 
 El defecto 5 es el más caro de los siete: con él, el equipo `B-102` de la
 nota `NOTA-00004` (`ataque`) quedaba con la presión equivocada, el operador
@@ -1662,10 +1664,27 @@ corrida fue por lo tanto **cero**; el costo real se midió aparte, con
 
 La corrida previa, con `martes-tranquilo` y `fuga-sin-enlace`, daba
 **91,5/100 — APRUEBA**: se midieron 78 de 93 puntos y la nota se reescaló sobre
-esos pesos. La nota de los 7 escenarios es más baja (88,5) **porque ahora se
+esos pesos. La nota de los 7 escenarios es más baja (88,9) **porque ahora se
 miden más criterios**: `D2`, `F3` y `G1` antes no tenían datos y ahora sí, y
 `G1` vale 3 puntos que se ganan enteros. La corrida anterior, con `small` y sin
 las correcciones de la tablet, daba **72,2/100**.
+
+#### Las corridas de los siete escenarios, una por una
+
+Los siete escenarios se corrieron varias veces mientras se arreglaban los
+defectos que iba enseñando la corrida. La progresión:
+
+| Corrida | Nota | Qué cambió |
+|---|---:|---|
+| `_fase7` | 88,5 | La Fase 7 completa: cierre por voz, estados y habilita. |
+| `_fase7b` | 87,6 | Un arreglo de la tablet que mejoró un caso y arruinó otro: por eso la nota **bajó**. |
+| `_fase7c` | 87,8 | Los siete defectos ya corregidos. |
+| `_fase7d` | **88,9** | La corrida que se reporta arriba: 10 errores de B1 en vez de 13, y las seis correcciones de la tablet. |
+
+Que la nota baje al corregir algo no es raro: `B1` y `D2` miden **decisiones**,
+y un arreglo que cambia una clasificación puede moverlas en las dos
+direcciones. Lo que no se negocia es que el sistema no invente: cada cambio
+tiene su test.
 
 #### La corrida con el modelo de visión integrated (dos escenarios)
 
@@ -1709,7 +1728,7 @@ describir sigue sin describir: nadie da por buena una foto que no se leyó.
 > aprobada de antes, así que **no es efecto del modelo de visión**: es un bug
 > del scorer. La nota de arriba se obtuvo cargando el módulo oficial **sin
 > tocarlo** y reemplazando **en memoria** esa función por la misma con
-> `ok = bool(ok)`: 88,5 en la corrida de los 7 escenarios y 91,5 en la de los
+> `ok = bool(ok)`: 88,9 en la corrida de los 7 escenarios y 91,5 en la de los
 > dos. El repositorio del corrector quedó intacto (`git status` limpio).
 
 ### Fase 5 contra la planta simulada
