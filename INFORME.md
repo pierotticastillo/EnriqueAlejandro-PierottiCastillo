@@ -1839,7 +1839,14 @@ repuestos**.
     con una **falla activa**, y el sistema sólo escala con lo que el operador
     lee (una lectura fuera de límite o un síntoma del catálogo). Un síntoma
     cualitativo que el ASR transcriba distinto de la frase del catálogo se
-    pierde: por eso `B1` quedó en 92 % y `D2` en 75 % (§13).
+    pierde: por eso `B1` quedó en 93 % y `D2` en 75 % (§13).
+15. El catálogo de la planta tiene **una sola tarea** para la pérdida por
+    empaquetadura (`T-B-EMP`, el cambio), mientras que el manual (§8.3) pide
+    **ajustar** el prensaestopas primero y cambiar la empaquetadura sólo si el
+    goteo sigue por encima de 30 gotas/min después de dos ajustes. El sistema
+    escala el goteo por encima de 10 gotas/min —la firma en la recorrida
+    (§8.4)— y propone la tarea que hay en el catálogo; no puede proponer el
+    ajuste porque el catálogo no lo tiene.
 
 ### Próximos pasos
 
