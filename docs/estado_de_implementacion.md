@@ -16,11 +16,11 @@ La **restricción 04 (lista cerrada de modelos)** quedó atendida: el ASR pasó 
 
 La **conversación de tablet** quedó cerrada: la corrección del operador se aplica a la lectura que está corrigiendo (no a la última del equipo), al mover una lectura a otro equipo el valor se convierte, la negación saca una sola lectura y la conversación tiene tope (`PARTE_MAX_CORRECCIONES=5`): si no converge, la nota queda para revisión humana en vez de dar vueltas.
 
-El **corrector oficial** da **89,8/100 — APRUEBA** sobre los **7 escenarios** de
+El **corrector oficial** da **90,3/100 — APRUEBA** sobre los **7 escenarios** de
 la rúbrica (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`,
 `sin-luz`, `contratista`, `ataque` y `libre`), con `faster-whisper-base`, el LLM
 local activo y el modelo de nube con visión habilitado: **93 de 93 puntos
-medidos** (83,5 de 93, reescalados a 100), sin eliminatorias y con **0 mensajes
+medidos** (83,97 de 93, reescalados a 100), sin eliminatorias y con **0 mensajes
 inválidos** en los siete escenarios. El bloque G mide `orden_ejecutada` y quedó
 en **100 %**: todos los cierres por voz pasaron su orden a `Ejecutada`. La nota
 es más baja que los 91,5 de la corrida de dos escenarios porque ahora se miden
@@ -396,32 +396,36 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 - `python -m pytest`: **439 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **414 pasaron, 25 omitidas**.
 - `ruff check .`: **sin errores**.
-- **Corrector oficial, corrida completa (7 escenarios)**: **89,8/100 — APRUEBA**
-  (`_fase8`, la corrida vigente), sin eliminatorias, 93 de 93 puntos medidos
-  (83,5 de 93, reescalados a 100) y **0 mensajes inválidos**. Por criterio:
-  A1 100 %, A2 57 %, A3 82 %, A4a 100 %, A4b 100 %, B1 95 %, B2 100 %, D1 100 %,
+- **Corrector oficial, corrida completa (7 escenarios)**: **90,3/100 — APRUEBA**
+  (`_fase9`, la corrida vigente), sin eliminatorias, 93 de 93 puntos medidos
+  (83,97 de 93, reescalados a 100) y **0 mensajes inválidos**. Por criterio:
+  A1 99 %, A2 61 %, A3 83 %, A4a 100 %, A4b 98 %, B1 95 %, B2 100 %, D1 100 %,
   D2 75 %, E1 100 %, E2 75 %, E3 100 %, F1 100 %, F2 100 %, F3 100 %,
   **G1 100 %** (`G2` y `G3` están `activo: false` en la rúbrica).
-  - La corrida anterior (`_fase7e`) dio **87,5/100 — APRUEBA** y la de antes
-    (`_fase7d`) **88,9/100 — APRUEBA**. Las dos diferencias son
-    **varianza del audio de la planta**, no cambios del sistema: comparando
-    dos corridas completas nota por nota, **17 de los 82 audios son distintos**
-    (65 son el mismo archivo) y son justamente las notas cuya transcripción
-    cambia. El texto verdadero de la nota es idéntico entre corridas: lo que
-    cambia es el archivo de audio, y con él lo que oye el decodificador.
+  - La corrida anterior (`_fase8`) dio **89,8/100 — APRUEBA**: la diferencia
+    son los **tres defectos del sistema** que aquella corrida destapó y que ya
+    están corregidos (la observación que se comía la cláusula de al lado, el
+    decimal con espacio y el segundo equipo de una cláusula). Con ellos,
+    `sin-luz` y `contratista` pasaron de tener un error de `B1` cada uno a
+    estar al **100 %**. Antes de `_fase8`, `_fase7e` dio 87,5 y `_fase7d`
+    88,9: esas dos diferencias son **varianza del audio de la planta**, no
+    cambios del sistema —comparando dos corridas completas nota por nota,
+    **17 de los 82 audios son distintos** (65 son el mismo archivo) y son
+    justamente las notas cuya transcripción cambia. El texto verdadero de la
+    nota es idéntico entre corridas: lo que cambia es el archivo de audio, y
+    con él lo que oye el decodificador.
   - El **vocabulario de la planta en el prompt del ASR** es lo que cerró esa
     varianza: los nombres de los equipos y los síntomas van **al final** del
     prompt (es la última línea la que el decodificador toma). Medido sobre el
     **mismo audio**, el prompt con los nombres de los equipos sube las
     decisiones correctas de `B1` de 35/41 a **37/41** y las filas de 30/35 a
-    **33/37**, sin tocar `A4a`. Con eso, `A4a` y `A4b` volvieron al **100 %**
-    y `B1` quedó en 95 %.
+    **33/37**, sin tocar `A4a`. Con eso, `A4a` volvió al **100 %** y `B1`
+    quedó en 95 %.
   - El defecto 8 (el goteo medido) quedó **verificado por el corrector oficial**
     en `ataque`: la fila del goteo pasó de `observacion: null` a
-    «goteo por empaquetadura» y el evento de `SinNovedad` a **`Escalado`**
-    (`ataque` al 100 %, 9 de 9 decisiones).
-  - Lo que queda debajo del 100 % y por qué: el operador virtual confirma el primer borrador en 53 de las 83 notas (el ASR de `base` escribe «ciento dos» por «ciento doce» y el operador corrige); quedan sin confirmar **12** notas, casi todas **sin mediciones numéricas**, que ese operador no puede validar; `B1` falla en **10 de 146 decisiones**: cuatro por **síntomas que el ASR garbló** («golpe teometálico», «unpeteo» y «gol peteo» por «golpeteo metálico», y «Lados» por «la dos», donde el equipo ni se reconoció), dos por notas que el operador nunca confirmó (sin parte no hay evento), y cuatro por **dos defectos del sistema** que esa corrida.destapó (la fila de la bomba en reserva y el decimal con espacio del ASR), corregidos después y verificados con la corrida siguiente; `D2` falla en un caso por la misma cadena (de un evento sin escalar no sale orden); `E2` falla en `tormenta-perfecta` porque **durante ese corte no hubo nada que esperar** (la planta no publicó ningún aviso por radio), así que la cola estaba —correctamente— vacía.
-  - La progresión de las corridas de los 7 escenarios: `_fase7` 88,5 → `_fase7b` 87,6 → `_fase7c` 87,8 → `_fase7d` 88,9 → `_fase7e` 87,5 → `_fase8` **89,8**. Que la nota baje al corregir algo no es raro: `B1` y `D2` miden decisiones, y un arreglo puede moverlas en las dos direcciones. La bajada de `_fase7e` fue **varianza del audio de la planta** (ver arriba), no del sistema.
+    «goteo por empaquetadura» y el evento de `SinNovedad` a **`Escalado`**.
+  - Lo que queda debajo del 100 % y por qué: el operador virtual confirma el primer borrador en 57 de las 83 notas (el ASR de `base` escribe «ciento dos» por «ciento doce» y el operador corrige); quedan sin confirmar **11** notas, casi todas **sin mediciones numéricas**, que ese operador no puede validar; `B1` falla en **8 de 146 decisiones**: cuatro por **síntomas que el ASR garbló** («golpe teometálico», «unpeteo» y «gol peteo» por «golpeteo metálico», y «Lados» por «la dos», donde el equipo ni se reconoció), una por el decimal «0 **con** 3» que el ASR escribió por «cero coma tres» (ya corregido), y dos de una nota de `libre` que llegó al final del escenario y el operador no alcanzó a confirmar; `A4b` falla en una nota de `sin-luz` en la que el ASR garbló «el filtro B» como «el filtro lo ven» y el sistema preguntó de más; `D2` falla en un caso por la misma cadena (de un evento sin escalar no sale orden); `E2` falla en `tormenta-perfecta` porque **durante ese corte no hubo nada que esperar** (la planta no publicó ningún aviso por radio), así que la cola estaba —correctamente— vacía.
+  - La progresión de las corridas de los 7 escenarios: `_fase7` 88,5 → `_fase7b` 87,6 → `_fase7c` 87,8 → `_fase7d` 88,9 → `_fase7e` 87,5 → `_fase8` 89,8 → `_fase9` **90,3**. Que la nota baje al corregir algo no es raro: `B1` y `D2` miden decisiones, y un arreglo puede moverlas en las dos direcciones. La bajada de `_fase7e` fue **varianza del audio de la planta** (ver arriba), no del sistema.
   - Nota sobre la herramienta: el `puntuar.py` del corrector, tal como está hoy,
     **no puede calcular el puntaje** — `TypeError: int + str` en `bien += ok`
     (`ok` puede ser el texto del motivo). El crash se reproduce igual con la
@@ -476,6 +480,28 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Historial
 
+- **2026-11-09 (tarde, corrida `_fase9`: 90,3/100):** la corrida `_fase8`
+  había dejado cuatro decisiones de `B1` que **no eran culpa del ASR** sino
+  del sistema, y se corrigieron: (a) la observación «parada, en reserva» se
+  comía la cláusula siguiente y la medición de «la dos» se publicaba en el
+  equipo de al lado; (b) el decimal con espacio del ASR («0, 4») se leía como
+  0, con lo que el diferencial disparaba la alarma de presión baja; (c) cuando
+  una cláusula nombra dos equipos, el segundo quedaba escondido detrás del
+  primero; y (d) el ASR escribe a veces el decimal con la parte entera en
+  dígitos y la fracción en palabras («0 con 3» por «cero coma tres»), que
+  también se leía como 0. La corrida oficial de los **7 escenarios** dio
+  **90,3/100 — APRUEBA** (83,97 de 93 puntos medidos, 0 eliminatorias, 0
+  mensajes inválidos) con `A4a` en 100 %, `A2` en 61 %, `A3` en 83 %, `B1` en
+  **95 %** (8 errores de 146 decisiones) y `G1` en 100 %. Es la mejor nota de
+  todas las corridas: con los arreglos, `sin-luz` y `contratista` pasaron al
+  **100 %** en `B1` (antes tenían un error cada uno). Los ocho errores que
+  quedan son del decodificador: cuatro síntomas «golpeteo metálico» garblados,
+  un nombre de equipo garblado («Lados» por «la dos»), un decimal que el ASR
+  escribió con otra forma y una nota que llegó al final del escenario y el
+  operador no alcanzó a confirmar. La progresión: `_fase7` 88,5 → `_fase7b`
+  87,6 → `_fase7c` 87,8 → `_fase7d` 88,9 → `_fase7e` 87,5 → `_fase8` 89,8 →
+  `_fase9` **90,3**.
+
 - **2026-11-09 (tarde, corrida `_fase8`: 89,8/100):** se corrigieron el
   **noveno defecto** (el ASR escribe «1.600 de descarga» por «mil seiscientos»
   y el sistema lo leía como 1,6 psi) y se le dio al decodificador el
@@ -484,9 +510,9 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
   La corrida oficial de los **7 escenarios** dio **89,8/100 — APRUEBA**
   (83,5 de 93 puntos medidos, 0 eliminatorias, 0 mensajes inválidos) con
   `A4a` y `A4b` de vuelta al **100 %**, `B1` en **95 %** (10 errores de 146
-  decisiones) y `G1` en 100 %. Es la mejor nota de todas las corridas. La
-  progresión: `_fase7` 88,5 → `_fase7b` 87,6 → `_fase7c` 87,8 → `_fase7d`
-  88,9 → `_fase7e` 87,5 → `_fase8` **89,8**.
+  decisiones) y `G1` en 100 %. La progresión: `_fase7` 88,5 → `_fase7b` 87,6 →
+  `_fase7c` 87,8 → `_fase7d` 88,9 → `_fase7e` 87,5 → `_fase8` **89,8** (la
+  corrida siguiente, `_fase9`, llegó a 90,3).
 
 - **2026-11-09 (mañana, noveno defecto y varianza del audio):** la corrida `_fase7e`
   (los 7 escenarios) dio **87,5/100 — APRUEBA**, un punto menos que

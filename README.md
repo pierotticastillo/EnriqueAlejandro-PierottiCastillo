@@ -42,7 +42,7 @@ de órdenes.
       `HAB-AAAA-NNNN` y el monto tomado de la orden y de la lista de precios
       del contrato.
 
-**Corrector oficial:** **89,8/100 — APRUEBA** sobre los 7 escenarios de la
+**Corrector oficial:** **90,3/100 — APRUEBA** sobre los 7 escenarios de la
 rúbrica (93 de 93 puntos medidos, sin eliminatorias, 0 mensajes inválidos).
 El bloque G mide `orden_ejecutada` y quedó en **100 %**: todos los cierres por
 voz pasaron su orden a `Ejecutada`.
@@ -292,10 +292,10 @@ cada equipo de la nota por separado. El escalado lleva el contexto del parte
 las últimas horas. Un equipo **parado en reserva o por mantenimiento** no es una
 anomalía.
 
-### Trece cosas que la corrida de corrección enseñó
+### Catorce cosas que la corrida de corrección enseñó
 
 Las reglas de detección y de la tablet se afinaron con la corrida oficial de
-los 7 escenarios (los trece casos tienen test):
+los 7 escenarios (los catorce casos tienen test):
 
 - **«La 1 está disparada, no arranca» es una falla**, no una bomba parada: la
   coma no parte la frase y «parada» se busca como palabra completa, no como
@@ -340,6 +340,8 @@ los 7 escenarios (los trece casos tienen test):
 - **«0, 4» es cero coma cuatro**: el ASR abre un espacio después de la coma
   del decimal y el 0,4 se leía como 0, con lo que el diferencial disparaba la
   alarma de presión baja y el filtro se escalaba sin motivo.
+- **«0 con 3» también es cero coma tres**: el ASR escribe a veces la parte
+  entera en dígitos y la fracción en palabras, y el 0,3 se leía como 0.
 - **Si una cláusula nombra dos equipos, son dos ideas**: el segundo equipo no
   queda escondido detrás del primero, así que la fila de la bomba en reserva
   también se publica.
