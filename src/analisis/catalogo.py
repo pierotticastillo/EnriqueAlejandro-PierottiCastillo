@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from analisis.fallas import CatalogoFallas
 from analisis.modelos import FallaCatalogo
+from planta.parte_extractor import SINTOMAS_HABLADOS
 from rag.corpus import DocumentoRag
 from tools.modelos import (
     ConsultaCatalogoTareas,
@@ -81,16 +82,17 @@ class CatalogoManuales:
         referencia, el ASR local acierta.
 
         Se arma con lo que dice el manual (los nombres de las tareas del plan de
-        mantenimiento y los de los repuestos de la lista de materiales) y con
+        mantenimiento y los de los repuestos de la lista de materiales), con
         los nombres que la planta da para sus equipos ("la del medio", "el
-        filtro A", "el pulmón"): son las palabras que el técnico dice en el
-        parte por voz, y sin ellas el ASR las garbla ("el aboma" por "la
-        bomba", "competeo metálico" por "golpeteo metálico") y el sistema no
-        reconoce ni el equipo ni el síntoma.
+        filtro A", "el pulmón") y con los síntomas que el sistema entiende
+        ("golpeteo metálico", "ruido de rodamiento"): son las palabras que el
+        técnico dice en el parte por voz, y sin ellas el ASR las garbla ("el
+        aboma" por "la bomba", "competeo metálico" por "golpeteo metálico") y
+        el sistema no reconoce ni el equipo ni el síntoma.
 
-        Los nombres de los equipos van **al final** del prompt: se midió que
-        es donde el decodificador los toma, y es lo que decide el equipo y la
-        fila del parte.
+        Los equipos y los síntomas van **al final** del prompt, en la misma
+        línea: se midió que es la última línea la que el decodificador toma, y
+        son esas palabras las que deciden el equipo y la fila del parte.
         """
         tareas: list[str] = []
         for tarea in self.tareas:
@@ -102,15 +104,19 @@ class CatalogoManuales:
             nombre = _nombre_corto(repuesto.nombre)
             if nombre and nombre not in repuestos:
                 repuestos.append(nombre)
+        ultima = (
+            f"Equipos de la planta: {', '.join(self.nombres_equipos)}; "
+            f"síntomas: {', '.join(SINTOMAS_HABLADOS)}."
+            if self.nombres_equipos
+            else f"Síntomas: {', '.join(SINTOMAS_HABLADOS)}."
+        )
         partes = [
             "Cierre de orden de trabajo de la planta de inyección de agua PIA-3.",
             f"Tareas: {', '.join(tareas)}." if tareas else "",
             f"Repuestos: {', '.join(repuestos)}." if repuestos else "",
             "El técnico dice qué hizo, qué repuestos usó, cuántas horas tardó "
             "y cómo quedó la prueba final.",
-            f"Equipos de la planta: {', '.join(self.nombres_equipos)}."
-            if self.nombres_equipos
-            else "",
+            ultima,
         ]
         return " ".join(parte for parte in partes if parte)
 

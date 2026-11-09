@@ -187,8 +187,33 @@ def test_el_vocabulario_del_asr_conoce_los_nombres_de_los_equipos() -> None:
 def test_el_vocabulario_del_asr_no_trae_una_equipo_vacio(catalogo: CatalogoManuales) -> None:
     """Sin nombres de equipos, la sección no aparece: no se arma en balde."""
     vocabulario = catalogo.vocabulario_asr()
-    assert "Equipos:" not in vocabulario
+    assert "Equipos" not in vocabulario
     assert "  " not in vocabulario
+
+
+def test_el_vocabulario_del_asr_conoce_los_sintomas() -> None:
+    """El decodificador garbla los síntomas: "golpe teometálico".
+
+    Una observación garblada no es una anomalía: el equipo no se escala y el
+    evento sale como "no hay novedad". Los síntomas que el sistema entiende
+    van, entonces, en el prompt del ASR.
+    """
+    catalogo = CatalogoManuales.desde_documentos(documentos())
+    vocabulario = catalogo.vocabulario_asr()
+    assert "golpeteo metálico" in vocabulario
+    assert "ruido de rodamiento" in vocabulario
+    assert "disparada no arranca" in vocabulario
+
+
+def test_los_equipos_y_los_sintomas_van_en_la_ultima_linea() -> None:
+    """Es la última línea la que el decodificador toma: ahí van los dos."""
+    catalogo = CatalogoManuales.desde_documentos(
+        documentos(),
+        nombres_equipos=["la bomba", "el filtro A"],
+    )
+    ultima = catalogo.vocabulario_asr().split(". ")[-1]
+    assert "la bomba" in ultima
+    assert "golpeteo metálico" in ultima
 
 
 def test_las_tareas_salen_del_plan_de_mantenimiento(catalogo: CatalogoManuales) -> None:

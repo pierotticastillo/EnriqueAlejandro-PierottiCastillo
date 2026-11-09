@@ -22,6 +22,29 @@ from planta.unidades import convertir, normalizar_unidad, unidad_canonica
 
 CampoPregunta = Literal["equipo", "valor"]
 
+# Los síntomas que el sistema entiende, escritos como los dice el técnico.
+#
+# Van al prompt del ASR: el decodificador garbla lo que no conoce ("golpe
+# teometálico" por "golpeteo metálico", "competeo metálico" por lo mismo) y
+# una observación garblada no es una anomalía: el equipo no se escala y el
+# evento sale como "no hay novedad" aunque la verdad de campo diga otra
+# cosa. Cada síntoma de esta lista es el que produce ``_observacion``.
+SINTOMAS_HABLADOS = (
+    "golpeteo metálico",
+    "piedras adentro",
+    "ruido raro de rodamiento",
+    "ruido de rodamiento",
+    "correas flojas",
+    "correas rotas",
+    "correas desalineadas",
+    "correas en mal estado",
+    "nivel de aceite bajo",
+    "rebalse a pileta",
+    "disparada no arranca",
+    "pérdida por empaquetadura",
+    "goteo por empaquetadura",
+)
+
 
 @dataclass
 class Hallazgo:
