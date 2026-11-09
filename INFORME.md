@@ -441,16 +441,20 @@ rechaza) sino un modelo con un campo con nombre: `ListaEquipos.equipos`,
 | Parámetro | Valor |
 |-----------|-------|
 | Motor | `faster-whisper` |
-| Modelo | `small` (placeholder) |
+| Modelo | `base` (el de la lista cerrada) |
 | Dispositivo | CPU |
 | Cómputo | `int8` |
 | Idioma | `es` |
 | Hilos | 2 |
 | Modo | Solo local (`local_files_only=True`) |
 
-La **lista cerrada de modelos** del curso todavía no fue confirmada. Por eso el
-motor está detrás de un protocolo y `small` se documenta como elección
-provisoria, no como decisión final.
+La **lista cerrada de modelos** del curso ya está confirmada y aplicada
+(§9.8): el ASR es `faster-whisper-base`, el embedder
+`paraphrase-multilingual-MiniLM-L12-v2` (384 dims), el LLM local
+`Qwen2.5-3B-Instruct` (Q4_K_M) y el modelo de nube con visión
+`Nemotron 3 Nano Omni 30B A3B`. `src/modelos_lista.py` es la fuente única de
+verdad y el verificador (`src/verificacion_modelos.py`) compara la
+configuración y el runtime contra esa lista al arrancar.
 
 ### Build sin nube en runtime
 
@@ -497,9 +501,15 @@ completo con el operador virtual (`planta_sim.dialogo`):
 
 ### Limitaciones del ASR
 
-- `small` puede confundir números o unidades en audio con ruido.
+- `base` puede confundir números o unidades en audio con ruido: es el modelo
+  de la lista cerrada y es menos fino que `small`, que era el placeholder.
+  La transcripción es la entrada que decide (A2, A3, A4a, B1 y D2 miden
+  decisiones que dependen de ella).
 - La calidad depende del micrófono y del acento del operador.
-- La lista cerrada de modelos puede obligar a cambiar de motor o de modelo.
+- El decodificador garbla lo que no conoce: por eso se le pasa el
+  vocabulario de la planta (tareas, repuestos y los nombres de campo de los
+  equipos); si una palabra no está en ese vocabulario, puede escribirla de
+  otra forma.
 - El adaptador actual no usa timestamps; el contrato no los exige para Fase 1.
 - En audio con varias voces o solapamientos puede fallar la separación.
 
@@ -632,9 +642,9 @@ mensajes ya publicados.
 
 El motor está detrás del protocolo `Embedder`: `fastembed` en Docker y
 `hashing` (determinista, sin descargas) en tests y como respaldo si el modelo
-no está disponible. Como con el ASR, la **lista cerrada de modelos** del
-curso sigue sin confirmarse: el modelo de embeddings es una elección
-documentada, no una decisión final.
+no está disponible. El modelo de embeddings es el de la **lista cerrada**
+(`paraphrase-multilingual-MiniLM-L12-v2`, 384 dims) y el verificador de
+modelos lo comprueba al arrancar, igual que al ASR (§9.8).
 
 ---
 
@@ -1902,7 +1912,13 @@ repuestos**.
     con una **falla activa**, y el sistema sólo escala con lo que el operador
     lee (una lectura fuera de límite o un síntoma del catálogo). Un síntoma
     cualitativo que el ASR transcriba distinto de la frase del catálogo se
-    pierde: por eso `B1` quedó en 93 % y `D2` en 75 % (§13).
+    pierde: por eso `B1` quedó en 91 % y `D2` en 75 % (§13). Parte de ese hueco
+    es del **decodificador de voz**, no del sistema: la planta genera el audio
+    de cada nota y las que no están en su banco de voces se sintetizan con
+    Piper, que **no repite el mismo audio** entre corridas. El remedy es
+    darle vocabulario al ASR (los nombres de los equipos, las tareas y los
+    repuestos); el resto necesita que el curso publique la lista de fallas
+    activas por equipo, que la planta no publica.
 15. El catálogo de la planta tiene **una sola tarea** para la pérdida por
     empaquetadura (`T-B-EMP`, el cambio), mientras que el manual (§8.3) pide
     **ajustar** el prensaestopas primero y cambiar la empaquetadura sólo si el
@@ -1910,6 +1926,15 @@ repuestos**.
     escala el goteo por encima de 10 gotas/min —la firma en la recorrida
     (§8.4)— y propone la tarea que hay en el catálogo; no puede proponer el
     ajuste porque el catálogo no lo tiene.
+16. **La nota del corrector se mueve con el audio de la planta.** El sistema es
+    determinista (misma entrada, misma salida), pero la entrada cambia entre
+    corridas: las notas del banco de voces de la planta dan un WAV idéntico
+    (42 de 42 comparables) y las sintetizadas con Piper dan uno distinto
+    siempre (0 de 17). Los criterios que miden **decisiones** sobre la
+    transcripción (`A2`, `A3`, `A4a`, `B1`, `D2`) son los que se mueven; los
+    que miden el comportamiento del sistema (`D1`, `B2`, `E1`, `E3`, `F1`,
+    `F2`, `F3`, `G1`) están en 100 % en todas las corridas. La comparación
+    entre corridas tiene que leer el detalle por criterio, no sólo el total.
 
 ### Próximos pasos
 
