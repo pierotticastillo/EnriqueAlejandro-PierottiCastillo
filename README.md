@@ -215,12 +215,17 @@ envía un borrador seguro y no se genera error.
   'pendiente'`).
 
 ```bash
-# aplicar migraciones manualmente
+# aplicar migraciones manualmente (el puerto es el de POSTGRES_PORT del .env)
 DATABASE_URL=postgresql+psycopg://pia3:pia3@localhost:55432/pia3 alembic upgrade head
 
 # tests de idempotencia y constraints
 TEST_DATABASE_URL=postgresql+psycopg://pia3:pia3@localhost:55432/pia3 pytest
 ```
+
+> En Windows el puerto 55432 puede caer en un rango reservado por Hyper-V/WSL
+> (Dynamic Client Port Range). El compose lo deja configurable:
+> `POSTGRES_PORT=55600` en el `.env` y el `DATABASE_URL` apuntando al mismo
+> puerto.
 
 Los tests cubren doble `evento_sistema.id`, doble `orden.id`, doble
 `idempotency_key.clave`, `alerta_seguridad.tipo` fuera de S1–S4,

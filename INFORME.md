@@ -1525,7 +1525,7 @@ Variables principales (ver `.env.example`):
 |----------|-------------------|-----|
 | `PIA3_HTTP_PROXY` / `PIA3_HTTPS_PROXY` | `http://enlace:3128` | salida a internet |
 | `PIA3_NO_PROXY` | `broker,sim,enlace,localhost,127.0.0.1,postgres` | exclusiones del proxy |
-| `POSTGRES_*` | `pia3` | base local |
+| `POSTGRES_*` | `pia3` | base local (`POSTGRES_PORT` publica el puerto en el host: por defecto 55432, y es configurable porque Windows reserva rangos de puertos dinámicos) |
 | `DATABASE_URL` | `postgresql+psycopg://…@postgres:5432/pia3` | conexión del sistema |
 | `MQTT_HOST` / `MQTT_PORT` | `broker` / `1883` | planta |
 | `PLANTA_API_URL` | `http://sim:8100` | API de la planta |
