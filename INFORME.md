@@ -1120,8 +1120,8 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **406 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **381 passed, 25 skipped** sin base: los omitidos son los tests de
+- **430 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **405 passed, 25 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
 - `ruff check .` sin observaciones.
 
@@ -1133,7 +1133,8 @@ Cobertura funcional de los tests:
 - extracción de notas reales, fotos, seguridad y “sin novedad”;
 - **artefactos del ASR real** (`09` por “cero nueve”, `PS y` por “psi”,
   `Reservoir` por “reserva”, la palabra “diferencial” comida, `1-3` por
-  “uno coma tres”, `preses` por “psi”);
+  “uno coma tres”, `preses` por “psi”, `1.600` por “mil seiscientos”, `kg` por
+  “kilogramos” y `59 °C` por “59 grados”);
 - borradores, preguntas, confirmación y correcciones de tablet;
 - **convergencia de la tablet**: la corrección de valor va a su variable y no a
   la última del equipo, al mover una lectura se convierte el valor, la negación
