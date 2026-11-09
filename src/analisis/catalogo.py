@@ -68,6 +68,7 @@ class CatalogoManuales:
     repuestos: dict[str, RepuestoStock]
     materiales: dict[str, tuple[str, ...]]
     equipos_por_documento: dict[str, tuple[str, ...]]
+    nombres_equipos: tuple[str, ...] = ()
 
     # ------------------------------------------------------------------ tareas
 
@@ -75,12 +76,17 @@ class CatalogoManuales:
         """El vocabulario de la planta, para el ASR local.
 
         El decodificador de voz escribe lo que oye; si no conoce los nombres
-        de las tareas y de los repuestos de la planta, escribe "Chofitrante"
-        en vez de "filtrante" y el cierre ya no se puede comparar contra la
-        orden. Con estos nombres de referencia, el ASR local acierta.
+        de la planta, escribe "Chofitrante" en vez de "filtrante" y el cierre
+        ya no se puede comparar contra la orden. Con estos nombres de
+        referencia, el ASR local acierta.
 
-        Se arma con lo que dice el manual: los nombres de las tareas del plan
-        de mantenimiento y los de los repuestos de la lista de materiales.
+        Se arma con lo que dice el manual (los nombres de las tareas del plan de
+        mantenimiento y los de los repuestos de la lista de materiales) y con
+        los nombres que la planta da para sus equipos ("la del medio", "el
+        filtro A", "el pulmón"): son las palabras que el técnico dice en el
+        parte por voz, y sin ellas el ASR las garbla ("el aboma" por "la
+        bomba", "competeo metálico" por "golpeteo metálico") y el sistema no
+        reconoce ni el equipo ni el síntoma.
         """
         tareas: list[str] = []
         for tarea in self.tareas:
@@ -93,11 +99,13 @@ class CatalogoManuales:
             if nombre and nombre not in repuestos:
                 repuestos.append(nombre)
         partes = [
-            "Cierre de orden de trabajo de la planta de inyección de agua PIA-3.",
+            "Parte de campo de la planta de inyección de agua PIA-3.",
+            f"Equipos: {', '.join(self.nombres_equipos)}." if self.nombres_equipos else "",
             f"Tareas: {', '.join(tareas)}." if tareas else "",
             f"Repuestos: {', '.join(repuestos)}." if repuestos else "",
-            "El técnico dice qué hizo, qué repuestos usó, cuántas horas tardó "
-            "y cómo quedó la prueba final.",
+            "El técnico dice qué midió, qué síntoma notó y, al cerrar la orden, "
+            "qué hizo, qué repuestos usó, cuántas horas tardó y cómo quedó la "
+            "prueba final.",
         ]
         return " ".join(parte for parte in partes if parte)
 
@@ -199,6 +207,7 @@ class CatalogoManuales:
         documentos: list[DocumentoRag],
         *,
         equipos: list[str] | None = None,
+        nombres_equipos: list[str] | None = None,
     ) -> CatalogoManuales:
         from tools.inventario import inventario, lista_materiales
         from tools.tareas import catalogo_tareas
@@ -238,6 +247,7 @@ class CatalogoManuales:
             repuestos=repuestos,
             materiales=materiales,
             equipos_por_documento=equipos_por_documento,
+            nombres_equipos=tuple(nombres_equipos or ()),
         )
 
 

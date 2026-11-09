@@ -68,6 +68,10 @@ def cargar_catalogo(cliente: ClienteApi, planta: dict[str, Any]) -> CatalogoManu
 
     Sale del mismo corpus que usa el RAG: por lo tanto cada falla, tarea y
     repuesto viene con su cita, sin ninguna tabla escrita a mano en el código.
+
+    También se llevan los nombres que la planta da para sus equipos ("la del
+    medio", "el filtro A"): son el vocabulario del parte por voz y el ASR los
+    necesita para no garblarlos.
     """
     documentos = CorpusPlanta(cliente).cargar(incluir_historial=False)
     equipos = [
@@ -75,7 +79,19 @@ def cargar_catalogo(cliente: ClienteApi, planta: dict[str, Any]) -> CatalogoManu
         for equipo in planta.get("equipos") or []
         if isinstance(equipo, dict) and equipo.get("tag")
     ]
-    catalogo = CatalogoManuales.desde_documentos(documentos, equipos=equipos)
+    nombres: list[str] = []
+    for equipo in planta.get("equipos") or []:
+        if not isinstance(equipo, dict):
+            continue
+        for nombre in equipo.get("nombres") or []:
+            nombre = str(nombre).strip()
+            if nombre and nombre not in nombres:
+                nombres.append(nombre)
+    catalogo = CatalogoManuales.desde_documentos(
+        documentos,
+        equipos=equipos,
+        nombres_equipos=nombres,
+    )
     logger.info(
         "Catálogo de manuales cargado: %s fallas, %s tareas",
         len(catalogo.fallas),

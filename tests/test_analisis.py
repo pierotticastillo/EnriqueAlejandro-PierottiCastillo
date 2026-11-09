@@ -164,6 +164,33 @@ def test_la_revision_vencida_no_entra_al_catalogo(
     assert falla.documento == "TX350-D"
 
 
+def test_el_vocabulario_del_asr_conoce_los_nombres_de_los_equipos() -> None:
+    """El ASR garbla los nombres de campo: "el aboma" por "la bomba".
+
+    El vocabulario que se le pasa al decodificador de voz tiene que traer los
+    nombres que la planta da para sus equipos ("la bomba", "el filtro A",
+    "la del medio"), no sólo los que están en el manual: sin ellos el
+    sistema no reconoce ni el equipo ni el síntoma de la nota.
+    """
+    catalogo = CatalogoManuales.desde_documentos(
+        documentos(),
+        nombres_equipos=["la bomba", "el filtro A"],
+    )
+    vocabulario = catalogo.vocabulario_asr()
+    assert "la bomba" in vocabulario
+    assert "el filtro A" in vocabulario
+    # Y sigue llevando lo que el manual dice (tareas y repuestos).
+    assert "Tareas:" in vocabulario
+    assert "Repuestos:" in vocabulario
+
+
+def test_el_vocabulario_del_asr_no_trae_una_equipo_vacio(catalogo: CatalogoManuales) -> None:
+    """Sin nombres de equipos, la sección no aparece: no se arma en balde."""
+    vocabulario = catalogo.vocabulario_asr()
+    assert "Equipos:" not in vocabulario
+    assert "  " not in vocabulario
+
+
 def test_las_tareas_salen_del_plan_de_mantenimiento(catalogo: CatalogoManuales) -> None:
     tarea = catalogo.tarea_para_equipo("T-B-EMP", "B-102")
     assert tarea is not None
