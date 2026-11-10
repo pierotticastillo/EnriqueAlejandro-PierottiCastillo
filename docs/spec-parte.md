@@ -50,9 +50,18 @@ consulta, y **ninguna de las dos puede cambiar el resultado de las etapas 8 y
 El agente de LangChain **consulta y propone**: usa las mismas ocho tools del
 MCP, con los mismos esquemas Pydantic estrictos (`extra="forbid"`), y su
 salida se contrasta con el catálogo antes de usarse. Una cita que no está en
-la lista de permitidas **descarta la propuesta entera**; una falla que no
-está en el catálogo, también. Las causas que el manual no respalda se
-omiten, pero no invalidan el resto.
+la lista de permitidas **ni** entre las que le mostrará una herramienta
+**descarta la propuesta entera**; una falla que no está en el catálogo,
+también. Las causas que el manual no respalda se omiten, pero no invalidan el
+resto.
+
+La propuesta tiene dos caminos de salida, y el agente usa el que el modelo
+pueda: la **herramienta de salida** (`PropuestaAgente`) o el **cierre
+estructurado** (la conversación se le vuelve a pasar al modelo con el
+esquema). El cierre es necesario con los modelos pequeños: consultan bien,
+pero no llaman a la herramienta de salida y escriben la propuesta en prosa.
+Es el mismo modelo y la misma conversación, y queda registrado como un paso
+más del agente.
 
 ## 3. Condiciones de corte
 
@@ -80,8 +89,8 @@ sigue con el camino determinista.
 | Presupuesto | Tope | Configuración | Qué acota |
 |---|---:|---|---|
 | Pasos del agente | 6 vueltas del modelo | `AGENTE_MAX_PASOS` | las vueltas y las tool calls por consulta |
-| Tokens del agente | 4 000 tokens | `AGENTE_MAX_TOKENS` | el gasto de la consulta |
-| Timeout de la consulta | 120 s | `AGENTE_TIMEOUT_S` | el reloj del agente |
+| Tokens del agente | 12 000 tokens | `AGENTE_MAX_TOKENS` | el gasto de la consulta (con el cierre de la propuesta) |
+| Timeout de la consulta | 420 s | `AGENTE_TIMEOUT_S` | el reloj del agente |
 | **Timeout global por nota** | 180 s | `NOTA_TIMEOUT_S` | desde que la nota entra hasta que el parte sale |
 | Timeout del modelo | 90 s | `OLLAMA_TIMEOUT_S` | cada llamada al modelo local |
 | Timeout de la conexión a la base | 5 s | fijo | que una base caída no bloquee el sistema |
@@ -100,10 +109,13 @@ costo y el tiempo**.
 |---|---|
 | `modelo` | modelo, prompt, salida, tokens de entrada y de salida, costo, segundos, paso |
 | `tool` | herramienta, argumentos, salida, segundos, paso |
+| `consulta` | el resumen de la consulta: modelo, tokens, costo y segundos |
 | `corte` | por qué se cortó, y el resumen del presupuesto |
 | `decision` | la decisión del planificador, con su usuario y su motivo |
 
-Tabla: `registro_trayectoria` (migración `0007`).
+Tabla: `registro_trayectoria` (migración `0007`). El costo sale de los tokens
+medidos: la tarifa del modelo (`PRECIO_USD_POR_MILLON`, 0 con el modelo local
+de la planta) se aplica a los tokens de cada llamada.
 
 ## 6. La decisión del planificador
 
@@ -139,3 +151,4 @@ Cada línea tiene un test que la fija.
 | A8 | Sólo se deciden órdenes pendientes, y la decisión queda en `aprobacion` | `tests/test_db_central.py` |
 | A9 | La Central no es una tool | `tests/test_central.py` |
 | A10 | Sin agente, sin modelo o sin base, el sistema sigue igual | `tests/test_agente.py`, `tests/test_db_central.py` |
+| A11 | Si el modelo escribe prosa, el cierre estructurado arma la propuesta | `tests/test_agente.py` |

@@ -56,6 +56,21 @@ Pydantic estrictos) y propone una falla con sus causas y sus citas; lo que
 propone se contrasta con el catálogo antes de usarse. Corre en el hilo de
 redacción, así que no agrega latencia al camino crítico.
 
+La propuesta tiene **dos caminos de salida**: la herramienta de salida
+(`PropuestaAgente`) y el **cierre estructurado** (la conversación se le
+vuelve a pasar al modelo con el esquema). El cierre hizo falta porque con el
+modelo local de 3B el agente consultaba bien pero **no llamaba a la
+herramienta de salida**: escribía la propuesta en prosa y, en la corrida
+completa del corrector, ninguna propuesta llegaba válida. Con el cierre
+—el mismo modelo, la misma conversación y los mismos materiales, con el
+esquema de salida estructurada nativa de Ollama— la propuesta llega entera
+(falla, causas, citas, tareas y justificación) y queda registrada en la
+trayectoria como un paso más del agente. El esquema del cierre exige **todos**
+los campos, porque el modelo local omite los que están marcados como
+opcionales, y el agente tiene contexto y salida propios
+(`AGENTE_NUM_CTX=4096`, `AGENTE_MAX_TOKENS_SALIDA=700`): el del redactor no
+alcanzaba para una consulta con herramientas.
+
 El **registro de la trayectoria** quedó implementado (`registro_trayectoria`,
 migración `0007`): una fila por paso con el modelo, las tools y sus
 argumentos, los tokens, el costo y el tiempo, más el motivo de cada corte y

@@ -151,6 +151,7 @@ class AgenteAnalisis:
         justificación determinista sigue estando.
         """
         handlers = list(self._callbacks) + list(callbacks or [])
+        mensajes: list[Any] = []
         try:
             resultado = self._agente.invoke(
                 {"messages": [{"role": "user", "content": prompt}]},
@@ -159,6 +160,13 @@ class AgenteAnalisis:
                     "callbacks": handlers,
                 },
             )
+            mensajes = resultado.get("messages") or []
+            propuesta = resultado.get("structured_response")
+            if not isinstance(propuesta, PropuestaAgente):
+                # Los modelos pequeños no llaman a la herramienta de salida:
+                # escriben prosa. La propuesta se cierra con la salida
+                # estructurada nativa, sobre la misma conversación.
+                propuesta = self._cerrar(mensajes, handlers)
         except PresupuestoAgotado as exc:
             # Condición de corte: se anota y se sigue con lo que había.
             logger.warning("La consulta al agente se cortó: %s", exc)
@@ -170,13 +178,6 @@ class AgenteAnalisis:
             if presupuesto is not None:
                 presupuesto.anotar_corte(f"el modelo falló: {exc}")
             return None
-        propuesta = resultado.get("structured_response")
-        mensajes = resultado.get("messages") or []
-        if not isinstance(propuesta, PropuestaAgente):
-            # Los modelos pequeños no llaman a la herramienta de salida:
-            # escriben prosa. La propuesta se cierra con la salida
-            # estructurada nativa, sobre la misma conversación.
-            propuesta = self._cerrar(mensajes, handlers)
         if not isinstance(propuesta, PropuestaAgente):
             logger.warning("El agente no devolvió una propuesta válida")
             return None

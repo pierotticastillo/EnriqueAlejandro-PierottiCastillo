@@ -106,6 +106,11 @@ class Settings(BaseSettings):
     # 0 = el modelo se descarga de memoria en cuanto termina de responder.
     # Con 8 GB de RAM en la planta no puede quedar residente.
     ollama_keep_alive: int = 0
+    # Tarifa del modelo en USD por millón de tokens (entrada y salida). Con el
+    # modelo local de la planta es 0: no hay nada que facturar. Si algún día
+    # el agente usa un modelo de nube, se pone la tarifa y el costo de cada
+    # paso sale de los tokens medidos.
+    precio_usd_por_millon: float = 0.0
 
     # Núcleo de agentes (LangChain). El presupuesto de pasos es el tope de
     # vueltas y tool calls del agente por consulta: es el "presupuesto de
@@ -120,7 +125,15 @@ class Settings(BaseSettings):
     # Timeout de la consulta al agente: es el reloj del presupuesto. Corta
     # antes que el timeout del modelo, para que el corte sea del presupuesto
     # y no un error de red.
-    agente_timeout_s: float = 180.0
+    #
+    # Medido en la planta simulada, con el modelo local detrás del proxy del
+    # enlace: cada vuelta del agente tarda entre 60 y 110 s (el modelo se
+    # descarga de memoria entre llamadas, así que cada una paga la carga), y
+    # la consulta completa —dos vueltas y el cierre de la propuesta— ronda
+    # los 250 s. Con 180 s el agente se cortaba siempre antes de cerrar la
+    # propuesta. El corte no frena la planta: el agente corre en el hilo de
+    # redacción.
+    agente_timeout_s: float = 420.0
     # Contexto y salida propios del agente. El redactor escribe un párrafo
     # (250 tokens alcanza); el agente consulta con herramientas y después
     # cierra la propuesta en un esquema, así que necesita más de las dos

@@ -306,6 +306,45 @@ def test_la_trayectoria_se_escribe_y_se_lee_por_orden(engine) -> None:
             )
 
 
+def test_la_trayectoria_guarda_el_resumen_de_la_consulta(engine) -> None:
+    """La fila ``consulta`` dice con qué modelo se consultó y cuánto tardó.
+
+    Es el resumen de la consulta al agente: sin el modelo, los tokens y el
+    tiempo, la bitácora tiene los pasos sueltos pero no se puede responder
+    "cuánto tardó" de una mirada.
+    """
+    registrador = RegistradorTrayectoria(engine)
+    registrador.registrar(
+        etapa="agente",
+        tipo="consulta",
+        modelo="qwen2.5:3b-instruct",
+        argumentos={"pasos": 3, "tokens": 5200, "corte": None},
+        salida={"corte": None},
+        tokens_prompt=4800,
+        tokens_completion=400,
+        costo_usd=0.0156,
+        segundos=248.5,
+        orden_id="ORD-TRAYEC-2",
+        equipo="B-102",
+    )
+    try:
+        pasos = registrador.pasos("ORD-TRAYEC-2")
+        assert len(pasos) == 1
+        fila = pasos[0]
+        assert fila["tipo"] == "consulta"
+        assert fila["modelo"] == "qwen2.5:3b-instruct"
+        assert fila["tokens_prompt"] == 4800
+        assert fila["tokens_completion"] == 400
+        assert float(fila["costo_usd"]) == pytest.approx(0.0156)
+        assert float(fila["segundos"]) == pytest.approx(248.5)
+    finally:
+        with engine.begin() as conexion:
+            conexion.execute(
+                text("DELETE FROM registro_trayectoria WHERE orden_id = :id"),
+                {"id": "ORD-TRAYEC-2"},
+            )
+
+
 def test_la_trayectoria_acepta_una_orden_real(engine, repositorio) -> None:
     """El registro se ata a la orden que lo originó."""
     with engine.begin() as conexion:

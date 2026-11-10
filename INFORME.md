@@ -1647,7 +1647,8 @@ La tabla `registro_trayectoria` (migración `0007`) tiene una fila por paso:
 |---|---|---|---|---|---|---|---|
 | `modelo` | sí | — | el prompt | entrada y salida | sí | sí | si falló |
 | `tool` | — | sí | sí | — | — | sí | si falló |
-| `corte` | — | — | el resumen del presupuesto | — | — | — | por qué se cortó |
+| `consulta` | sí | — | el resumen del presupuesto | entrada y salida | sí | sí | — |
+| `corte` | sí | — | el resumen del presupuesto | entrada y salida | sí | sí | por qué se cortó |
 | `decision` | — | — | la decisión, el usuario y el motivo | — | — | — | — |
 
 Las filas se escriben con los callbacks de LangChain: toda llamada al modelo
@@ -1655,9 +1656,16 @@ y toda llamada a una herramienta dejan su fila, sin instrumentar nada a mano.
 Los índices por `orden_id` y por `etapa` permiten seguir el recorrido de una
 orden y medir el gasto de cada tipo de paso.
 
-El costo se guarda en USD. Con el modelo local (Ollama en la planta) el costo
-es 0; la columna queda para el caso de un modelo de nube, y el total por
-orden se puede sumar con una consulta.
+La fila `consulta` (o `corte`, si el presupuesto se agotó) es el **resumen** de
+la consulta: con qué modelo se consultó, cuántos tokens gastó, cuánto costó y
+cuánto tardó. Sin ella la bitácora tiene los pasos sueltos pero no se puede
+responder «cuánto tardó la consulta» de una mirada.
+
+El costo se guarda en USD y **sale de los tokens medidos**: la tarifa del
+modelo (`PRECIO_USD_POR_MILLON`) se aplica a los tokens de entrada y de
+salida de cada llamada. Con el modelo local (Ollama en la planta) la tarifa es
+0 —no hay nada que facturar— y la columna queda en 0; con un modelo de nube se
+pone la tarifa y el total por orden se puede sumar con una consulta.
 
 ### 12.3 La Central de mantenimiento
 
@@ -1698,13 +1706,21 @@ tokens, y timeout global por nota"*.
 |---|---:|---|---|
 | Pasos | 6 | `AGENTE_MAX_PASOS` | las vueltas del modelo por consulta |
 | Tokens | 12 000 | `AGENTE_MAX_TOKENS` | el gasto de la consulta |
-| Timeout de la consulta | 180 s | `AGENTE_TIMEOUT_S` | el reloj del agente |
+| Timeout de la consulta | 420 s | `AGENTE_TIMEOUT_S` | el reloj del agente |
 | **Timeout global por nota** | 180 s | `NOTA_TIMEOUT_S` | desde que la nota entra hasta que el parte sale |
 
 El tope de tokens se mide con el modelo local: el prompt de la consulta lleva
 unos 1.600 tokens y cada vuelta los vuelve a mandar, y el cierre de la
 propuesta suma otra vuelta. Con 4.000 el agente se cortaba **siempre** antes
 de cerrar la propuesta, así que el tope quedó en 12.000.
+
+El timeout se midió en la planta simulada, con el modelo local detrás del
+proxy del enlace: cada vuelta tarda entre 60 y 110 s —el modelo se descarga
+de memoria entre llamadas, así que cada una paga la carga— y la consulta
+completa (dos vueltas y el cierre) ronda los **250 s**. Con 180 s el agente
+se cortaba siempre antes del cierre; el tope quedó en 420 s. El corte no
+frena la planta: el agente corre en el hilo de redacción, después de que la
+orden ya salió.
 
 Cuando se agota uno, el corte es una **condición prevista**: el motivo queda
 escrito en la bitácora (tipo `corte`) y el sistema sigue por el camino
@@ -1766,6 +1782,7 @@ Variables principales (ver `.env.example`):
 | `OLLAMA_TIMEOUT_S` | `90` | timeout de la llamada |
 | `OLLAMA_SEED` | `42` | semilla fija (salida reproducible) |
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga de memoria al terminar |
+| `PRECIO_USD_POR_MILLON` | `0` | tarifa del modelo (USD por millón de tokens): con el modelo local es 0 |
 | `AGENTE_MAX_PASOS` | `6` | presupuesto de pasos del agente (vueltas del modelo) |
 | `AGENTE_MAX_TOKENS` | `12000` | presupuesto de tokens del agente por consulta |
 | `AGENTE_TIMEOUT_S` | `180` | timeout de la consulta al agente |
@@ -2245,9 +2262,11 @@ repuestos**.
     apruebe o rechace. Si la planta tuviera que exponerla fuera de la red
     interna, habría que ponerle autenticación y control de acceso por rol: hoy
     la decisión queda auditada (usuario, motivo, orden), pero no autenticada.
-19. **El costo en USD de la trayectoria es 0 con el modelo local.** La columna
-    queda para el caso de un modelo de nube; con Ollama en la planta, lo que
-    se mide es el tiempo y los tokens.
+19. **El costo en USD de la trayectoria es 0 con el modelo local.** No es un
+    campo vacío: el costo se calcula con los tokens medidos y la tarifa del
+    modelo (`PRECIO_USD_POR_MILLON`), que con Ollama en la planta es 0 porque
+    no hay nada que facturar. Con un modelo de nube se pone la tarifa y la
+    columna se llena sola.
 
 ### Próximos pasos
 

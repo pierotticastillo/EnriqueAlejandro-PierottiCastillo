@@ -315,6 +315,7 @@ def main() -> None:
         registrador=registrador,
         agente_max_tokens=settings.agente_max_tokens,
         agente_timeout_s=settings.agente_timeout_s,
+        precio_usd_por_millon=settings.precio_usd_por_millon,
     )
     if modelo is not None:
         logger.info("Modelo local de redacción activo: %s", modelo.nombre)

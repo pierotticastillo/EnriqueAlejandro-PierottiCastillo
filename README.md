@@ -478,6 +478,20 @@ agente de LangChain (`create_agent`) que **consulta** y **propone**.
 - **Salida estructurada por herramienta** (`PropuestaAgente`): la propuesta
   llega validada por Pydantic antes de que el sistema la mire.
 
+### El cierre de la propuesta
+
+El modelo local de 3B consulta bien pero **no llama a la herramienta de
+salida**: escribe la propuesta en prosa. Por eso, si la herramienta de salida
+no fue llamada, la conversación se le vuelve a pasar al modelo con el esquema
+y se le pide que complete la propuesta: es el **cierre estructurado**, con la
+salida estructurada nativa de Ollama (`format` con el JSON schema). No es un
+camino distinto —el mismo modelo, la misma conversación y los mismos
+materiales— y queda registrado en la trayectoria como un paso más del agente.
+
+El esquema del cierre exige **todos** los campos: el modelo local omite los
+que están marcados como opcionales, y con la falla, las causas y las citas
+opcionales la propuesta llegaba con la justificación y nada más.
+
 ### Qué no usa
 
 - **La Central de mantenimiento no es una tool.** No está en el registro ni en
@@ -491,7 +505,7 @@ agente de LangChain (`create_agent`) que **consulta** y **propone**.
 | Si el agente propone… | Qué pasa |
 |---|---|
 | Una falla que no está en el catálogo | Se descarta la propuesta entera |
-| Una cita que no está en la lista de permitidas | Se descarta la propuesta entera |
+| Una cita que no está en la lista de permitidas ni entre las que le mostró una herramienta | Se descarta la propuesta entera |
 | Una causa que el manual no respalda | Se omite esa causa; el resto sigue |
 | Una falla, causas y citas respaldadas | Se usa como **justificación** de la orden |
 
@@ -507,9 +521,15 @@ tokens, y timeout global por nota"*. Están en `agente/presupuesto.py`:
 | Presupuesto | Tope | Variable |
 |---|---:|---|
 | Pasos del agente (vueltas del modelo) | 6 | `AGENTE_MAX_PASOS` |
-| Tokens del agente por consulta | 4 000 | `AGENTE_MAX_TOKENS` |
-| Timeout de la consulta al agente | 120 s | `AGENTE_TIMEOUT_S` |
+| Tokens del agente por consulta | 12 000 | `AGENTE_MAX_TOKENS` |
+| Timeout de la consulta al agente | 420 s | `AGENTE_TIMEOUT_S` |
 | **Timeout global por nota** (desde que entra hasta que sale el parte) | 180 s | `NOTA_TIMEOUT_S` |
+
+El tope de tokens está medido con el modelo local: el prompt de la consulta
+lleva unos 1.600 tokens, cada vuelta los vuelve a mandar y el cierre de la
+propuesta suma otra vuelta. El timeout también: en la planta simulada cada
+vuelta del modelo local tarda entre 60 y 110 s (se descarga de memoria entre
+llamadas), así que la consulta completa ronda los 250 s.
 
 Cuando se agota uno, el corte es una **condición prevista**: queda escrito en
 la bitácora con su motivo y el sistema sigue por el camino determinista. La
@@ -527,12 +547,17 @@ La tabla `registro_trayectoria` (migración `0007`) tiene una fila por paso:
 |---|---|
 | `modelo` | modelo, prompt, salida, tokens de entrada y de salida, costo, segundos, número de paso |
 | `tool` | herramienta, argumentos, salida, segundos, número de paso |
+| `consulta` | el resumen de la consulta: modelo, tokens, costo y segundos |
 | `corte` | por qué se cortó la etapa y el resumen del presupuesto |
 | `decision` | la decisión del planificador, con su usuario y su motivo |
 
 Se escribe con los callbacks de LangChain (`agente/trayectoria.py`), así que
 no hay que instrumentar nada a mano: toda llamada al modelo y toda llamada a
 una herramienta dejan su fila.
+
+El costo **sale de los tokens medidos**: la tarifa del modelo
+(`PRECIO_USD_POR_MILLON`, 0 con el modelo local de la planta) se aplica a los
+tokens de entrada y de salida de cada llamada.
 
 ## Central de mantenimiento (la decisión del planificador)
 
@@ -672,8 +697,10 @@ Las principales están documentadas en `.env.example`:
 | `OLLAMA_TIMEOUT_S` | `90` | timeout de la llamada |
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga al terminar |
 | `AGENTE_MAX_PASOS` | `6` | presupuesto de pasos del agente (vueltas del modelo) |
-| `AGENTE_MAX_TOKENS` | `4000` | presupuesto de tokens del agente por consulta |
-| `AGENTE_TIMEOUT_S` | `120` | timeout de la consulta al agente |
+| `AGENTE_MAX_TOKENS` | `12000` | presupuesto de tokens del agente por consulta |
+| `AGENTE_TIMEOUT_S` | `180` | timeout de la consulta al agente |
+| `AGENTE_NUM_CTX` | `4096` | contexto del agente (el del redactor es 2048) |
+| `AGENTE_MAX_TOKENS_SALIDA` | `700` | tokens que puede escribir el agente (el del redactor son 250) |
 | `NOTA_TIMEOUT_S` | `180` | **timeout global por nota**: desde que entra hasta que sale el parte |
 | `CENTRAL_ACTIVO` | `true` | levanta la Central de mantenimiento |
 | `CENTRAL_HOST` / `CENTRAL_PUERTO` | `0.0.0.0` / `8200` | escucha de la Central |

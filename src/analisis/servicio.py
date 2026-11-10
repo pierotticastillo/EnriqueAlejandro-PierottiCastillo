@@ -86,7 +86,8 @@ class ServicioAnalisis:
         agente: AgenteAnalisis | None = None,
         registrador: Any = None,
         agente_max_tokens: int = 12000,
-        agente_timeout_s: float = 180.0,
+        agente_timeout_s: float = 420.0,
+        precio_usd_por_millon: float = 0.0,
     ) -> None:
         self._catalogo = catalogo
         self._estado = estado
@@ -104,6 +105,8 @@ class ServicioAnalisis:
         # El presupuesto de la consulta al agente: pasos, tokens y tiempo.
         self._agente_max_tokens = agente_max_tokens
         self._agente_timeout_s = agente_timeout_s
+        # La tarifa del modelo, para el costo de cada paso de la trayectoria.
+        self._precio_usd_por_millon = precio_usd_por_millon
 
     # ------------------------------------------------------------------ análisis
 
@@ -347,17 +350,19 @@ class ServicioAnalisis:
         if self._registrador is not None:
             from agente.trayectoria import TrazaAgente
 
-            callbacks.append(
-                TrazaAgente(
-                    self._registrador,
-                    etapa="agente",
-                    orden_id=analisis.borrador.id,
-                    evento_id=analisis.evento_id,
-                    equipo=analisis.equipo,
-                    presupuesto=presupuesto,
-                    modelo=self._agente.nombre_modelo,
-                )
+            traza = TrazaAgente(
+                self._registrador,
+                etapa="agente",
+                orden_id=analisis.borrador.id,
+                evento_id=analisis.evento_id,
+                equipo=analisis.equipo,
+                presupuesto=presupuesto,
+                modelo=self._agente.nombre_modelo,
+                precio_usd_por_millon=self._precio_usd_por_millon,
             )
+            callbacks.append(traza)
+        else:
+            traza = None
         tareas = self._nombres_de_tareas(analisis.borrador.tareas, analisis.borrador.equipo)
         try:
             propuesta = self._agente.consultar(
@@ -371,12 +376,18 @@ class ServicioAnalisis:
             return None
         if self._registrador is not None:
             # El corte queda en la bitácora: no se borra en silencio. Si la
-            # consulta llegó bien, lo que queda es el resumen del presupuesto.
+            # consulta llegó bien, lo que queda es el resumen del presupuesto:
+            # con el modelo, los tokens, el costo y el tiempo de la consulta.
             self._registrador.registrar(
                 etapa="agente",
                 tipo="corte" if presupuesto.corte else "consulta",
+                modelo=self._agente.nombre_modelo,
                 argumentos=presupuesto.resumen(),
                 salida={"corte": presupuesto.corte},
+                tokens_prompt=traza.tokens_prompt if traza is not None else 0,
+                tokens_completion=traza.tokens_completion if traza is not None else 0,
+                costo_usd=traza.costo_usd if traza is not None else 0.0,
+                segundos=presupuesto.segundos,
                 error=presupuesto.corte,
                 orden_id=analisis.borrador.id,
                 evento_id=analisis.evento_id,

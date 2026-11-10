@@ -70,6 +70,9 @@ class ModeloFalso(BaseChatModel):
     propuesta: dict[str, Any] = {}
     error: bool = False
     turnos: list[Any] = []
+    # El nombre del modelo, como en ChatOllama: es lo que queda escrito en
+    # la bitácora.
+    model: str = "modelo-falso"
 
     @property
     def _llm_type(self) -> str:
@@ -596,6 +599,44 @@ def test_la_trayectoria_registra_el_nombre_del_modelo() -> None:
     assert all(modelo == "qwen2.5:3b-instruct" for modelo in modelos)
 
 
+def test_el_costo_de_un_paso_sale_de_los_tokens() -> None:
+    """El costo no se estima a ojo: sale de los tokens y de la tarifa.
+
+    Con el modelo local de la planta la tarifa es 0 (no hay nada que
+    facturar); con un modelo de nube, el costo de cada paso se calcula con los
+    tokens que midió el callback.
+    """
+    registrador = RegistradorFalso()
+    traza = TrazaAgente(
+        registrador,
+        orden_id="ORD-1",
+        modelo="qwen2.5:3b-instruct",
+        precio_usd_por_millon=3.0,
+    )
+    agente = _agente(callbacks=[traza])
+
+    agente.consultar("probá", permitidas=("TX350-D §8.3",))
+
+    modelos = [fila for fila in registrador.filas if fila["tipo"] == "modelo"]
+    assert modelos
+    for fila in modelos:
+        tokens = fila["tokens_prompt"] + fila["tokens_completion"]
+        assert fila["costo_usd"] == pytest.approx(tokens * 3.0 / 1_000_000)
+
+
+def test_con_el_modelo_local_el_costo_es_cero() -> None:
+    """El modelo local no se factura: el costo queda en 0."""
+    registrador = RegistradorFalso()
+    traza = TrazaAgente(registrador, orden_id="ORD-1", modelo="qwen2.5:3b-instruct")
+    agente = _agente(callbacks=[traza])
+
+    agente.consultar("probá", permitidas=("TX350-D §8.3",))
+
+    modelos = [fila for fila in registrador.filas if fila["tipo"] == "modelo"]
+    assert modelos
+    assert all(fila["costo_usd"] == 0.0 for fila in modelos)
+
+
 # ------------------------------------------------------- la integración completa
 
 
@@ -667,3 +708,61 @@ def test_el_servicio_justifica_con_el_agente_y_deja_la_trayectoria(planta: dict)
     assert "tool" in tipos
     # Y queda el resumen del presupuesto de la consulta.
     assert "consulta" in tipos
+
+
+def test_el_resumen_de_la_consulta_lleva_modelo_tokens_y_tiempo(planta: dict) -> None:
+    """La fila ``consulta`` dice con qué modelo se consultó y cuánto costó.
+
+    Sin esto, la bitácora tiene los pasos sueltos pero no el resumen: no se
+    puede responder "cuánto tardó la consulta ni con qué modelo" de una
+    mirada.
+    """
+    from datetime import UTC, datetime
+
+    from planta_contrato import EventoSistema, TipoEvento
+
+    from analisis.servicio import ServicioAnalisis
+    from planta.parte_extractor import Hallazgo
+
+    registrador = RegistradorFalso()
+    servicio = ServicioAnalisis(
+        _catalogo(),
+        cliente=ClienteFalso(),
+        planta=planta,
+        agente=_agente(),
+        registrador=registrador,
+        precio_usd_por_millon=3.0,
+    )
+    evento = EventoSistema(
+        id="parte:nota-1:B-102",
+        ts=datetime(2026, 11, 10, 9, 0, tzinfo=UTC),
+        tipo=TipoEvento.escalado,
+        equipo="B-102",
+        origen="parte",
+        parte_id="parte-1",
+        nota_ids=["nota-1"],
+        resumen="B-102 goteo_empaquetadura: pérdida importante por empaquetadura",
+    )
+    filas = [
+        Hallazgo(
+            tag="B-102",
+            variable="goteo_empaquetadura",
+            valor=180,
+            unidad="gotas/min",
+            observacion="pérdida importante por empaquetadura",
+        )
+    ]
+    analisis = servicio.analizar_evento(evento, filas=filas)
+    assert analisis is not None
+    servicio.redactar(analisis)
+
+    consultas = [fila for fila in registrador.filas if fila["tipo"] == "consulta"]
+    assert consultas
+    fila = consultas[0]
+    assert fila["modelo"] == "modelo-falso"
+    assert fila["tokens_prompt"] > 0
+    assert fila["tokens_completion"] > 0
+    assert fila["segundos"] > 0
+    # El costo sale de los tokens medidos, no de una estimación.
+    tokens = fila["tokens_prompt"] + fila["tokens_completion"]
+    assert fila["costo_usd"] == pytest.approx(tokens * 3.0 / 1_000_000)

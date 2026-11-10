@@ -148,6 +148,7 @@ class TrazaAgente(BaseCallbackHandler):
         equipo: str | None = None,
         presupuesto: Presupuesto | None = None,
         modelo: str | None = None,
+        precio_usd_por_millon: float = 0.0,
     ) -> None:
         self._registrador = registrador
         self._etapa = etapa
@@ -157,10 +158,42 @@ class TrazaAgente(BaseCallbackHandler):
         self._presupuesto = presupuesto
         # El nombre del modelo, si no viene en los parámetros de la invocación.
         self._modelo_agente = modelo
+        # La tarifa del modelo: con el modelo local de la planta es 0 (no hay
+        # nada que facturar), y con un modelo de nube se pone la tarifa real y
+        # el costo sale de los tokens medidos.
+        self._precio = float(precio_usd_por_millon or 0.0)
         self._inicios: dict[str, float] = {}
         self._modelos: dict[str, str] = {}
         self._argumentos: dict[str, Any] = {}
         self._paso = 0
+        # Los totales de la consulta: los usa el resumen que se escribe
+        # cuando la consulta termina (o se corta).
+        self._tokens_prompt = 0
+        self._tokens_completion = 0
+        self._costo = 0.0
+        self._segundos_modelo = 0.0
+
+    # ------------------------------------------------------------------ totales
+
+    @property
+    def tokens_prompt(self) -> int:
+        """Los tokens de entrada que gastó la consulta."""
+        return self._tokens_prompt
+
+    @property
+    def tokens_completion(self) -> int:
+        """Los tokens de salida que gastó la consulta."""
+        return self._tokens_completion
+
+    @property
+    def costo_usd(self) -> float:
+        """El costo de la consulta, con la tarifa del modelo."""
+        return self._costo
+
+    @property
+    def segundos(self) -> float:
+        """Cuánto tardó el modelo, sumando todas sus llamadas."""
+        return self._segundos_modelo
 
     # El presupuesto agotado es una **condición de corte**: tiene que
     # interrumpir al agente, no quedar anotado en el log y seguir.
@@ -184,6 +217,11 @@ class TrazaAgente(BaseCallbackHandler):
         salida = _texto_de(response)
         prompt_tokens, completion_tokens = _tokens(response)
         self._paso += 1
+        costo = _costo(prompt_tokens, completion_tokens, self._precio)
+        self._tokens_prompt += prompt_tokens
+        self._tokens_completion += completion_tokens
+        self._costo += costo
+        self._segundos_modelo += segundos
         self._registrador.registrar(
             etapa=self._etapa,
             tipo="modelo",
@@ -192,6 +230,7 @@ class TrazaAgente(BaseCallbackHandler):
             salida=salida,
             tokens_prompt=prompt_tokens,
             tokens_completion=completion_tokens,
+            costo_usd=costo,
             segundos=segundos,
             orden_id=self._orden_id,
             evento_id=self._evento_id,
@@ -209,6 +248,7 @@ class TrazaAgente(BaseCallbackHandler):
         self._modelos.pop(run_id, "")
         self._argumentos.pop(run_id, "")
         self._paso += 1
+        self._segundos_modelo += segundos
         self._registrador.registrar(
             etapa=self._etapa,
             tipo="modelo",
@@ -272,6 +312,18 @@ class TrazaAgente(BaseCallbackHandler):
 
 def _segundos(inicio: float | None) -> float:
     return 0.0 if inicio is None else time.monotonic() - inicio
+
+
+def _costo(tokens_prompt: int, tokens_completion: int, precio_por_millon: float) -> float:
+    """El costo de una llamada, a partir de los tokens y de la tarifa.
+
+    La tarifa es la del modelo: con el modelo local de la planta es 0 (no hay
+    nada que facturar) y con un modelo de nube se configura. El costo **sale
+    de los tokens medidos**, nunca de una estimación a ojo.
+    """
+    if precio_por_millon <= 0:
+        return 0.0
+    return (tokens_prompt + tokens_completion) * precio_por_millon / 1_000_000
 
 
 def _generaciones(response: Any) -> list[Any]:

@@ -200,6 +200,8 @@ services:
       OLLAMA_TIMEOUT_S: ${OLLAMA_TIMEOUT_S:-90}
       OLLAMA_SEED: ${OLLAMA_SEED:-42}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-0}
+      # Tarifa del modelo (USD por millón de tokens): con el modelo local es 0.
+      PRECIO_USD_POR_MILLON: ${PRECIO_USD_POR_MILLON:-0}
       # Modelo de nube con visión (NVIDIA). Es un AUXILIAR: describe las fotos
       # para que quien revise sepa qué está mirando. No decide ni aprueba.
       # La llamada sale por el proxy del enlace, que es la única salida
@@ -217,7 +219,7 @@ services:
       AGENTE_MAX_PASOS: ${AGENTE_MAX_PASOS:-6}
       # Presupuesto de tokens y timeout del agente por consulta.
       AGENTE_MAX_TOKENS: ${AGENTE_MAX_TOKENS:-12000}
-      AGENTE_TIMEOUT_S: ${AGENTE_TIMEOUT_S:-180}
+      AGENTE_TIMEOUT_S: ${AGENTE_TIMEOUT_S:-420}
       # Contexto y salida propios del agente: consulta con herramientas y
       # después cierra la propuesta en un esquema.
       AGENTE_NUM_CTX: ${AGENTE_NUM_CTX:-4096}
