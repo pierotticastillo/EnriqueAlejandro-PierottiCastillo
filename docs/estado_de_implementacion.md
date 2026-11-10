@@ -16,18 +16,21 @@ La **restricción 04 (lista cerrada de modelos)** quedó atendida: el ASR pasó 
 
 La **conversación de tablet** quedó cerrada: la corrección del operador se aplica a la lectura que está corrigiendo (no a la última del equipo), al mover una lectura a otro equipo el valor se convierte, la negación saca una sola lectura y la conversación tiene tope (`PARTE_MAX_CORRECCIONES=5`): si no converge, la nota queda para revisión humana en vez de dar vueltas.
 
-El **corrector oficial** da **94,1/100 — APRUEBA** sobre los **7 escenarios** de
+El **corrector oficial** da **92,6/100 — APRUEBA** sobre los **7 escenarios** de
 la rúbrica (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`,
 `sin-luz`, `contratista`, `ataque` y `libre`), con `faster-whisper-base`, el LLM
 local activo y el modelo de nube con visión habilitado: **93 de 93 puntos
-medidos** (87,5 de 93, reescalados a 100), sin eliminatorias y con **0 mensajes
-inválidos** en los siete escenarios. `A1` (cobertura), `D1`, `D2` y el bloque G
-(`orden_ejecutada`) quedaron en **100 %**: las 91 notas tuvieron borrador y todos
-los cierres por voz pasaron su orden a `Ejecutada`. Lo que quedó debajo del
-100 % es `A2`/`A3` (el operador virtual no siempre confirma el primer borrador
-con un ASR de 3B) y `B1` (1 error de 158 decisiones, de una transcripción que
-el decodificador cortó a media lectura): son criterios que dependen del **audio
-de la planta**, que cambia entre corridas, no del comportamiento del sistema.
+medidos** (86,13 de 93, reescalados a 100), sin eliminatorias y con **0 mensajes
+inválidos** en los siete escenarios (548). `A1` (cobertura), `D1`, `D2` y el
+bloque G (`orden_ejecutada`) quedaron en **100 %**: las 91 notas tuvieron
+borrador y todos los cierres por voz pasaron su orden a `Ejecutada`. Lo que
+quedó debajo del 100 % es `A2`/`A3` (el operador virtual no siempre confirma el
+primer borrador con un ASR de 3B), `A4a` (83 %) y `B1` (98 %): son criterios
+que dependen del **audio de la planta**, que se regenera en cada corrida, no
+del comportamiento del sistema. Una corrida anterior del mismo sistema dio
+**94,1**: la diferencia está medida nota por nota en el `INFORME.md` (§14) y es
+del decodificador («diez» quedó como «medio», «golpeteo metálico» quedó como
+«golpe teometaico»).
 
 La **Fase 6 (operación sin enlace y cola)** quedó cerrada: la cola
 (`outbox_cola`) pasó a ser **la salida de la planta** — eventos, órdenes y
@@ -453,13 +456,19 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 - `python -m pytest`: **531 tests, 0 fallas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose pasan las 531; sin base: 494 pasan y 37 se omiten).
 - `ruff check src tests migrations`: **sin errores**.
-- **Corrector oficial, corrida completa (7 escenarios)**: **94,1/100 — APRUEBA**
-  (`_fase11`, la corrida vigente), sin eliminatorias, 93 de 93 puntos medidos
-  (87,5 de 93, reescalados a 100) y **0 mensajes inválidos** (544 mensajes en
-  los siete escenarios). Por criterio:
-  A1 100 %, A2 65 %, A3 85 %, A4a 100 %, A4b 100 %, B1 99 %, B2 100 %, D1 100 %,
+- **Corrector oficial, corrida completa (7 escenarios)**: **92,6/100 — APRUEBA**
+  (`_fase11b`, la corrida vigente, con el reintento del enlace), sin
+  eliminatorias, 93 de 93 puntos medidos (86,13 de 93, reescalados a 100) y
+  **0 mensajes inválidos** (548 mensajes en los siete escenarios). Por criterio:
+  A1 100 %, A2 62 %, A3 82 %, A4a 83 %, A4b 100 %, B1 98 %, B2 100 %, D1 100 %,
   D2 100 %, E1 100 %, E2 75 %, E3 100 %, F1 100 %, F2 100 %, F3 100 %,
   **G1 100 %** (`G2` y `G3` están `activo: false` en la rúbrica).
+  - La corrida anterior de la misma Entrega 1 (`_fase11`) dio **94,1/100** y la
+    anterior a esa (`_fase10`) **93,1/100**. La diferencia entre las dos últimas
+    es la **varianza del audio de la planta**, medida nota por nota en el
+    `INFORME.md` (§14): los criterios que miden el comportamiento del sistema
+    (`D1`, `B2`, `E1`, `E3`, `F1`, `F2`, `F3`, `G1`) están en **100 %** en las
+    tres corridas.
   - La corrida anterior (`_fase10`) dio **93,1/100 — APRUEBA**: la diferencia
     son las tres correcciones que aquella corrida dejó pendientes —el decimal
     «0 con 3» que el ASR escribe por «cero coma tres» (el defecto 13), la
@@ -572,29 +581,33 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Historial
 
-- **2026-11-10 (Entrega 1 y corrida `_fase11`: 94,1/100):** se implementó la
-  **Entrega 1** del TP: el **núcleo de agentes en LangChain** (`create_agent`),
-  el **registro de la trayectoria** (migración `0007`: modelo, tools y sus
-  argumentos, tokens, costo y tiempo de cada paso), la **Central de
-  mantenimiento** (el canal de decisión del planificador, con pantalla y API;
-  no es una tool: el agente no puede aprobar nada) y el **presupuesto y las
-  condiciones de corte** (pasos, tokens y timeout global por nota), con la
-  mini spec del flujo del parte en `docs/spec-parte.md`. La corrida oficial de
-  los **7 escenarios** dio **94,1/100 — APRUEBA** (87,5 de 93 puntos medidos, 0
-  eliminatorias, **0 mensajes inválidos** en 544 mensajes): `A1` llegó al
-  **100 %** (las 91 notas tuvieron borrador), `B1` quedó en el **99 %** (1 error
-  de 158 decisiones) y `D2` siguió en el **100 %**. Lo único que quedó debajo
-  del 100 % es `A2`/`A3` (el operador virtual no siempre confirma el primer
-  borrador) y `E2` (75 %): son criterios que dependen del **audio de la
-  planta**, que cambia entre corridas, no del comportamiento del sistema.
-  La corrida **no encontró ningún defecto nuevo**: el único error de `B1` es
-  de una transcripción que el decodificador cortó a media lectura («el
-  rodamiento me dio 66 grados con la»), y las otras dos notas con el mismo
-  síntoma se transcribieron bien y se detectaron. En la corrida se vio que el
-  **radioenlace** de la planta (el proxy que cierra los túneles) se come
-  consultas enteras del agente («Server disconnected without sending a
-  response»): por eso la llamada al modelo ahora **reintenta una vez**, sólo
-  ante fallos transitorios de red y **respetando el presupuesto**.
+- **2026-11-10 (Entrega 1; corridas `_fase11` 94,1 y `_fase11b` 92,6):** se
+  implementó la **Entrega 1** del TP: el **núcleo de agentes en LangChain**
+  (`create_agent`), el **registro de la trayectoria** (migración `0007`: modelo,
+  tools y sus argumentos, tokens, costo y tiempo de cada paso), la **Central de
+  mantenimiento** (el canal de decisión del planificador, con pantalla y API; no
+  es una tool: el agente no puede aprobar nada) y el **presupuesto y las
+  condiciones de corte** (pasos, tokens y timeout global por nota), con la mini
+  spec del flujo del parte en `docs/spec-parte.md`. La Entrega 1 se midió **dos
+  veces** con el corrector oficial sobre los **7 escenarios**: **94,1/100** y
+  **92,6/100 — APRUEBA** las dos, sin eliminatorias y con **0 mensajes
+  inválidos**. En las dos, `A1` (cobertura) llegó al **100 %** (las 91 notas
+  tuvieron borrador) y `D1`, `D2` y `G1` siguieron en el **100 %**. La diferencia
+  de 1,5 puntos está **medida nota por nota** (`INFORME.md`, §14) y es del
+  **decodificador**, no del sistema: la planta regenera el audio en cada
+  corrida, y en la segunda «diez» quedó como «medio» (el sistema no tuvo qué
+  preguntar), «golpeteo metálico» quedó como «golpe teometaico» (un garblado de
+  cuatro letras, que el sistema **no** adivina a propósito: una anomalía
+  inventada es peor que una anomalía perdida) y una frase quedó cortada a media
+  lectura. Los criterios que miden el comportamiento del sistema y no lo que
+  dijo el operador (`D1`, `B2`, `E1`, `E3`, `F1`, `F2`, `F3`, `G1`) están en
+  **100 %** en las dos corridas. En la primera se vio que el **radioenlace** de
+  la planta (el proxy que cierra los túneles) se come consultas enteras del
+  agente («Server disconnected without sending a response»): por eso la
+  llamada al modelo ahora **reintenta una vez**, sólo ante fallos transitorios
+  de red y **respetando el presupuesto**. En la trayectoria de la segunda
+  corrida se ve el efecto: **15 consultas completadas y 1 corte**, contra **13
+  consultas y 4 cortes** de la primera.
 
 - **2026-11-09 (noche, corrida `_fase10`: 93,1/100):** la corrida oficial de los
   **7 escenarios** dio **93,1/100 — APRUEBA** (86,62 de 93 puntos medidos, 0

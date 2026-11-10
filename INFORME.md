@@ -7,7 +7,7 @@
 **Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5, 6 y 7 implementadas y verificadas.
 Entrega 1 (núcleo de agentes, trayectoria, Central de mantenimiento y
 presupuesto) implementada y verificada.
-Corrector oficial: **94,1/100 — APRUEBA** (los 7 escenarios de la rúbrica,
+Corrector oficial: **92,6/100 — APRUEBA** (los 7 escenarios de la rúbrica,
 93 de 93 puntos medidos, sin eliminatorias; el bloque G mide `orden_ejecutada`,
 que quedó en el 100 %).
 
@@ -1876,20 +1876,21 @@ Persiste los binarios de las notas entre reinicios:
 Corrida completa de `correccion/corregir.py` sobre los **7 escenarios** de la
 rúbrica (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`,
 `contratista`, `ataque` y `libre`), con `faster-whisper-base`, el LLM local
-activo y el modelo de nube con visión habilitado:
+activo y el modelo de nube con visión habilitado. Es la corrida `_fase11b`, la
+**última** y la que corre sobre el código que está subido (commit `d6b5588`):
 
-**94,1/100 — APRUEBA**, sin eliminatorias. Se midieron **los 93 puntos de los
+**92,6/100 — APRUEBA**, sin eliminatorias. Se midieron **los 93 puntos de los
 93** que la rúbrica tiene activos (los siete escenarios tienen datos, así que no
-hubo que reescalar nada): 87,5 de 93 puntos, reescalados a 100.
+hubo que reescalar nada): 86,13 de 93 puntos, reescalados a 100.
 
 | Criterio | Peso | Valor | Puntos |
 |---|---:|---:|---:|
 | A1 Cobertura | 5 | 100 % | 5,00 |
-| A2 Borrador al primer intento | 10 | 65 % | 6,51 |
-| A3 Parte final correcto | 8 | 85 % | 6,77 |
-| A4a Pregunta cuando hace falta | 4 | 100 % | 4,00 |
+| A2 Borrador al primer intento | 10 | 62 % | 6,18 |
+| A3 Parte final correcto | 8 | 82 % | 6,54 |
+| A4a Pregunta cuando hace falta | 4 | 83 % | 3,33 |
 | A4b No pregunta de más | 3 | 100 % | 3,00 |
-| B1 Sin novedad / Escalado | 10 | 99 % | 9,94 |
+| B1 Sin novedad / Escalado | 10 | 98 % | 9,83 |
 | B2 Alerta de seguridad | 10 | 100 % | 10,00 |
 | D1 Reglas de aprobación | 15 | 100 % | 15,00 |
 | D2 Orden adecuada a la falla | 10 | 100 % | 10,00 |
@@ -1911,36 +1912,65 @@ activo, `G1` («cada cierre por voz pasa su orden a Ejecutada»), quedó en **10
 como `Ejecutada`.
 
 Los **mensajes del sistema fueron válidos en su totalidad**: 0 inválidos en los
-siete escenarios (54, 107, 33, 62, 105, 57 y 126 mensajes: 544 en total).
+siete escenarios (55, 98, 35, 63, 106, 65 y 126 mensajes: 548 en total).
 
 #### Lo que queda debajo del 100 % y por qué
 
 | Criterio | Qué pasó |
 |---|---|
-| **A2** (65 %) | El operador virtual confirma el primer borrador en 67 de las 91 notas (78 % en `martes-tranquilo`, 54 % en `tormenta-perfecta`, 50 % en `fuga-sin-enlace`, 89 % en `sin-luz`, 84 % en `contratista`, 20 % en `ataque` y 81 % en `libre`). El ASR (`base`, el modelo de la lista cerrada) escribe «ciento dos» por «ciento doce», «huilo raro» por «ruido raro», y el operador corrige: el sistema aplica la corrección en la fila correcta y converge en el segundo borrador. Es el costo de finura del modelo, y la conversación lo resuelve sin inventar el valor que el operador dijo. |
-| **A3** (85 %) | 9 de las 91 notas quedaron sin confirmar (`NOTA-00008` en `martes-tranquilo`; `NOTA-00017` y `NOTA-00018` en `tormenta-perfecta`; `NOTA-00001` y `NOTA-00006` en `fuga-sin-enlace`; `NOTA-00027` en `contratista`; `NOTA-00001` en `ataque`; `NOTA-00019` y `NOTA-00028` en `libre`). Casi todas son notas **sin mediciones numéricas** («la bomba está parada, en reserva», «la uno está disparada, no arranca»): el operador virtual de la planta descarta toda fila sin valor y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay borrador que ese operador pueda confirmar. |
-| **B1** (99 %) | **1 de 158 decisiones**. La única es de `tormenta-perfecta` (25 decisiones): la `NOTA-00005` dice «hace un **golpeteo metálico**» y el decodificador **cortó la frase a media lectura** —la transcripción termina en «el rodamiento me dio 66 grados con la»— y además «la dos» quedó como «lado», así que el sistema recibió la presión de la bomba equivocada y **nunca vio el síntoma**: el equipo quedó `SinNovedad` donde la verdad de campo decía `Escalado`. No es un defecto del cruce: las otras dos notas de `tormenta-perfecta` con el mismo síntoma («La dos hace un golpeteo metálico») se transcribieron bien y se detectaron. `martes-tranquilo` (18 decisiones), `fuga-sin-enlace` (4), `sin-luz` (17), `contratista` (32), `ataque` (9) y `libre` (53) están al **100 %**. |
+| **A2** (62 %) | El operador virtual confirma el primer borrador en 65 de las 91 notas (67 % en `martes-tranquilo`, 62 % en `tormenta-perfecta`, 50 % en `fuga-sin-enlace`, 89 % en `sin-luz`, 84 % en `contratista`, 0 % en `ataque` y 81 % en `libre`). El ASR (`base`, el modelo de la lista cerrada) escribe «ciento dos» por «ciento doce», «huilo raro» por «ruido raro», y el operador corrige: el sistema aplica la corrección en la fila correcta y converge en el segundo borrador. Es el costo de finura del modelo, y la conversación lo resuelve sin inventar el valor que el operador dijo. |
+| **A3** (82 %) | 10 de las 91 notas quedaron sin confirmar (`NOTA-00008` en `martes-tranquilo`; `NOTA-00017` y `NOTA-00018` en `tormenta-perfecta`; `NOTA-00001` y `NOTA-00006` en `fuga-sin-enlace`; `NOTA-00027` en `contratista`; `NOTA-00001` y `NOTA-00005` en `ataque`; `NOTA-00019` y `NOTA-00028` en `libre`). Casi todas son notas **sin mediciones numéricas** («la bomba está parada, en reserva», «la uno está disparada, no arranca»): el operador virtual de la planta descarta toda fila sin valor y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay borrador que ese operador pueda confirmar. |
+| **A4a** (83 %) | La única ambigüedad de la corrida es la `NOTA-00005` de `ataque`: el operador dice «El filtro B me dio **diez** de diferencial» y el sistema **no preguntó**. La causa es el decodificador: en esta corrida transcribió «El filtro B, **el medio, es** de diferencial» —«diez» quedó como «medio» y no llegó ningún número—, así que el sistema no tenía una lectura que discutir. En la corrida anterior el mismo audio llegó como «El filtro B, medio **10** de diferencial»: el sistema tuvo el valor, vio que no era posible y preguntó. |
+| **B1** (98 %) | **3 de 181 decisiones**, las tres de `tormenta-perfecta` (25 decisiones): las tres notas dicen «hace un **golpeteo metálico**» y el decodificador las garbló —«hace un **golpe teometaico**»— o cortó la frase a media lectura. En la `NOTA-00005` la transcripción termina en «el rodamiento medio 66 grados con la» y «la dos» quedó como «lados»; en la `NOTA-00011` y en la `NOTA-00018` el síntoma quedó como «golpe teometaico». El sistema no vio el síntoma y el equipo quedó `SinNovedad` donde la verdad de campo decía `Escalado`. No es un defecto del cruce: en la corrida anterior el mismo síntoma llegó bien escrito y se detectó en las tres notas. `martes-tranquilo` (18 decisiones), `fuga-sin-enlace` (4), `sin-luz` (17), `contratista` (32), `ataque` (9) y `libre` (56) están al **100 %**. |
 | **E2** (75 %) | El criterio exige que el latido reporte **pendientes durante el corte de enlace**. En `fuga-sin-enlace` pasó: el aviso por radio quedó en la cola (`pendientes_sincronizar = 1`) y volvió a cero cuando volvió el enlace. En `tormenta-perfecta` no pasó porque **durante ese corte no hubo nada que esperar**: la planta no publicó ningún aviso por radio (el escenario no tiene nota insegura), así que la cola estaba —correctamente— vacía y el latido decía 0. |
 
-Los criterios que se mueven con el **audio** de la planta son los que dependen
-de lo que dijo el operador (`A2`, `A3`, `A4a`, `B1`, `D2`): en la corrida que se
-reporta arriba, `D2` («orden adecuada a la falla») está en **100 %** porque en
-`tormenta-perfecta` la falla `F02-B-102-4` (golpeteo metálico en `B-102`)
-terminó en la orden `ORD-B-102-TX-T02`, con `T-B-VAL` y el kit de válvulas. No
-fue un cambio del sistema sino del **audio**: el decodificador transcribió
-bien «golpeteo metálico» en las notas que alcanzó a leer, el evento salió
-`Escalado` y de un evento escalado sale la orden. En la corrida anterior el
-mismo síntoma estaba garblado en todas las notas y, de un evento sin escalar,
-no sale orden: el sistema no inventa una orden para una falla que no vio
-escalada.
+#### Las dos corridas de la Entrega 1, y por qué la nota se mueve
 
-En la corrida que se reporta arriba (94,1) lo que subió es `A1`
-(cobertura), que llegó al **100 %**: las 91 notas de los siete escenarios
-tuvieron borrador. `B1` subió de 98 % a 99 % y `A2`/`A3` de 61/82 % a
-65/85 %, porque el **audio** de la planta cambia entre corridas (§15, punto
-16): los criterios que dependen de lo que dijo el operador se mueven con la
-transcripción, y los que miden el comportamiento del sistema (`D1`, `B2`,
-`E1`, `E3`, `F1`, `F2`, `F3`, `G1`) están en **100 %** en todas las corridas.
+La Entrega 1 se midió **dos veces** con el corrector oficial, sobre los mismos
+siete escenarios y el mismo sistema:
+
+| Corrida | Commit | Nota | `A1` | `A2` | `A3` | `A4a` | `B1` | `D1` | `D2` | `G1` |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `_fase11` | `bfbf02e` | **94,1** | 100 % | 65 % | 85 % | 100 % | 99 % | 100 % | 100 % | 100 % |
+| `_fase11b` | `d6b5588` | **92,6** | 100 % | 62 % | 82 % | 83 % | 98 % | 100 % | 100 % | 100 % |
+
+La única diferencia de código entre las dos es el **reintento del enlace**
+(§12.4), que vive en la llamada al modelo del agente: **no toca ninguna
+decisión** —el agente propone y el código decide—, así que la diferencia de la
+nota no viene de ahí. Viene del **audio**, que la planta regenera en cada
+corrida (§15, punto 16). Se puede ver nota por nota:
+
+| Nota | `_fase11` (94,1) | `_fase11b` (92,6) | Qué pasó |
+|---|---|---|---|
+| `ataque` `NOTA-00005` | «El filtro B, medio **10** de diferencial» | «El filtro B, **el medio, es** de diferencial» | «diez» quedó como «medio»: no llegó ningún número, el sistema no tenía qué preguntar (`A4a`) |
+| `tormenta-perfecta` `NOTA-00005` | «…el rodamiento me dio 66 grados con la pistola, hace un **golpeteo metálico**» | «…el rodamiento medio 66 grados con la» | frase cortada: el síntoma no llegó (`B1`) |
+| `tormenta-perfecta` `NOTA-00011` y `NOTA-00018` | «hace un **golpeteo metálico**» | «hace un **golpe teometaico**» | el síntoma quedó a cuatro letras de distancia: no se reconoce, y no se reconoce **a propósito** (§15, punto 14) |
+
+La verdad de campo de esas cuatro notas es **exactamente la misma** en las dos
+corridas: cambió el WAV, no el sistema.
+
+Esto también explica por qué los criterios que **no** dependen de lo que dijo
+el operador están en **100 %** en las dos corridas (`D1`, `B2`, `E1`, `E3`,
+`F1`, `F2`, `F3`, `G1`), y por qué el sistema no intenta «adivinar» el
+síntoma: un garblado de cuatro letras puede ser otra palabra, y una anomalia
+inventada es peor que una anomalía perdida.
+
+#### Lo que el reintento del enlace cambió (medido en la trayectoria)
+
+Lo que el reintento sí cambia es la **consulta del agente**, que antes se
+perdía entera cuando se caía el radioenlace. En las dos corridas se registró
+la trayectoria (`registro_trayectoria`, filas `consulta` y `corte`):
+
+| Corrida | Consultas del agente completadas | Cortes por caída del enlace |
+|---|---:|---:|
+| `_fase11` (sin reintento) | 13 | **4** |
+| `_fase11b` (con reintento) | 15 | **1** |
+
+El corte que queda es el caso en que **el enlace no volvió**: la llamada falló
+con `[Errno 104] Connection reset by peer`, se reintentó 15 s después y también
+falló. Ahí el corte queda escrito en la bitácora y el sistema sigue por el
+camino determinista: es exactamente lo que pide el anexo (condiciones de corte
+y presupuesto), y no un fallo silencioso.
 
 #### Los dieciséis defectos que encontraron las corridas, y que están corregidos
 
@@ -2112,7 +2142,7 @@ corrida fue por lo tanto **cero**; el costo real se midió aparte, con
 
 La corrida previa, con `martes-tranquilo` y `fuga-sin-enlace`, daba
 **91,5/100 — APRUEBA**: se midieron 78 de 93 puntos y la nota se reescaló sobre
-esos pesos. La nota de los 7 escenarios es más alta (94,1) **porque ahora se
+esos pesos. La nota de los 7 escenarios es más alta (92,6) **porque ahora se
 miden más criterios**: `D2`, `F3` y `G1` antes no tenían datos y ahora sí, y
 `G1` vale 3 puntos que se ganan enteros. La corrida anterior, con `small` y sin
 las correcciones de la tablet, daba **72,2/100**.
@@ -2132,7 +2162,8 @@ defectos que iba enseñando la corrida. La progresión:
 | `_fase8` | 89,8 | El noveno defecto corregido (los millares del ASR ya no se leen como decimales), el vocabulario de la planta (los nombres de los equipos y los síntomas) en el prompt del ASR, y `A4a`/`A4b` de vuelta al 100 %. |
 | `_fase9` | 90,3 | Los tres defectos que encontró la corrida anterior (la observación que se comía la cláusula de al lado, el decimal con espacio y el segundo equipo de una cláusula) ya corregidos, con `sin-luz` y `contratista` al 100 % en `B1`. |
 | `_fase10` | 93,1 | La corrida anterior: el decimal «0 con 3» ya se lee como 0,3 (el defecto 13), `A4b` volvió al 100 %, `B1` quedó en el 98 % (5 errores de 146 decisiones) y `D2` llegó al 100 %. |
-| `_fase11` | **94,1** | La corrida que se reporta arriba: con el núcleo de agentes (LangChain), la trayectoria y la Central ya integrated, `A1` llegó al **100 %**, `B1` quedó en el 99 % (1 error de 158 decisiones, por una transcripción cortada a media lectura) y `D2` siguió en el 100 %. |
+| `_fase11` | 94,1 | La corrida de la Entrega 1 (núcleo de agentes, trayectoria, Central y presupuesto): `A1` llegó al **100 %**, `B1` quedó en el 99 % (1 error de 158 decisiones) y `D2` siguió en el 100 %. |
+| `_fase11b` | **92,6** | La corrida que se reporta arriba: la misma Entrega 1 **con el reintento del enlace**. La nota bajó 1,5 puntos y la causa está medida: es el **audio de la planta**, que cambia entre corridas (§15, punto 16). Los criterios que miden el comportamiento del sistema (`D1`, `B2`, `E1`, `E3`, `F1`, `F2`, `F3`, `G1`) siguen en **100 %**. |
 
 Que la nota baje al corregir algo no es raro: `B1` y `D2` miden **decisiones**,
 y un arreglo que cambia una clasificación puede moverlas en las dos
@@ -2183,7 +2214,7 @@ describir sigue sin describir: nadie da por buena una foto que no se leyó.
 > línea cambiada**, `bien += bool(ok)`: primero reemplazando esa función en
 > memoria, y después con una **copia** del `puntuar.py` (para puntuar una
 > corrida completa, que es lo que `corregir.py` intenta al final y no puede).
-> Con ese cambio: **94,1** en la corrida de los 7 escenarios y 91,5 en la de los
+> Con ese cambio: **92,6** en la corrida de los 7 escenarios y 91,5 en la de los
 > dos. El `bool(ok)` no cambia el resultado: `ok` truthy es un booleano y
 > `ok` falso es una cadena vacía, así que el conteo es el mismo. El
 > repositorio del corrector quedó intacto (`git status` limpio).
