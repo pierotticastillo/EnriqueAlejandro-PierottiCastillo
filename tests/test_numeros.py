@@ -80,3 +80,45 @@ def test_un_guion_entre_digitos_no_es_un_rango() -> None:
     assert numero is not None
     assert numero.valor == pytest.approx(1600)
     assert numero.decimal is False
+
+
+def test_el_articulo_un_no_es_el_numero_uno() -> None:
+    """El "un" de "hace un golpeteo metálico" es un artículo.
+
+    Leído como el número uno arruinaba la nota: en "tiene un cubilo claro de
+    rodamiento" publicaba una temperatura de 1,0 °C que tapaba la lectura
+    buena de la misma fila, y en "la un está en 115 kilos" el artículo se
+    comía la medición.
+    """
+    assert parsear_numero("hace un golpeteo metálico") is None
+    assert parsear_numero("tiene un ruido raro de rodamiento") is None
+    numero = parsear_numero("la un esta en 115 kilos de descarga")
+    assert numero is not None
+    assert numero.valor == pytest.approx(115)
+
+
+def test_el_un_es_numero_cuando_el_contexto_lo_pide() -> None:
+    """Hay "un" que **sí** es el número uno."""
+    # "cincuenta y un grados": lo une la "y".
+    numero = parsear_numero("el rodamiento medio 50 y un grados con la pistola")
+    assert numero is not None
+    assert numero.valor == pytest.approx(51)
+    # "un metro": lo que sigue es una unidad.
+    numero = parsear_numero("el pulmon esta en un metro")
+    assert numero is not None
+    assert numero.valor == pytest.approx(1)
+    # "un con tres": es un decimal.
+    numero = parsear_numero("el filtro A medio un con tres de diferencial")
+    assert numero is not None
+    assert numero.valor == pytest.approx(1.3)
+    # "3 horas y un minuto": el "un" es otra cosa, no un 4.
+    numero = parsear_numero("fueron 3 horas y un minuto")
+    assert numero is not None
+    assert numero.valor == pytest.approx(3)
+
+
+def test_la_cantidad_de_un_repuesto_se_lee_sin_la_regla_del_articulo() -> None:
+    """"Usé un kit de empaquetadura" es **un** kit: ahí el "un" es la cantidad."""
+    numero = parsear_numero("use un kit de empaquetadura", articulos=False)
+    assert numero is not None
+    assert numero.valor == pytest.approx(1)

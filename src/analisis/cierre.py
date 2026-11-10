@@ -552,7 +552,9 @@ def _cantidad_antes(ventana: str) -> float | None:
         if decimal is not None:
             return round(float(decimal.group(1)) + float(decimal.group(2)) / 10, 2)
         resto = " ".join(palabras[inicio:])
-        dicho = parsear_numero(resto)
+        # La cantidad se lee sin la regla del artículo: en "usé un kit de
+        # empaquetadura" el "un" **sí** es la cantidad (uno).
+        dicho = parsear_numero(resto, articulos=False)
         if dicho is None:
             continue
         if not normalizar(resto).startswith(normalizar(dicho.dijo)):

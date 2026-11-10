@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass
 
 from planta.texto import normalizar
+from planta.unidades import normalizar_unidad
 
 UNIDADES = {
     "cero": 0,
@@ -86,6 +87,16 @@ DIGITOS = {
     "nueve",
 }
 MARCADORES_DECIMALES = {"coma", "con", "punto"}
+
+# "un" y "una" son artículos la mayoría de las veces: "hace un golpeteo
+# metálico", "tiene un ruido raro de rodamiento". Leídos como el número uno
+# arruinaban la nota: en "tiene un cubilo claro de rodamiento" se publicaba
+# una temperatura de 1,0 °C que **tapaba** la lectura buena de la misma
+# fila, y en "la un está en 115 kilos" el artículo se comía la medición.
+# Sólo son el número cuando los une ("cincuenta y un grados"), cuando lo que
+# sigue es un decimal ("un con tres") o cuando lo que sigue es una unidad
+# ("un metro", "un grado").
+_ARTICULOS = ("un", "una")
 # El ASR a veces abre un espacio después de la coma del decimal: "0, 4 de
 # diferencial" por "cero coma cuatro". Sin contemplarlo, el cero se leía
 # como el número y el 0,4 se perdía: el diferencial quedaba en 0 y disparaba
@@ -162,8 +173,29 @@ def _fraccion(tokens: list[str], inicio: int) -> tuple[float | None, int]:
     return valor, fin
 
 
-def parsear_numero(texto: str) -> NumeroDicho | None:
-    """Devuelve el primer número dicho en ``texto``, o ``None``."""
+def _es_articulo(tokens: list[str], indice: int) -> bool:
+    """Si el "un"/"una" de esta posición es un artículo y no el número uno."""
+    if indice > 0 and tokens[indice - 1] == "y":
+        # "cincuenta y un grados": es el número.
+        return False
+    siguiente = tokens[indice + 1] if indice + 1 < len(tokens) else ""
+    if siguiente in MARCADORES_DECIMALES:
+        # "un con tres": es el número.
+        return False
+    if normalizar_unidad(siguiente) or siguiente == "diferencial":
+        # "un metro", "un grado": es el número.
+        return False
+    return True
+
+
+def parsear_numero(texto: str, *, articulos: bool = True) -> NumeroDicho | None:
+    """Devuelve el primer número dicho en ``texto``, o ``None``.
+
+    Con ``articulos`` (el valor por defecto) el "un"/"una" de "hace un
+    golpeteo metálico" se lee como artículo y no como el número uno.
+    Las **cantidades** se leen con ``articulos=False``: ahí el "un" sí es la
+    cantidad ("usé un kit de empaquetadura" es un kit).
+    """
     tokens = TOKEN.findall(_DECIMAL_CON_GUION.sub(r"\1,\2", normalizar(texto)))
 
     for i, token in enumerate(tokens):
@@ -178,6 +210,19 @@ def parsear_numero(texto: str) -> NumeroDicho | None:
                 )
             compacto = token.replace(" ", "")
             valor = float(compacto.replace(",", "."))
+            # "50 y un grados": el ASR escribe la parte entera en dígitos y la
+            # que sigue en palabras ("cincuenta y un grados" -> "50 y un
+            # grados"). Sin esto se leía 50 y la temperatura quedaba un grado
+            # abajo: el operador no confirmaba el borrador. Sólo se corrige
+            # cuando lo que sigue es una unidad: en "3 horas y un minuto" el
+            # "un" es otra cosa.
+            if i + 3 < len(tokens) and tokens[i + 1] == "y" and tokens[i + 2] in ("un", "uno"):
+                if normalizar_unidad(tokens[i + 3]):
+                    return NumeroDicho(
+                        valor + 1,
+                        decimal=False,
+                        dijo=f"{token} y {tokens[i + 2]}",
+                    )
             # "0 con 3": el ASR escribe el decimal con la parte entera en
             # dígitos y la fracción en palabras ("cero con tres" -> "0 con
             # 3"). Sin esto se leía 0 y el diferencial de 0,3 quedaba por
@@ -200,6 +245,11 @@ def parsear_numero(texto: str) -> NumeroDicho | None:
         if i + 1 < len(tokens) and token in DIGITOS and tokens[i + 1] in DIGITOS:
             valor = UNIDADES[token] + UNIDADES[tokens[i + 1]] / 10
             return NumeroDicho(valor, decimal=True, dijo=f"{token} {tokens[i + 1]}")
+
+        if articulos and token in _ARTICULOS and _es_articulo(tokens, i):
+            # Es el artículo de "hace un golpeteo metálico": no es una
+            # medición. Se sigue buscando el número de verdad.
+            continue
 
         entero, j = _entero(tokens, i)
         if entero is None:

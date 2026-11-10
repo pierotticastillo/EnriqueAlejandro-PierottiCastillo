@@ -434,3 +434,70 @@ def test_presion_dicha_en_otra_unidad_se_convierte(planta: dict) -> None:
     assert fila.tag == "B-102"
     assert fila.unidad == "psi"
     assert fila.valor == pytest.approx(1635.68, abs=0.1)
+
+
+def test_el_sintoma_no_se_pierde_cuando_la_clausula_trae_medicion(planta: dict) -> None:
+    """La medición y el síntoma pueden venir en la misma cláusula.
+
+    El técnico dice "el rodamiento me dio 61 grados con la pistola, hace un
+    golpeteo metálico", pero el ASR a veces pierde la coma. Con las dos
+    ideas juntas, la cláusula se tomaba como una temperatura y el síntoma se
+    perdía: la fila de ruido no se publicaba y el equipo no se escalaba,
+    aunque la verdad de campo diga que hay que escalarlo.
+
+    La transcripción es la real de la corrida `_fase9` (NOTA-00011 de
+    `tormenta-perfecta`).
+    """
+    extraccion = ExtractorParte(planta).extraer(
+        "La dos está en 1620 de descarga el rodamiento medio 61 grados con la pistola "
+        "hace un golpeteo metálico."
+    )
+    assert _filas(extraccion) == [
+        ("B-102", "presion_descarga_local", 1620.0, "psi", None),
+        ("B-102", "temperatura_rodamiento_ir", 61.0, "degC", None),
+        ("B-102", "ruido", None, None, "hace un golpeteo metálico"),
+    ]
+
+
+def test_el_sintoma_no_secome_la_medicion_del_equipo_de_al_lado(planta: dict) -> None:
+    """La cláusula del síntoma y la del otro equipo van separadas.
+
+    "La dos está en 1630 de descarga, hace un golpeteo metálico, la de la
+    punta está en 114 de descarga": sin partir donde arranca la frase del
+    síntoma, la medición de la punta se leía como 1 (el "un" del artículo) y
+    el ruido se perdía.
+
+    La transcripción es la real de la corrida `_fase9` (NOTA-00014 de
+    `tormenta-perfecta`).
+    """
+    extraccion = ExtractorParte(planta).extraer(
+        "La dos está en 1630 de descarga, hace un golpeteo metálico, la de la punta "
+        "está en 114 de descarga el rodamiento, medio 50 y un grados con la pistola, el pulmón"
+    )
+    assert _filas(extraccion) == [
+        ("B-102", "presion_descarga_local", 1630.0, "psi", None),
+        ("B-102", "ruido", None, None, "hace un golpeteo metálico"),
+        ("B-101", "presion_descarga_local", 114.0, "kg/cm2", None),
+        ("B-101", "temperatura_rodamiento_ir", 51.0, "degC", None),
+    ]
+
+
+def test_el_articulo_un_no_tapa_la_temperatura(planta: dict) -> None:
+    """El "un" de "tiene un cubilo claro de rodamiento" no es el número uno.
+
+    Leído como 1, publicaba una temperatura de 1,0 °C que **tapaba** la
+    lectura buena (96 °C) de la misma fila: el operador no confirmaba el
+    borrador porque el número no era el que dijo.
+
+    La transcripción es la real de la corrida `_fase10` (NOTA-00014 de
+    `contratista`).
+    """
+    extraccion = ExtractorParte(planta).extraer(
+        "El filtro A, medio uno con tres de diferencial, en la bomba el rodamiento, "
+        "medio 96 grados con la pistola, tiene un cubilo claro de rodamiento."
+    )
+    filas = _filas(extraccion)
+    assert ("F-201A", "presion_diferencial", 1.3, "kg/cm2", None) in filas
+    temperaturas = [f for f in filas if f[1] == "temperatura_rodamiento_ir"]
+    assert len(temperaturas) == 1
+    assert temperaturas[0][2] == 96.0

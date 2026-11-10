@@ -106,6 +106,48 @@ _CUE_ESTADO = (
 _CUE_REBALSE = ("rebals", "rebalse")
 
 
+# El técnico dice el síntoma con su propio verbo ("hace un golpeteo
+# metálico", "tiene un ruido raro de rodamiento", "chorrea por la
+# empaquetadura"). La frase se busca con ese verbo delante para poder
+# encontrar **dónde arranca** cuando el ASR juntó dos ideas en una sola
+# cláusula (ver ``_separar_sintoma``).
+_FRASE_SINTOMA = re.compile(
+    r"\b(?:hace|tiene|suena|sigue|chorrea|gotea|pierde)\b"
+    r"(?:\s+\w+){0,4}?"
+    r"\s+\b(?:golpeteo|piedras|ruido|correas|correa|empaquetadura|aceite)\b"
+)
+
+
+def _separar_sintoma(norm: str) -> list[str]:
+    """Parte una cláusula que junta una medición con un síntoma.
+
+    El técnico dice las dos ideas separadas por una coma ("el rodamiento me
+    dio 61 grados con la pistola, hace un golpeteo metálico"). Cuando
+    el ASR pierde esa coma, las dos ideas quedan en la misma cláusula y pasa
+    algo que no puede pasar: el síntoma se perdía (la fila de ruido no se
+    publicaba, así que el equipo no se escalaba) y la fila de la medición
+    tomaba el número del artículo ("hace un golpeteo metálico" se
+    leía como 1). Se parte donde arranca la frase del síntoma y cada idea va
+    en su fila, en el orden en que se dijeron.
+    """
+    coincidencia = _FRASE_SINTOMA.search(norm)
+    if coincidencia is None:
+        return [norm]
+
+    inicio = coincidencia.start()
+    corte = len(norm)
+    for separador in ",.;:":
+        posicion = norm.find(separador, inicio)
+        if posicion != -1:
+            corte = min(corte, posicion)
+
+    antes = norm[:inicio].strip(" ,")
+    sintoma = norm[inicio:corte].strip(" ,")
+    despues = norm[corte:].strip(" ,")
+    partes = [parte for parte in (antes, sintoma, despues) if parte]
+    return partes if len(partes) > 1 else [norm]
+
+
 def _menciona(norm: str, cues: tuple[str, ...]) -> bool:
     """Si el texto dice alguna de las palabras, **completa**.
 
@@ -270,6 +312,18 @@ class ExtractorParte:
         if not norm:
             return
 
+        # Una cláusula puede traer dos ideas cuando el ASR perdió la coma
+        # que las separaba ("... con la pistola hace un golpeteo
+        # metálico"). Se parte para que la medición y el síntoma vayan cada
+        # uno en su fila.
+        partes = _separar_sintoma(norm)
+        if len(partes) > 1:
+            for parte in partes:
+                self._procesar_parte(parte)
+            return
+        self._procesar_parte(norm)
+
+    def _procesar_parte(self, norm: str) -> None:
         mencion = self.resolver.resolver(norm)
         resto = norm
         if mencion is not None:
