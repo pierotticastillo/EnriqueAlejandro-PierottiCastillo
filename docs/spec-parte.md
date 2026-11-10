@@ -99,6 +99,16 @@ El presupuesto es un objeto (`agente/presupuesto.py`) con tres límites y un
 reloj. Cuando se agota uno, dice **por qué** se cortó: ese motivo queda en la
 bitácora.
 
+El reloj se comprueba **antes de cada vuelta** del modelo (la guarda
+`_GuardaPresupuesto`), no después: una etapa que ya se pasó el plazo no
+arranca otra vuelta, así que el timeout global no se puede pasar "por una
+vuelta más". La guarda se engancha siempre, haya bitácora o no.
+
+El timeout de **cada llamada** al modelo es el presupuesto entero
+(`AGENTE_TIMEOUT_S`), no el del redactor: con el modelo local una vuelta
+tarda entre 60 y 110 s, así que con el timeout del redactor (90 s) algunas
+vueltas morían por la red en vez de cortarse por el presupuesto.
+
 ## 5. La trayectoria
 
 Cada paso queda registrado con lo que el enunciado pide (sección F): **el

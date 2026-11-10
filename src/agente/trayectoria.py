@@ -202,6 +202,10 @@ class TrazaAgente(BaseCallbackHandler):
     # ------------------------------------------------------------------ modelo
 
     def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], **kwargs: Any) -> None:
+        if self._presupuesto is not None:
+            # Si el plazo ya se pasó, la vuelta no arranca: el corte es del
+            # presupuesto, no un error de red.
+            self._presupuesto.exigir_vivo()
         run_id = str(kwargs.get("run_id") or "")
         self._inicios[run_id] = time.monotonic()
         parametros = kwargs.get("invocation_params") or {}

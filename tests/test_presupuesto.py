@@ -83,6 +83,27 @@ def test_el_corte_que_se_anota_no_se_pisa() -> None:
     assert presupuesto.corte == "el modelo falló"
 
 
+def test_una_etapa_sin_tiempo_no_empieza_otra_vuelta() -> None:
+    """El plazo se comprueba **antes** de la vuelta, no después.
+
+    Sin esto, el presupuesto sólo se miraba cuando la vuelta terminaba: una
+    etapa que ya se había pasado el plazo igual arrancaba otra vuelta y se
+    iba más allá del timeout global.
+    """
+    presupuesto = Presupuesto(timeout_s=0.01)
+    time.sleep(0.02)
+    with pytest.raises(PresupuestoAgotado):
+        presupuesto.exigir_vivo()
+    assert "timeout global" in (presupuesto.corte or "")
+
+
+def test_una_etapa_con_tiempo_arranca_la_vuelta() -> None:
+    """Con plazo, la vuelta arranca: no se corta antes de tiempo."""
+    presupuesto = Presupuesto(max_pasos=6, max_tokens=4000, timeout_s=30)
+    presupuesto.exigir_vivo()
+    assert presupuesto.corte is None
+
+
 def test_el_resumen_cuentra_lo_gastado() -> None:
     """El resumen es lo que queda escrito en la bitácora."""
     presupuesto = Presupuesto(max_pasos=6, max_tokens=4000, timeout_s=120)

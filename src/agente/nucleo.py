@@ -27,6 +27,7 @@ import logging
 from typing import Any
 
 from langchain.agents import create_agent
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
@@ -36,6 +37,27 @@ from agente.presupuesto import Presupuesto, PresupuestoAgotado
 from agente.tools import construir_tools
 
 logger = logging.getLogger("agente.nucleo")
+
+
+class _GuardaPresupuesto(BaseCallbackHandler):
+    """Comprueba el presupuesto **antes** de cada vuelta del modelo.
+
+    El corte del presupuesto no puede depender de que haya una bitácora: sin
+    base de datos tampoco hay callback que lo compruebe, y entonces la
+    consulta se pasaba del plazo sin que nadie lo notara. Con esta guarda,
+    el presupuesto manda siempre: si el plazo global ya se pasó, la vuelta no
+    arranca y el corte queda escrito.
+    """
+
+    # Si la guarda falla, el error sube: es una condición de corte, no algo
+    # que pueda quedar anotado en el log y seguir.
+    raise_error = True
+
+    def __init__(self, presupuesto: Presupuesto) -> None:
+        self._presupuesto = presupuesto
+
+    def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], **kwargs: Any) -> None:
+        self._presupuesto.exigir_vivo()
 
 #: Cuántas **vueltas del modelo** puede dar el agente como máximo. Es el
 #: "presupuesto de pasos" del anexo: el agente no puede seguir consultando
@@ -151,6 +173,10 @@ class AgenteAnalisis:
         justificación determinista sigue estando.
         """
         handlers = list(self._callbacks) + list(callbacks or [])
+        if presupuesto is not None:
+            # La guarda va siempre: el presupuesto es el que corta, haya
+            # bitácora o no.
+            handlers.insert(0, _GuardaPresupuesto(presupuesto))
         mensajes: list[Any] = []
         try:
             resultado = self._agente.invoke(
@@ -350,7 +376,16 @@ def crear_agente(
         return None
     from langchain_ollama import ChatOllama
 
-    cliente_kwargs: dict[str, Any] = {"timeout": settings.ollama_timeout_s}
+    # El timeout de **cada llamada** al modelo es el presupuesto entero de la
+    # consulta, no el timeout del redactor: medido en la planta simulada, una
+    # vuelta del modelo local tarda entre 60 y 110 s (se descarga de memoria
+    # entre llamadas), así que con el timeout del redactor (90 s) algunas
+    # vueltas morían por la red en vez de cortarse por el presupuesto. Con
+    # este valor, quien corta es siempre el presupuesto, y el presupuesto
+    # comprueba el plazo **antes** de cada vuelta (`exigir_vivo`).
+    cliente_kwargs: dict[str, Any] = {
+        "timeout": getattr(settings, "agente_timeout_s", settings.ollama_timeout_s)
+    }
     proxy = getattr(settings, "ollama_proxy", None) or None
     if proxy:
         # `trust_env=False`: el tráfico no sale por el proxy del entorno. Si

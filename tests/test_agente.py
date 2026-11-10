@@ -373,6 +373,46 @@ def test_si_el_modelo_falla_no_rompe_nada() -> None:
     assert agente.consultar("probá", permitidas=("TX350-D §8.3",)) is None
 
 
+def test_el_timeout_de_la_llamada_no_es_menor_que_el_presupuesto() -> None:
+    """El presupuesto es el que corta, no la red.
+
+    Medido en la planta simulada: una vuelta del modelo local tarda entre
+    60 y 110 s (se descarga de memoria entre llamadas). Con el timeout del
+    redactor (90 s) algunas vueltas morían por la red, y el corte quedaba
+    escrito como un fallo del modelo en vez de una condición de corte.
+    """
+    from agente.nucleo import crear_agente
+    from config import Settings
+
+    settings = Settings(llm_activo=True, agente_timeout_s=420, ollama_timeout_s=90)
+    agente = crear_agente(settings, cliente=ClienteFalso(), catalogo=_catalogo())
+    assert agente is not None
+    timeout = agente._modelo.client_kwargs.get("timeout")  # noqa: SLF001
+    assert timeout == 420
+
+
+def test_la_consulta_se_corta_si_el_plazo_ya_se_paso() -> None:
+    """Una consulta que arranca sin plazo no llega a llamar al modelo.
+
+    El presupuesto se comprueba antes de cada vuelta: si el plazo global ya
+    se pasó, la vuelta no arranca y el corte queda escrito.
+    """
+    import time as _tiempo
+
+    from agente.presupuesto import Presupuesto
+
+    presupuesto = Presupuesto(max_pasos=6, max_tokens=12000, timeout_s=0.01)
+    _tiempo.sleep(0.02)
+    agente = _agente()
+    assert agente.consultar(
+        "probá",
+        permitidas=("TX350-D §8.3",),
+        presupuesto=presupuesto,
+    ) is None
+    assert presupuesto.corte is not None
+    assert "timeout global" in presupuesto.corte
+
+
 # ------------------------------------------------------------------- el cierre
 
 

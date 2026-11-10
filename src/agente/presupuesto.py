@@ -89,6 +89,19 @@ class Presupuesto:
         if self.corte is None:
             self.corte = motivo
 
+    def exigir_vivo(self) -> None:
+        """Si la etapa ya no puede seguir, la corta.
+
+        Se llama **antes** de cada vuelta del modelo: sin esto, el presupuesto
+        sólo se comprobaba cuando la vuelta terminaba, así que una etapa sin
+        tiempo podía arrancar una vuelta más y pasarse del plazo. Acá el
+        corte es real: la vuelta no empieza.
+        """
+        motivo = self.motivo_corte()
+        if motivo is not None:
+            self.corte = motivo
+            raise PresupuestoAgotado(motivo)
+
     def consumir_paso(
         self,
         tokens_prompt: int = 0,

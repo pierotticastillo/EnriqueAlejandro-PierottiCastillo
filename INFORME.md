@@ -1732,6 +1732,21 @@ El `recursion_limit` de LangChain (`pasos × 2 + 2`) acota el ciclo del
 agente por debajo; el presupuesto es la segunda red, y la que **deja
 constancia** de por qué se cortó.
 
+**El presupuesto se comprueba antes de cada vuelta, no después.** Es lo que
+hace que el timeout sea global de verdad: una etapa que ya se pasó el plazo
+no arranca otra vuelta, así que el plazo no se puede pasar "por una vuelta
+más". La comprobación vive en una guarda que se engancha al agente siempre
+(`_GuardaPresupuesto`), no en la bitácora: sin base de datos tampoco hay
+callback que la compruebe, y entonces la consulta se iría del plazo sin que
+nadie lo notara.
+
+Por lo mismo, el **timeout de cada llamada al modelo** es el presupuesto
+entero y no el timeout del redactor (`OLLAMA_TIMEOUT_S`, 90 s): medido en la
+planta simulada, una vuelta del modelo local tarda entre 60 y 110 s, así que
+con 90 s algunas vueltas morían **por la red** y el corte quedaba escrito
+como un fallo del modelo en vez de una condición de corte del presupuesto.
+Con 420 s, quien corta es siempre el presupuesto.
+
 ### 12.5 La mini spec
 
 [`docs/spec-parte.md`](docs/spec-parte.md) es la especificación corta del
