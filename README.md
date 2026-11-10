@@ -688,8 +688,8 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **442 passed** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose. Sin base quedan **417 passed, 25 skipped** (los de
+Resultado actual: **448 passed** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose. Sin base quedan **423 passed, 25 skipped** (los de
 idempotencia/constraints y los del índice RAG), porque necesitan la base
 levantada.
 

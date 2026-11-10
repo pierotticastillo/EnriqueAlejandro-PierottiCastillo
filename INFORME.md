@@ -1120,8 +1120,8 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **442 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **417 passed, 25 skipped** sin base: los omitidos son los tests de
+- **448 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **423 passed, 25 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
 - `ruff check .` sin observaciones.
 
@@ -1644,10 +1644,12 @@ anterior el mismo síntoma estaba garblado en todas las notas y, de un evento
 sin escalar, no sale orden: el sistema no inventa una orden para una falla que
 no vio escalada.
 
-#### Los trece defectos que encontró la corrida, y que están corregidos
+#### Los dieciséis defectos que encontraron las corridas, y que están corregidos
 
 La corrida completa de los siete escenarios no sólo mide: también **enseña**.
-Salieron trece defectos reales del sistema, cada uno con un test que lo fija:
+Salieron dieciséis defectos reales del sistema, cada uno con un test que lo
+fija: trece los encontró la corrida de los siete escenarios y tres salieron al
+volver a medir **todas** las corridas sobre el mismo corpus.
 
 | # | Defecto | Qué pasaba | Arreglo |
 |---|---|---|---|
@@ -1664,6 +1666,9 @@ Salieron trece defectos reales del sistema, cada uno con un test que lo fija:
 | 11 | **El decimal con espacio se leía como el entero** | El ASR abre un espacio después de la coma del decimal: «el filtro A, medio 0, 4 de diferencial». El lector de números sólo aceptaba el separador pegado («0,4»), así que leía **0** y el 0,4 se perdía: el diferencial del filtro A quedaba en 0 kg/cm², por debajo de la alarma (0,15), y disparaba «diferencial bajo» —el equipo se escalaba donde la verdad de campo decía que no había novedad. | El separador con espacio se lee igual que el pegado, en el decimal y en el millar (`planta/numeros.py`). |
 | 12 | **El segundo equipo de una cláusula quedaba escondido** | El ASR junta con una coma dos frases que el técnico dijo separadas: «el filtro B me dio uno de diferencial, además la 3 está parada por mantenimiento». El extractor tomaba el **primer** nombre de equipo de la cláusula y el segundo no se veía: la fila de la bomba en reserva no se publicaba y **su evento no salía**. | La cláusula se parte cuando nombra dos equipos y entre los dos hay una medición (o sea, cuando la primera parte ya es una idea completa): «el manómetro de la uno» no se parte (`planta/parte_extractor.py`). |
 | 13 | **El decimal que el ASR escribe con la parte entera en dígitos** | El ASR escribe «0 **con** 3 de diferencial» por «cero coma tres»: la parte entera en dígitos y la fracción en palabras. El lector de números se quedaba con el 0, así que un diferencial de 0,3 kg/cm² quedaba por debajo de la alarma (0,15) y disparaba «diferencial bajo»: el filtro se escalaba donde la verdad de campo decía que no había novedad. | «0 con 3», «1 coma 2» y «1 punto 5» se leen como el decimal que son (\planta/numeros.py). |
+| 14 | **La fila de ruido se perdía cuando la cláusula traía la medición** | El ASR a veces pierde la coma entre las dos ideas: «el rodamiento me dio 61 grados con la pistola, hace un golpeteo metálico» llega como **una sola cláusula**. La cláusula se tomaba como una temperatura y el síntoma se perdía: la fila de ruido no se publicaba y el equipo **no se escalaba**, aunque la verdad de campo diga que hay que escalarlo. | La cláusula se parte donde arranca la frase del síntoma (el verbo del técnico más la palabra del síntoma) y cada idea va en su fila, en el orden en que se dijeron (`planta/parte_extractor.py`). |
+| 15 | **El artículo «un» se leía como el número uno** | «Tiene un cubilo claro de rodamiento» publicaba una temperatura de **1,0 °C** que tapaba la lectura buena (96 °C) de la misma fila: el operador no confirmaba el borrador porque el número no era el que dijo. Y en «la un está en 115 kilos de descarga» el artículo se comía la medición. | El lector de números distingue el artículo del número: el «un» es número cuando lo une la «y» («cincuenta y un»), cuando lo sigue un decimal («un con tres») o una unidad («un metro»). Las **cantidades** se leen sin esa regla: «usé un kit» es un kit (`planta/numeros.py`, `analisis/cierre.py`). |
+| 16 | **«50 y un grados» se leía 50** | El ASR escribe la parte entera en dígitos y la que sigue en palabras («cincuenta y un grados» → «50 y un grados»): la temperatura del rodamiento quedaba un grado abajo (50 en vez de 51) y el operador **no confirmaba** el borrador, porque la comparación con la verdad de campo tiene una tolerancia de 0,05 °C y 50 no es 51. | En la rama de dígitos, si sigue «y» + «un/uno» + una unidad, el valor es el entero más uno («3 horas y un minuto» sigue siendo 3) (`planta/numeros.py`). |
 
 Todos son **defectos del sistema, no del ASR**: ocurrían con transcripciones
 correctas (el 5 y el 6 con las correcciones del propio operador virtual, el 8
@@ -1676,10 +1681,41 @@ frase que el ASR transcribía bien. Los tres últimos (10, 11 y 12) también:
 lo que el ASR escribió es lo que se oyó— y el sistema perdía la fila o la
 cifra.
 
-La corrida `_fase10` (93,1) **no encontró ningún defecto nuevo**: los
-cinco errores de `B1` que quedaron son del decodificador (tres síntomas «golpeteo
-metálico» garblados y una nota que llegó al final del escenario) y ninguna
-decisión del sistema está detrás de ellos.
+Los tres últimos que se agregaron (14, 15 y 16) también son defectos del
+sistema, y se encontraron **volviendo a correr el extractor sobre todo el
+corpus**: las 925 notas de todas las corridas, leídas dos veces (el texto
+verdadero de campo y la transcripción real del ASR). El 14 se disparaba con
+la transcripción perfectamente legible de la `NOTA-00011` de
+`tormenta-perfecta`; el 15, con una frase que el ASR transcribió bien («tiene
+un cubilo claro de rodamiento»); y el 16, con «50 y un grados», que el ASR
+escribe con la parte entera en dígitos.
+
+#### Cómo se midieron: el corpus entero, nota por nota
+
+Para no corregir a ciegas, cada arreglo se mide sobre **todas** las corridas, no
+sobre la última. El extractor se corre dos veces por nota —una con el texto
+**verdadero** de campo y otra con la transcripción **real** del ASR— y el
+resultado se compara fila por fila con la verdad, con la misma tolerancia que
+usa el corrector oficial. El corpus son las **925 notas** de las 19 corridas
+guardadas: 1791 lecturas (925 con el texto verdadero y 866 con la transcripción
+del decodificador).
+
+| | antes | después |
+|---|---:|---:|
+| notas completas | 1390 | **1392** |
+| notas que empeoran | — | **0** |
+
+Las dos que mejoran son la `NOTA-00010` de `contratista` (corrida `_fase6`) y la
+`NOTA-00011` de `tormenta-perfecta` (corrida `_fase9`): en las dos, el ASR había
+perdido la coma entre la medición y el síntoma.
+
+La corrida `_fase10` (93,1) **no encontró ningún defecto nuevo en los
+criterios**: los cinco errores de `B1` que quedaron son del decodificador
+(tres síntomas «golpeteo metálico» garblados y una nota que llegó al final
+del escenario) y ninguna decisión del sistema está detrás de ellos. Los
+defectos 14, 15 y 16 no salieron de una corrida nueva, sino de **volver a
+medir el corpus entero**: sobre las 1791 lecturas (925 notas × 2) los tres
+arreglos **mejoran 2 notas y no empeoran ninguna**.
 
 El defecto 5 es el más caro de los siete: con él, el equipo `B-102` de la
 nota `NOTA-00004` (`ataque`) quedaba con la presión equivocada, el operador

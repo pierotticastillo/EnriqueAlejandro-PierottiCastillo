@@ -394,7 +394,7 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Última verificación
 
-- `python -m pytest`: **442 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **417 pasaron, 25 omitidas**.
+- `python -m pytest`: **448 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **423 pasaron, 25 omitidas**.
 - `ruff check .`: **sin errores**.
 - **Corrector oficial, corrida completa (7 escenarios)**: **93,1/100 — APRUEBA**
   (`_fase10`, la corrida vigente), sin eliminatorias, 93 de 93 puntos medidos
@@ -456,6 +456,17 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
     nota se obtuvo cargando el módulo oficial **sin tocarlo** y corrigiendo esa
     función **en memoria** (`ok = bool(ok)`); el repositorio del corrector quedó
     con `git status` limpio.
+- **Volver a medir todo el corpus encontró tres defectos más** (14, 15 y 16),
+  ya corregidos y con un test cada uno: (a) la fila de ruido se perdía cuando
+  la cláusula traía la medición **y** el síntoma juntos —el ASR pierde la coma—
+  y el equipo no se escalaba; (b) el artículo «un» se leía como el número uno
+  («tiene un cubilo claro de rodamiento» publicaba 1,0 °C y **tapaba** la
+  lectura buena de 96 °C, así que el operador no confirmaba el borrador); y (c)
+  «50 y un grados» se leía 50 —el ASR escribe la parte entera en dígitos—, así
+  que la temperatura del rodamiento quedaba un grado abajo y el operador no
+  confirmaba. La medición es sobre las **925 notas de las 19 corridas**
+  (1791 lecturas: el texto verdadero de campo y la transcripción real del
+  ASR): **1390 → 1392 notas completas, 0 empeoran**.
 - Servidor MCP probado en vivo contra la planta: **8 tools**, todas con `additionalProperties: false` y `structuredContent` válido (`scripts/probar_mcp.py`).
 - Extractor contrastado contra la verdad de campo con las transcripciones reales del ASR (`scripts/analizar_notas.py`): el valor y la unidad coinciden en todas las filas comparables (la única que no se puede comparar es la de una nota que dice «la bomba», donde el sistema pregunta cuál de las tres es). El tipo de evento lo midió el **corrector oficial**: **141 de las 146 decisiones de B1** dan el tipo que espera (las 5 que no son las del §13: síntomas garblados por el ASR y una nota sin confirmar).
 - Índice RAG cargado contra la planta simulada y retrieval medido sobre la tabla `rag_chunk` real (704 fragmentos, 71 preguntas).
