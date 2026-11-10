@@ -306,7 +306,7 @@ class AgenteAnalisis:
         citas_ok: list[str] = []
         descartadas: list[str] = []
         for cita in propuesta.citas:
-            (citas_ok if _normalizar(cita) in conocidas else descartadas).append(cita)
+            (citas_ok if _cita_conocida(cita, conocidas) else descartadas).append(cita)
         if descartadas:
             logger.warning(
                 "El agente citó documentos desconocidos (%s): se descarta su propuesta",
@@ -425,6 +425,23 @@ def crear_agente(
 
 def _normalizar(texto: str) -> str:
     return " ".join(texto.strip().lower().split())
+
+
+def _cita_conocida(cita: str, conocidas: set[str]) -> bool:
+    """Si la cita es una de las conocidas.
+
+    El modelo escribe la cita **con el título de la sección**:
+    «MBP-4 §5.1: Límites de los sensores conectados» en vez de
+    «MBP-4 §5.1». La cita válida es la que lo precede: si esa parte está
+    entre las conocidas, la cita es la misma y no hace falta descartar la
+    propuesta entera. Lo que sigue al «:» no se usa para comparar: el título
+    no es parte de la cita.
+    """
+    texto = _normalizar(cita)
+    if texto in conocidas:
+        return True
+    base = texto.split(":", 1)[0].strip()
+    return bool(base) and base in conocidas
 
 
 def _esquema_cierre() -> dict[str, Any]:

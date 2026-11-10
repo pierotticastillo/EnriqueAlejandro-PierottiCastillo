@@ -496,6 +496,35 @@ def test_una_cita_que_mostro_la_herramienta_se_acepta() -> None:
     assert validada.citas == ("TX350-D §7.5",)
 
 
+def test_una_cita_con_el_titulo_de_la_seccion_se_acepta() -> None:
+    """El modelo escribe la cita con el título: la cita es la misma.
+
+    Escribe «MBP-4 §5.1: Límites de los sensores conectados» en vez de
+    «MBP-4 §5.1». La cita válida es la que precede al «:», así que la
+    propuesta no se descarta por un detalle de formato.
+    """
+    agente = _agente()
+    propuesta = PropuestaAgente(
+        falla="TX-T01",
+        citas=["TX350-D §8.3: Pérdida por empaquetadura"],
+        justificacion="porque sí",
+    )
+    validada = agente.validar(propuesta, permitidas=("TX350-D §8.3",))
+    assert validada is not None
+    assert validada.citas == ("TX350-D §8.3: Pérdida por empaquetadura",)
+
+
+def test_una_cita_con_titulo_de_un_documento_desconocido_se_descarta() -> None:
+    """El título no vuelve válida una cita de otro documento."""
+    agente = _agente()
+    propuesta = PropuestaAgente(
+        falla="TX-T01",
+        citas=["TX350-D §8.3: algo invented"],
+        justificacion="porque sí",
+    )
+    assert agente.validar(propuesta, permitidas=("MBP-4 §13.2",)) is None
+
+
 def test_el_agente_recoge_las_citas_de_las_herramientas() -> None:
     """Las citas que le devolvieron las tools son las que puede usar."""
     from langchain_core.messages import ToolMessage

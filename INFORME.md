@@ -2299,6 +2299,13 @@ repuestos**.
     modelo (`PRECIO_USD_POR_MILLON`), que con Ollama en la planta es 0 porque
     no hay nada que facturar. Con un modelo de nube se pone la tarifa y la
     columna se llena sola.
+20. **El corrector no puede medir la Central.** En la corrida, una orden
+    pendiente nunca se aprueba: el contrato de la planta no tiene un canal de
+    decisiones humanas, así que el planificador no llega a actuar y el escenario
+    no ejercita la aprobación. La Central es justamente ese canal —la decisión
+    la toma una persona, por HTTP, y queda auditada— pero para que el corrector
+    la midiera habría que sumar el canal al contrato y a la planta simulada.
+    Hoy queda para **revisión manual** (tests + verificación en vivo).
 
 ### Próximos pasos
 
