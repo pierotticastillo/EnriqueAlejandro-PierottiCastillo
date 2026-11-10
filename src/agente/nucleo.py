@@ -78,6 +78,11 @@ class _ModeloConReintentos(ChatOllama):
 
     Sólo se reintenta lo que es **transitorio** (la red se cayó). Un error
     del modelo (un esquema inválido, say) no se reintenta: se propaga.
+
+    El reintento **respeta el presupuesto**: el plazo de la consulta llega
+    al modelo por el contexto de la llamada, así que si ya no queda tiempo
+    el reintento no arranca y el corte queda anotado como condición de
+    corte.
     """
 
     #: Cuántos intentos tiene cada llamada (1 = sin reintento).

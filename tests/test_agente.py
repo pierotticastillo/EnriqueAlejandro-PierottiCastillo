@@ -638,6 +638,64 @@ def test_el_reintento_respeta_el_presupuesto() -> None:
     assert len(llamadas) == 1
 
 
+def test_el_reintento_aguanta_un_enlace_que_se_corta() -> None:
+    """El error real del enlace se reintenta, sin monkeypatchear nada.
+
+    Acá no se simula el fallo: se levanta un servidor que **corta la
+    conexión** en la primera llamada, tal como hace el proxy de la planta
+    cuando se cae el radioenlace, y se verifica que la segunda llamada
+    responde. Es el camino completo: ``httpx`` ve la conexión cortada, el
+    cliente de Ollama la envuelve y el reintento la reconoce.
+    """
+    import http.server
+    import threading
+
+    from agente.nucleo import _ModeloConReintentos
+
+    llamadas: list[int] = []
+
+    class _Servidor(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 - lo exige la clase
+            llamadas.append(1)
+            if len(llamadas) == 1:
+                # Corta la conexión sin responder: es lo que hace el proxy.
+                self.close_connection = True
+                self.connection.close()
+                return
+            cuerpo = json.dumps(
+                {
+                    "model": "qwen2.5:3b-instruct",
+                    "message": {"role": "assistant", "content": "hola"},
+                    "done": True,
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.end_headers()
+            self.wfile.write(cuerpo)
+
+        def log_message(self, *args: Any) -> None:
+            """Silencio el servidor: el test no quiere ruido."""
+
+    servidor = http.server.HTTPServer(("127.0.0.1", 0), _Servidor)
+    hilo = threading.Thread(target=servidor.serve_forever, daemon=True)
+    hilo.start()
+    try:
+        modelo = _ModeloConReintentos(
+            model="qwen2.5:3b-instruct",
+            base_url=f"http://127.0.0.1:{servidor.server_port}",
+            max_intentos=2,
+            espera_reintento_s=0.01,
+        )
+        salida = modelo.invoke([HumanMessage(content="probá")])
+    finally:
+        servidor.shutdown()
+        servidor.server_close()
+    assert salida.content == "hola"
+    assert len(llamadas) == 2
+
+
 def test_el_agente_recoge_las_citas_de_las_herramientas() -> None:
     """Las citas que le devolvieron las tools son las que puede usar."""
     from langchain_core.messages import ToolMessage
