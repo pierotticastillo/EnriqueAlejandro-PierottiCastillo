@@ -5,9 +5,18 @@ from __future__ import annotations
 import re
 import unicodedata
 
-# Ruido del ASR: cuando oye "reserva", a veces escribe "reservoir".
+# Ruido del ASR: cuando oye "reserva", a veces escribe "reservoir"; cuando
+# oye "cero", a veces escribe "ceo".
+#
+# El "ceo" era un defecto del sistema: la transcripción real del decodificador
+# decía "el filtro A, medio ceo, coma 3 de diferencial" y el diferencial se
+# publicaba como 3,0 kg/cm2 (con la observación "diferencial alto"), cuando
+# la verdad de campo era 0,3: el filtro se escalaba donde no había novedad.
+# La palabra "ceo" no existe en el español de la planta, así que el arreglo
+# es seguro. Salió en 7 notas de 5 corridas distintas.
 _RUIDO_ASR = {
     "reservoir": "reserva",
+    "ceo": "cero",
 }
 
 

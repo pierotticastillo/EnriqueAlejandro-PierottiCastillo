@@ -555,3 +555,22 @@ def test_el_articulo_un_no_tapa_la_temperatura(planta: dict) -> None:
     temperaturas = [f for f in filas if f[1] == "temperatura_rodamiento_ir"]
     assert len(temperaturas) == 1
     assert temperaturas[0][2] == 96.0
+
+
+def test_el_diferencial_con_ceo_no_se_publica_como_diferencial_alto(planta: dict) -> None:
+    """El ASR escribe "cero" como "ceo": el diferencial se leía diez veces mayor.
+
+    Con "medio ceo, coma 3" se publicaba 3,0 kg/cm2 con la observación
+    "diferencial alto", y el filtro se escalaba donde la verdad de campo
+    decía que no había novedad. La transcripción es la real de la corrida
+    `_fase12` (NOTA-00016 de `tormenta-perfecta`).
+    """
+    extraccion = ExtractorParte(planta).extraer(
+        "listo, el filtro A, medio ceo, coma 3 de diferencial, "
+        "la de la punta está en 113 kilos de descarga."
+    )
+
+    assert _filas(extraccion) == [
+        ("F-201A", "presion_diferencial", 0.3, "kg/cm2", None),
+        ("B-101", "presion_descarga_local", 113.0, "kg/cm2", None),
+    ]

@@ -122,3 +122,23 @@ def test_la_cantidad_de_un_repuesto_se_lee_sin_la_regla_del_articulo() -> None:
     numero = parsear_numero("use un kit de empaquetadura", articulos=False)
     assert numero is not None
     assert numero.valor == pytest.approx(1)
+
+def test_el_ceo_del_asr_se_lee_como_cero() -> None:
+    """El ASR escribe "cero" como "ceo" y el decimal se perdía.
+
+    La transcripción real del decodificador decía "el filtro A, medio ceo,
+    coma 3 de diferencial" y el diferencial se publicaba como 3,0 kg/cm2
+    (con la observación "diferencial alto"), cuando la verdad de campo era
+    0,3: el filtro se escalaba donde no había novedad. Salió en 7 notas de
+    5 corridas distintas.
+    """
+    numero = parsear_numero("el filtro A, medio ceo, coma 3 de diferencial")
+    assert numero is not None
+    assert numero.valor == pytest.approx(0.3)
+    assert numero.decimal is True
+    numero = parsear_numero("el primario medio ceo con 3 de diferencial")
+    assert numero is not None
+    assert numero.valor == pytest.approx(0.3)
+    numero = parsear_numero("el filtro B medio ceo coma 9 de diferencial")
+    assert numero is not None
+    assert numero.valor == pytest.approx(0.9)
