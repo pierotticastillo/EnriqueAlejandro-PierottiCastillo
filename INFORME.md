@@ -2328,6 +2328,14 @@ repuestos**.
     la toma una persona, por HTTP, y queda auditada— pero para que el corrector
     la midiera habría que sumar el canal al contrato y a la planta simulada.
     Hoy queda para **revisión manual** (tests + verificación en vivo).
+21. **El radioenlace de la planta simulada corta la conexión.** En la corrida
+    completa, cuatro consultas del agente se perdieron con «Server disconnected
+    without sending a response»: el proxy de la planta cierra los túneles y la
+    llamada se cae entera. No es un fallo del modelo ni del prompt. Con el
+    reintento (§12.4) la consulta se recupera una vez; si el enlace no vuelve,
+    el corte queda escrito en la bitácora y el sistema sigue por el camino
+    determinista. El presupuesto sigue mandando: el reintento no puede pasarse
+    del timeout global.
 
 ### Próximos pasos
 
@@ -2348,8 +2356,10 @@ repuestos**.
 6. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
    cuando cambie la planta.
 7. Medir el **agente contra el baseline** (la justificación determinista) con
-   el mismo corpus de la corrida de 93,1: hoy el agente está verificado con
-   tests, pero todavía no con la corrida completa.
+   el mismo corpus de la corrida completa: hoy el agente está verificado con
+   tests y con la corrida de los 7 escenarios (la trayectoria muestra las
+   consultas con su modelo, sus tokens y su tiempo), pero falta medir cuánto
+   aporta la justificación del agente sobre la del cruce léxico.
 8. Ponerle **autenticación** a la Central si la planta la expone fuera de la
    red interna.
 

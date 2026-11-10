@@ -535,6 +535,15 @@ Cuando se agota uno, el corte es una **condición prevista**: queda escrito en
 la bitácora con su motivo y el sistema sigue por el camino determinista. La
 spec completa está en [`docs/spec-parte.md`](docs/spec-parte.md).
 
+**Si se cae el enlace, la llamada al modelo reintenta una vez.** En la planta
+simulada el radioenlace se cae y el proxy cierra los túneles: el cliente ve
+«Server disconnected without sending a response» y la consulta se pierde
+entera, aunque el modelo no haya hecho nada malo. El reintento
+(`AGENTE_MAX_INTENTOS=2`) vive **en la llamada**, así que cubre la consulta y
+el cierre sin repetir las consultas a las herramientas; sólo se reintenta lo
+**transitorio** (la red), y respeta el presupuesto: si ya no queda tiempo, no
+reintenta y el corte queda anotado.
+
 ## Registro de la trayectoria
 
 El enunciado (sección F) pide: *"cada decisión queda registrada con el modelo
