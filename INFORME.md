@@ -1579,6 +1579,62 @@ servidor MCP, así que el agente no tiene forma de aprobar nada. Y el prompt
 ficha de la falla, las causas del catálogo, las tareas ya decididas y el
 resultado de las reglas.
 
+#### El cierre estructurado: por qué la propuesta tiene dos caminos
+
+Con el modelo local de 3B (`qwen2.5:3b-instruct`, el único de la lista
+cerrada que corre en la planta) el agente **nunca** devolvía una propuesta
+válida. No era un problema de prompt sino del camino de salida: el modelo
+consultaba bien —llamaba a las tools y leía los manuales— pero **no llamaba a
+la herramienta de salida** y escribía la propuesta en prosa. En la corrida
+completa del corrector, el log lo decía una y otra vez: *«El agente no
+devolvió una propuesta válida»*.
+
+La salida estructurada nativa de Ollama (`format` con el JSON schema)
+resuelve el problema, pero **no se puede usar dentro del ciclo de
+herramientas**: Ollama no acepta `format` y tool calls en la misma petición.
+Por eso el agente tiene dos caminos, y el segundo es el que funciona:
+
+| Camino | Cuándo | Qué pide |
+|---|---|---|
+| **Herramienta de salida** | el modelo llama a la tool `PropuestaAgente` (los modelos grandes) | `create_agent(..., response_format=PropuestaAgente)` y `state["structured_response"]` |
+| **Cierre estructurado** | el modelo escribe prosa (los modelos pequeños) | la conversación se le vuelve a pasar al modelo con el esquema y se le pide que complete la propuesta |
+
+El cierre es el **mismo modelo, la misma conversación y los mismos
+materiales**: no cambia una palabra de lo que el agente consultó. Es un paso
+más del agente, así que queda registrado en la trayectoria con su modelo, sus
+tokens y su tiempo, y consume presupuesto como cualquier otro.
+
+Dos detalles que hicieron falta para que el cierre sirviera:
+
+* **Todos los campos obligatorios.** El modelo local **omite** los campos que
+  el esquema marca como opcionales: con la falla, las causas y las citas
+  opcionales, la respuesta llegaba con la justificación y nada más. El
+  esquema del cierre los exige a todos (`_esquema_cierre`), y el modelo de
+  Pydantic sigue siendo tolerante.
+* **Contexto y salida propios del agente.** El redactor escribe un párrafo
+  (250 tokens alcanzan); el agente consulta con herramientas y después cierra
+  la propuesta, así que necesita más de las dos cosas: con el contexto del
+  redactor (2048) el prompt consumía todo el espacio y no llegaba a
+  responder. Ahora el agente tiene `AGENTE_NUM_CTX=4096` y
+  `AGENTE_MAX_TOKENS_SALIDA=700`.
+
+Medido en vivo contra el modelo local, el ciclo completo deja la propuesta
+así:
+
+```
+falla=TX-T01  causas=['Desgaste normal de los anillos']  citas=['TX350-D §8.3']
+tareas=['T-B-EMP']  confianza=alta
+justificación: "Las mediciones de la planta muestran un goteo empaquetadura
+de 180 gotas/min, lo que es un desvío significativo del valor normal. Según
+el manual TX350-D, la empaquetadura se gasta con el tiempo y con los sólidos
+del agua…"
+```
+
+**Las citas que el agente puede usar son las que vio.** Una cita que no está
+en la lista de permitidas **ni** entre las que le devolvieron las herramientas
+es inventada y descarta la propuesta entera; las que le mostró el manual se
+aceptan, porque están respaldadas por la herramienta que las devolvió.
+
 ### 12.2 El registro de la trayectoria
 
 El enunciado, sección F: *"cada decisión queda registrada con el modelo
@@ -1641,9 +1697,14 @@ tokens, y timeout global por nota"*.
 | Presupuesto | Tope | Variable | Qué acota |
 |---|---:|---|---|
 | Pasos | 6 | `AGENTE_MAX_PASOS` | las vueltas del modelo por consulta |
-| Tokens | 4 000 | `AGENTE_MAX_TOKENS` | el gasto de la consulta |
-| Timeout de la consulta | 120 s | `AGENTE_TIMEOUT_S` | el reloj del agente |
+| Tokens | 12 000 | `AGENTE_MAX_TOKENS` | el gasto de la consulta |
+| Timeout de la consulta | 180 s | `AGENTE_TIMEOUT_S` | el reloj del agente |
 | **Timeout global por nota** | 180 s | `NOTA_TIMEOUT_S` | desde que la nota entra hasta que el parte sale |
+
+El tope de tokens se mide con el modelo local: el prompt de la consulta lleva
+unos 1.600 tokens y cada vuelta los vuelve a mandar, y el cierre de la
+propuesta suma otra vuelta. Con 4.000 el agente se cortaba **siempre** antes
+de cerrar la propuesta, así que el tope quedó en 12.000.
 
 Cuando se agota uno, el corte es una **condición prevista**: el motivo queda
 escrito en la bitácora (tipo `corte`) y el sistema sigue por el camino
@@ -1706,8 +1767,10 @@ Variables principales (ver `.env.example`):
 | `OLLAMA_SEED` | `42` | semilla fija (salida reproducible) |
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga de memoria al terminar |
 | `AGENTE_MAX_PASOS` | `6` | presupuesto de pasos del agente (vueltas del modelo) |
-| `AGENTE_MAX_TOKENS` | `4000` | presupuesto de tokens del agente por consulta |
-| `AGENTE_TIMEOUT_S` | `120` | timeout de la consulta al agente |
+| `AGENTE_MAX_TOKENS` | `12000` | presupuesto de tokens del agente por consulta |
+| `AGENTE_TIMEOUT_S` | `180` | timeout de la consulta al agente |
+| `AGENTE_NUM_CTX` | `4096` | contexto del agente (el del redactor es 2048) |
+| `AGENTE_MAX_TOKENS_SALIDA` | `700` | tokens que puede escribir el agente (el del redactor son 250) |
 | `NOTA_TIMEOUT_S` | `180` | timeout global por nota (desde que entra hasta que sale el parte) |
 | `CENTRAL_ACTIVO` | `true` | levanta la Central de mantenimiento |
 | `CENTRAL_HOST` / `CENTRAL_PUERTO` | `0.0.0.0` / `8200` | escucha de la Central |

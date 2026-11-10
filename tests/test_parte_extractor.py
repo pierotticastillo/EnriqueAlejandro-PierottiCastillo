@@ -375,6 +375,60 @@ def test_foto_del_manometro(planta: dict) -> None:
     assert fila.foto_indice == 0
 
 
+# ------------------------------------------------- el ASR garbla las palabras
+
+
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        # El ASR parte la palabra: "gol peteo" por "golpeteo".
+        (
+            "La dos está en 1630 de descarga, hace un gol peteo metálico.",
+            [
+                ("B-102", "presion_descarga_local", 1630.0, "psi", None),
+                ("B-102", "ruido", None, None, "hace un golpeteo metálico"),
+            ],
+        ),
+        # El ASR cambia las letras: "gropeteo" por "golpeteo".
+        (
+            "Lados está en 1620 de descarga, el rodamiento medio 61 grados con la "
+            "pistola hace un gropeteo metálico.",
+            [
+                ("B-102", "presion_descarga_local", 1620.0, "psi", None),
+                ("B-102", "temperatura_rodamiento_ir", 61.0, "degC", None),
+                ("B-102", "ruido", None, None, "hace un golpeteo metálico"),
+            ],
+        ),
+    ],
+)
+def test_el_sintoma_garblado_no_se_pierde(
+    planta: dict,
+    texto: str,
+    esperado: list[tuple],
+) -> None:
+    """Una observación garblada no es una anomalía: el equipo no se escala.
+
+    Son transcripciones reales del corrector: el decodificador local escribió
+    "gol peteo" y "gropeteo" por "golpeteo". Con el síntoma perdido, la nota
+    salía como "sin novedad" aunque el técnico lo hubiera dicho.
+    """
+    extraccion = ExtractorParte(planta).extraer(texto)
+    assert _filas(extraccion) == esperado
+
+
+def test_las_correas_no_se_confunden_con_el_goteo(planta: dict) -> None:
+    """"Correas" y "chorrea" se parecen, pero son dos cosas distintas.
+
+    La búsqueda aproximada por garblado no puede convertir una correa floja
+    en un goteo por empaquetadura: si lo hace, se escala una bomba que no
+    pierde agua.
+    """
+    extraccion = ExtractorParte(planta).extraer("La dos tiene las correas flojas.")
+    assert _filas(extraccion) == [
+        ("B-102", "estado_correas", None, None, "correas flojas"),
+    ]
+
+
 @pytest.mark.parametrize(
     ("texto", "codigo", "tag"),
     [

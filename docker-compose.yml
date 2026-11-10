@@ -216,8 +216,12 @@ services:
       # consultando indefinidamente.
       AGENTE_MAX_PASOS: ${AGENTE_MAX_PASOS:-6}
       # Presupuesto de tokens y timeout del agente por consulta.
-      AGENTE_MAX_TOKENS: ${AGENTE_MAX_TOKENS:-4000}
-      AGENTE_TIMEOUT_S: ${AGENTE_TIMEOUT_S:-120}
+      AGENTE_MAX_TOKENS: ${AGENTE_MAX_TOKENS:-12000}
+      AGENTE_TIMEOUT_S: ${AGENTE_TIMEOUT_S:-180}
+      # Contexto y salida propios del agente: consulta con herramientas y
+      # después cierra la propuesta en un esquema.
+      AGENTE_NUM_CTX: ${AGENTE_NUM_CTX:-4096}
+      AGENTE_MAX_TOKENS_SALIDA: ${AGENTE_MAX_TOKENS_SALIDA:-700}
       # Timeout global por nota: el plazo desde que la nota entra hasta que
       # el parte sale publicado.
       NOTA_TIMEOUT_S: ${NOTA_TIMEOUT_S:-180}

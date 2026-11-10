@@ -161,6 +161,110 @@ def _agente(
     )
 
 
+class ModeloEnProsa(ModeloFalso):
+    """Un modelo que consulta con herramientas y después escribe prosa.
+
+    Es lo que hacen los modelos pequeños que corren en la planta: consultan
+    bien, pero al terminar **no llaman a la herramienta de salida** y escriben
+    la propuesta en texto. La propuesta se cierra después, con la salida
+    estructurada nativa del proveedor.
+    """
+
+    def with_structured_output(self, schema: Any, **kwargs: Any) -> Any:
+        """El cierre: el mismo modelo, con el esquema y en JSON."""
+        from langchain_core.runnables import RunnableLambda
+
+        def _cerrar(mensajes: Any) -> dict[str, Any]:
+            # Se llama al modelo de verdad: así los callbacks ven el paso y la
+            # trayectoria lo registra como lo que es.
+            respuesta = self.invoke(mensajes)
+            return {
+                "raw": respuesta,
+                "parsed": json.loads(respuesta.content),
+                "parsing_error": None,
+            }
+
+        return RunnableLambda(_cerrar)
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        if self.error:
+            raise RuntimeError("el modelo no respondió")
+        self.turnos.append(messages)
+        nombres = [getattr(tool, "name", "") for tool in (kwargs.get("tools") or [])]
+        if len(self.turnos) == 1 and "busqueda_rag" in nombres:
+            return ChatResult(
+                generations=[
+                    ChatGeneration(
+                        message=AIMessage(
+                            content="",
+                            usage_metadata=_USO,
+                            tool_calls=[
+                                {
+                                    "name": "busqueda_rag",
+                                    "args": {"consulta": "empaquetadura", "top_k": 3},
+                                    "id": "llamada-1",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    )
+                ]
+            )
+        if len(self.turnos) == 2:
+            # El modelo escribe la propuesta en prosa y no llama a la
+            # herramienta de salida.
+            return ChatResult(
+                generations=[
+                    ChatGeneration(
+                        message=AIMessage(
+                            content=(
+                                "La falla es TX-T01, la causa es el desgaste normal "
+                                "de los anillos y la cita es TX350-D §8.3."
+                            ),
+                            usage_metadata=_USO,
+                        )
+                    )
+                ]
+            )
+        # El cierre: la propuesta en JSON.
+        return ChatResult(
+            generations=[
+                ChatGeneration(
+                    message=AIMessage(content=json.dumps(self.propuesta), usage_metadata=_USO)
+                )
+            ]
+        )
+
+
+def _agente_en_prosa(
+    *,
+    callbacks: list[Any] | None = None,
+    propuesta: dict[str, Any] | None = None,
+) -> AgenteAnalisis:
+    return AgenteAnalisis(
+        ModeloEnProsa(
+            propuesta=propuesta
+            or {
+                "falla": "TX-T01",
+                "causas": ["Desgaste normal de los anillos"],
+                "citas": ["TX350-D §8.3"],
+                "tareas": ["T-B-EMP"],
+                "justificacion": "La empaquetadura está gastada.",
+                "confianza": "alta",
+            },
+        ),
+        cliente=ClienteFalso(),
+        catalogo=_catalogo(),
+        callbacks=callbacks,
+    )
+
+
 # ----------------------------------------------------------------------- tools
 
 
@@ -264,6 +368,107 @@ def test_si_el_modelo_falla_no_rompe_nada() -> None:
     """Un modelo caído devuelve ``None``: la orden ya está publicada."""
     agente = _agente(error=True)
     assert agente.consultar("probá", permitidas=("TX350-D §8.3",)) is None
+
+
+# ------------------------------------------------------------------- el cierre
+
+
+def test_el_agente_cierra_la_propuesta_cuando_el_modelo_escribe_prosa() -> None:
+    """El modelo pequeño no llama a la herramienta de salida: escribe prosa.
+
+    Con el modelo local de 3B, el agente consultaba bien pero **nunca**
+    devolvía una propuesta válida: la herramienta de salida no la llamaba y
+    la respuesta quedaba en texto. El cierre es lo que arregla eso: la
+    conversación se le vuelve a pasar al modelo con el esquema y la
+    propuesta vuelve estructurada.
+    """
+    agente = _agente_en_prosa()
+    propuesta = agente.consultar("probá", permitidas=("TX350-D §8.3",))
+    assert propuesta is not None
+    assert propuesta.falla == "TX-T01"
+    assert propuesta.causas == ("Desgaste normal de los anillos",)
+    assert propuesta.citas == ("TX350-D §8.3",)
+    assert propuesta.tareas == ("T-B-EMP",)
+
+
+def test_el_cierre_se_registra_en_la_trayectoria() -> None:
+    """El cierre es un paso más del agente: queda registrado como tal."""
+    registrador = RegistradorFalso()
+    traza = TrazaAgente(registrador, orden_id="ORD-1", equipo="B-101")
+    agente = _agente_en_prosa(callbacks=[traza])
+
+    agente.consultar("probá", permitidas=("TX350-D §8.3",))
+
+    modelos = [fila for fila in registrador.filas if fila["tipo"] == "modelo"]
+    assert len(modelos) >= 3
+    # El último es el cierre: la propuesta estructurada.
+    assert "TX-T01" in str(modelos[-1].get("salida"))
+
+
+def test_el_esquema_del_cierre_exige_todos_los_campos() -> None:
+    """El modelo local omite los campos opcionales: el cierre los exige.
+
+    Con el esquema de Pydantic (campos opcionales) la respuesta venía con la
+    justificación y nada más: la falla, las causas y las citas faltaban.
+    """
+    from agente.nucleo import _esquema_cierre
+
+    esquema = _esquema_cierre()
+    assert set(esquema["required"]) == set(esquema["properties"])
+    assert "falla" in esquema["required"]
+    assert "causas" in esquema["required"]
+    assert "citas" in esquema["required"]
+
+
+def test_una_cita_que_el_agente_no_vio_descarta_la_propuesta() -> None:
+    """Lo que el agente no consultó no lo puede citar.
+
+    Una cita que no está en la lista de permitidas ni entre las que le
+    mostraste las herramientas es inventada, y la propuesta se descarta
+    entera.
+    """
+    agente = _agente()
+    propuesta = PropuestaAgente(
+        falla="TX-T01",
+        citas=["TX350-D §7.5"],
+        justificacion="porque sí",
+    )
+    assert agente.validar(propuesta, permitidas=("TX350-D §8.3",)) is None
+
+
+def test_una_cita_que_mostro_la_herramienta_se_acepta() -> None:
+    """Si el manual le mostró la sección, puede citarla."""
+    agente = _agente()
+    propuesta = PropuestaAgente(
+        falla="TX-T01",
+        citas=["TX350-D §7.5"],
+        justificacion="porque sí",
+    )
+    validada = agente.validar(
+        propuesta,
+        permitidas=("TX350-D §8.3",),
+        vistas=("TX350-D §7.5",),
+    )
+    assert validada is not None
+    assert validada.citas == ("TX350-D §7.5",)
+
+
+def test_el_agente_recoge_las_citas_de_las_herramientas() -> None:
+    """Las citas que le devolvieron las tools son las que puede usar."""
+    from langchain_core.messages import ToolMessage
+
+    from agente.nucleo import _citas_vistas
+
+    mensajes = [
+        ToolMessage(
+            content=json.dumps(
+                [{"documento": "TX350-D", "cita": "TX350-D §8.3", "texto": "..."}]
+            ),
+            tool_call_id="llamada-1",
+        ),
+        ToolMessage(content="[]", tool_call_id="llamada-2"),
+    ]
+    assert _citas_vistas(mensajes) == ("TX350-D §8.3",)
 
 
 def test_la_justificacion_del_agente_se_formatea() -> None:

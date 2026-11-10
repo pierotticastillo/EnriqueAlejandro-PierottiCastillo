@@ -66,3 +66,25 @@ def test_nombre_canonico(planta: dict) -> None:
 def test_fallback_sin_api() -> None:
     resolver = ResolutorNombres()
     assert resolver.resolver_tag("la dos está en mil seiscientos") == "B-102"
+
+
+def test_alias_con_las_palabras_juntas(planta: dict) -> None:
+    """El ASR junta las palabras del alias: "Lados" por "la dos".
+
+    Es lo que pasó con las transcripciones reales del corrector: el
+    decodificador escribió "Lados está en 1620 de descarga" y el equipo se
+    perdió, así que la nota no escaló aunque el técnico lo hubiera dicho.
+    """
+    resolver = desde_api(planta)
+    assert resolver.resolver_tag("Lados está en mil seiscientos veinte") == "B-102"
+    assert resolver.resolver_tag("elfiltroB me dio uno") == "F-201B"
+    assert resolver.resolver_tag("Ladelmedio está parada") == "B-102"
+
+
+def test_el_alias_junto_no_crea_menciones_ambiguas(planta: dict) -> None:
+    """Un alias pegado es una mención concreta, no una bomba cualquiera."""
+    resolver = desde_api(planta)
+    mencion = resolver.resolver("Lados está en mil seiscientos veinte")
+    assert mencion is not None
+    assert mencion.tag == "B-102"
+    assert not mencion.es_ambigua

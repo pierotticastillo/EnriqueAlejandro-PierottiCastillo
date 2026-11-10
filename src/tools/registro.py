@@ -82,7 +82,9 @@ _tool(
 _tool(
     "historial_sensores",
     "Historial de un sensor (una muestra por minuto) con mínimo, máximo, promedio "
-    "y tendencia de la ventana consultada.",
+    "y tendencia de la ventana consultada. Los filtros son 'tag' (el equipo, por "
+    "ejemplo B-102) y 'variable' (la variable del sensor, por ejemplo "
+    "goteo_empaquetadura).",
     ConsultaHistorialSensores,
     HistorialSensores,
     historial_sensores,

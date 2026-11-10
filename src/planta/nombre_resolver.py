@@ -84,11 +84,18 @@ class ResolutorNombres:
                 self._alias[normalizar(nombre)] = tag
             self._alias[normalizar(tag)] = tag
 
+        # Cada alias tiene su propio grupo en el patrón: así, cuando el ASR
+        # junta las palabras del alias, el tag se busca por el grupo que
+        # matcheó y no por el texto exacto ("lados" por "la dos").
+        self._alias_por_grupo: dict[str, str] = {}
+        for grupo, nombre in _alias_ordenados(self._alias):
+            self._alias_por_grupo[grupo] = self._alias[nombre]
+
         self._patron_alias = (
             re.compile(
                 "|".join(
-                    rf"(?<!\w){re.escape(nombre)}(?!\w)"
-                    for nombre in sorted(self._alias, key=len, reverse=True)
+                    rf"(?P<{grupo}>(?<!\w){_alias_partido(nombre)}(?!\w))"
+                    for grupo, nombre in _alias_ordenados(self._alias)
                 )
             )
             if self._alias
@@ -137,7 +144,7 @@ class ResolutorNombres:
         if mejor is None:
             return None
         return Mencion(
-            tag=self._alias[mejor.group(0)],
+            tag=self._alias_por_grupo.get(mejor.lastgroup or "", ""),
             texto=mejor.group(0),
             inicio=mejor.start(),
             fin=mejor.end(),
@@ -155,6 +162,28 @@ class ResolutorNombres:
             fin=coincidencia.end(),
             generico=generico,
         )
+
+
+def _alias_ordenados(alias: dict[str, str]) -> list[tuple[str, str]]:
+    """Los alias, del más largo al más corto, con un nombre de grupo cada uno.
+
+    El más largo primero: "la del medio" tiene que ganarle a "la dos".
+    """
+    return [
+        (f"a{indice}", nombre)
+        for indice, nombre in enumerate(sorted(alias, key=len, reverse=True))
+    ]
+
+
+def _alias_partido(nombre: str) -> str:
+    """El alias, con los espacios entre palabras opcionales.
+
+    El ASR a veces junta las palabras del alias ("Lados" por "la dos",
+    "elfiltro" por "el filtro"). Con los espacios opcionales el alias se
+    reconoce igual, y el equipo es el mismo: lo que el técnico dijo no
+    cambia por cómo lo escribió el decodificador.
+    """
+    return re.escape(nombre).replace(r"\ ", r"\s*")
 
 
 def _desde_planta(

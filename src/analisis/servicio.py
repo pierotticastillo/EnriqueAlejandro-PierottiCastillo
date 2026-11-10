@@ -85,8 +85,8 @@ class ServicioAnalisis:
         modelo: AnalysisModel | None = None,
         agente: AgenteAnalisis | None = None,
         registrador: Any = None,
-        agente_max_tokens: int = 4000,
-        agente_timeout_s: float = 120.0,
+        agente_max_tokens: int = 12000,
+        agente_timeout_s: float = 180.0,
     ) -> None:
         self._catalogo = catalogo
         self._estado = estado
@@ -450,6 +450,8 @@ class ServicioAnalisis:
         lineas.append(
             "Consultá los manuales y el historial con las herramientas y después "
             "proponé la falla, las causas y las citas de las que sale. "
+            "Podés citar las secciones que te muestren las herramientas, tal "
+            "como están escritas. "
             "No cambies las tareas, los repuestos, los costos ni el resultado de "
             "las reglas."
         )

@@ -34,12 +34,51 @@ class PropuestaAgente(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    falla: str | None = Field(default=None, max_length=64)
-    causas: list[str] = Field(default_factory=list, max_length=MAX_ITEMS)
-    citas: list[str] = Field(default_factory=list, max_length=MAX_ITEMS)
-    tareas: list[str] = Field(default_factory=list, max_length=MAX_ITEMS)
-    justificacion: str = Field(min_length=1, max_length=MAX_CARACTERES)
-    confianza: Literal["alta", "media", "baja"] = "media"
+    falla: str | None = Field(
+        default=None,
+        max_length=64,
+        description=(
+            "Código de la falla, copiado de la ficha de la falla. Si la ficha "
+            "dice 'Código: TX-T01', acá va 'TX-T01'. Null sólo si no hay "
+            "ficha de falla."
+        ),
+    )
+    causas: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_ITEMS,
+        description=(
+            "Una causa del manual por elemento, copiada textualmente (por "
+            "ejemplo 'Desgaste normal de los anillos')."
+        ),
+    )
+    citas: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_ITEMS,
+        description=(
+            "Una cita del manual por elemento, tal como la escribió la "
+            "herramienta (por ejemplo 'TX350-D §8.3')."
+        ),
+    )
+    tareas: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_ITEMS,
+        description=(
+            "Un código de tarea del plan por elemento (por ejemplo 'T-B-EMP')."
+        ),
+    )
+    justificacion: str = Field(
+        min_length=1,
+        max_length=MAX_CARACTERES,
+        description=(
+            "Dos o tres frases con el por qué: qué se midió, qué dice el "
+            "manual y por qué esa causa. Sin repetir el código de la falla, "
+            "las causas ni las citas."
+        ),
+    )
+    confianza: Literal["alta", "media", "baja"] = Field(
+        default="media",
+        description="Cuánto respaldan las citas lo que se propone.",
+    )
 
 
 @dataclass(frozen=True)

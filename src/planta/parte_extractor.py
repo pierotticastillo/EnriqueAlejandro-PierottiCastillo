@@ -114,7 +114,7 @@ _CUE_REBALSE = ("rebals", "rebalse")
 _FRASE_SINTOMA = re.compile(
     r"\b(?:hace|tiene|suena|sigue|chorrea|gotea|pierde)\b"
     r"(?:\s+\w+){0,4}?"
-    r"\s+\b(?:golpeteo|piedras|ruido|correas|correa|empaquetadura|aceite)\b"
+    r"\s+\b(?:g\w{0,2}\s*peteo|pie\s*dras|ru\s*ido|cor\s*reas?|em\s*paquetadura|a\s*ceite)\b"
 )
 
 
@@ -154,10 +154,132 @@ def _menciona(norm: str, cues: tuple[str, ...]) -> bool:
     "manometro" no es un "metro": el manómetro es el instrumento, no la
     altura del tanque. Con la búsqueda por substring, "le saqué foto al
     manómetro" se tomaba como una medición de nivel.
+
+    Y hay un segundo caso: el ASR a veces **parte una palabra en dos**
+    ("gol peteo metálico" por "golpeteo metálico", "em paquetadura" por
+    "empaquetadura"). Una observación garblada no es una anomalía: el
+    síntoma se perdía y el equipo no se escalaba aunque el técnico lo
+    hubiera dicho. Por eso, en las palabras largas, también se acepta que
+    tengan un espacio en el medio.
     """
-    return any(
-        re.search(rf"(?<!\w){re.escape(cue)}(?!\w)", norm) for cue in cues
+    for cue in cues:
+        if re.search(rf"(?<!\w){re.escape(cue)}(?!\w)", norm):
+            return True
+        if len(cue.replace(" ", "")) >= 6:
+            partido = r"\s*".join(re.escape(letra) for letra in cue.replace(" ", ""))
+            if re.search(rf"(?<!\w){partido}(?!\w)", norm):
+                return True
+    return False
+
+
+#: Distancia de edición máxima para reconocer un síntoma que el ASR garbló.
+#: Con dos alcanza: "gropeteo" por "golpeteo" y "competeo" por "golpeteo"
+#: son el mismo garblado de siempre. Con tres, ya sería otra palabra y el
+#: sistema no puede arriesgarse a inventar una anomalía.
+_MAX_DISTANCIA = 2
+
+#: Para las palabras cortas, un error alcanza: "correa" y "chorrea" están a
+#: dos de distancia y son dos cosas distintas (una correa y un goteo).
+_MAX_DISTANCIA_CORTA = 1
+
+#: A partir de esta longitud, dos errores son tolerables.
+_LONGITUD_LARGA = 8
+
+
+def _familia_sintoma(norm: str) -> str | None:
+    """Qué síntoma dice el texto: ``"ruido"``, ``"goteo"``, ``"correas"`` o ``None``.
+
+    Primero se busca la coincidencia **exacta** (o con la palabra partida) en
+    las tres familias: si el texto dice "correas", eso es una correa y no un
+    goteo, aunque "correas" y "chorrea" se parezcan. Y sólo si el texto no
+    dice ninguno de los síntomas, se prueba la coincidencia aproximada: ahí
+    es donde entra el garblado del ASR ("gropeteo" por "golpeteo").
+    """
+    familias = (
+        ("ruido", _CUE_RUIDO),
+        ("goteo", _CUE_GOTEO),
+        ("correas", _CUE_CORREAS),
     )
+    for familia, cues in familias:
+        if _menciona(norm, cues):
+            return familia
+    for familia, cues in familias:
+        if _menciona_aproximada(norm, cues):
+            return familia
+    return None
+
+
+def _menciona_sintoma(norm: str, cues: tuple[str, ...]) -> bool:
+    """Si el texto dice alguno de los síntomas, aunque el ASR lo garble.
+
+    Primero la coincidencia exacta (con la palabra partida) y, si no hay
+    ninguna, la aproximada.
+    """
+    return _menciona(norm, cues) or _menciona_aproximada(norm, cues)
+
+
+def _menciona_aproximada(norm: str, cues: tuple[str, ...]) -> bool:
+    """Si alguna palabra del texto se parece a una de las pistas.
+
+    Sólo para los síntomas: son palabras muy distintas entre sí y un par de
+    letras cambiadas no puede cambiar el significado. En las demás
+    (variables, valores, estados) la búsqueda sigue siendo exacta.
+
+    Dos reglas la mantienenanya:
+
+    * la palabra tiene que tener **la misma cantidad de letras**: un garblado
+      no cambia el largo ("gropeteo" por "golpeteo"), pero "correas" y
+      "chorrea" tienen largo distinto y son dos cosas distintas;
+    * y la distancia es como mucho dos (una para las palabras cortas).
+    """
+    tokens = re.findall(r"\w+", norm)
+    for cue in cues:
+        if " " in cue or len(cue) < 6:
+            continue
+        maximo = (
+            _MAX_DISTANCIA if len(cue) >= _LONGITUD_LARGA else _MAX_DISTANCIA_CORTA
+        )
+        for token in tokens:
+            if len(token) != len(cue):
+                continue
+            if _distancia(token, cue) <= maximo:
+                return True
+    return False
+
+
+def _distancia(uno: str, otro: str) -> int:
+    """La distancia de edición (Damerau-Levenshtein).
+
+    Cuenta la **transposición** como un error solo: "gropeteo" por
+    "golpeteo" es el mismo error que el ASR comete siempre, y a dos letras
+    de distancia ya no se sabe si es un garblado o otra palabra.
+    """
+    if uno == otro:
+        return 0
+    if not uno:
+        return len(otro)
+    if not otro:
+        return len(uno)
+    anterior = list(range(len(otro) + 1))
+    for i, letra in enumerate(uno, start=1):
+        actual = [i]
+        for j, otra in enumerate(otro, start=1):
+            coste = 0 if letra == otra else 1
+            valor = min(
+                actual[-1] + 1,
+                anterior[j] + 1,
+                anterior[j - 1] + coste,
+            )
+            if (
+                i > 1
+                and j > 1
+                and letra == otro[j - 2]
+                and uno[i - 2] == otra
+            ):
+                valor = min(valor, anterior[j - 2] + 1)
+            actual.append(valor)
+        anterior = actual
+    return anterior[-1]
 
 # Observaciones que se derivan del VALOR de la fila y no de lo que dijo el
 # operador. Viven en una tabla para que la regla sea una sola: si el operador
@@ -422,12 +544,17 @@ class ExtractorParte:
             return "presion_diferencial"
         if _menciona(norm, _CUE_DESCARGA):
             return "presion_descarga_local"
+        # El síntoma se resuelve **una vez** para las tres familias: si el
+        # texto dice "correas", eso es una correa y no un goteo, aunque las
+        # dos palabras se parezcan. Y si no dice ninguno, se busca el
+        # garblado ("gropeteo" por "golpeteo").
+        sintoma = _familia_sintoma(norm)
         # El ruido manda sobre el rodamiento: "un ruido raro de rodamiento"
         # habla del ruido, no de la temperatura del rodamiento. Sin esto, la
         # frase se tomaba como una temperatura y el síntoma se perdía. Si la
         # misma frase trae la temperatura ("60 grados con la pistola"), la
         # temperatura es lo que se midió y manda ella.
-        if _menciona(norm, _CUE_RUIDO) and not (
+        if sintoma == "ruido" and not (
             "grado" in norm or "pistola" in norm
         ):
             return "ruido"
@@ -439,13 +566,13 @@ class ExtractorParte:
             return "temperatura_motor_ir"
         if _menciona(norm, _CUE_CAUDAL):
             return "caudal"
-        if _menciona(norm, _CUE_GOTEO):
+        if sintoma == "goteo":
             return "goteo_empaquetadura"
         if _menciona(norm, _CUE_ACEITE):
             return "nivel_aceite_visor"
-        if _menciona(norm, _CUE_CORREAS):
+        if sintoma == "correas":
             return "estado_correas"
-        if _menciona(norm, _CUE_RUIDO):
+        if sintoma == "ruido":
             return "ruido"
         if _menciona(norm, _CUE_ESTADO):
             return "estado"
@@ -841,11 +968,11 @@ def _observacion(
             return "correas desalineadas"
         return "correas en mal estado"
     if variable == "ruido":
-        if "golpeteo" in norm:
+        if _menciona_sintoma(norm, ("golpeteo",)):
             return "hace un golpeteo metálico"
-        if "piedras adentro" in norm:
+        if _menciona(norm, ("piedras adentro",)):
             return "suena como si tuviera piedras adentro"
-        if "ruido raro" in norm:
+        if _menciona(norm, ("ruido raro",)):
             return "tiene un ruido raro de rodamiento"
         return "ruido anormal"
     if variable == "goteo_empaquetadura":

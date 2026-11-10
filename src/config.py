@@ -112,12 +112,22 @@ class Settings(BaseSettings):
     # pasos" que pide el anexo de la Entrega 1.
     agente_max_pasos: int = 6
     # Presupuesto de tokens del agente por consulta. Si se pasa, la consulta
-    # se corta y queda escrito el corte.
-    agente_max_tokens: int = 4000
+    # se corta y queda escrito el corte. Medido con el modelo local: el
+    # prompt de la consulta lleva ~1.600 tokens y cada vuelta los vuelve a
+    # mandar; el cierre estructurado suma otra vuelta. Con 4.000 el agente se
+    # cortaba siempre antes de cerrar la propuesta.
+    agente_max_tokens: int = 12000
     # Timeout de la consulta al agente: es el reloj del presupuesto. Corta
     # antes que el timeout del modelo, para que el corte sea del presupuesto
     # y no un error de red.
-    agente_timeout_s: float = 120.0
+    agente_timeout_s: float = 180.0
+    # Contexto y salida propios del agente. El redactor escribe un párrafo
+    # (250 tokens alcanza); el agente consulta con herramientas y después
+    # cierra la propuesta en un esquema, así que necesita más de las dos
+    # cosas. Medido: con 2048 de contexto el prompt consumía todo el
+    # espacio y el modelo no llegaba a responder.
+    agente_num_ctx: int = 4096
+    agente_max_tokens_salida: int = 700
 
     # Timeout global por nota: el plazo que corre desde que la nota entra al
     # sistema hasta que el parte sale publicado. Acota la transcripción (que

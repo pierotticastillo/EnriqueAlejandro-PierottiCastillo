@@ -63,11 +63,21 @@ class Equipo(ModeloEstricto):
 class ConsultaHistorialSensores(ModeloEstricto):
     """Ventana del historial de un sensor."""
 
-    tag: str
-    variable: str
-    desde: datetime | None = None
-    hasta: datetime | None = None
-    limite: int = Field(default=500, ge=1, le=5000)
+    tag: str = Field(
+        description=(
+            "Tag del equipo que se consulta (por ejemplo B-102). Es el tag "
+            "del equipo, no el nombre de campo ni el de la variable."
+        )
+    )
+    variable: str = Field(
+        description=(
+            "Variable del sensor que se consulta (por ejemplo "
+            "goteo_empaquetadura o presion_descarga_local)."
+        )
+    )
+    desde: datetime | None = Field(default=None, description="Desde cuándo (ISO 8601).")
+    hasta: datetime | None = Field(default=None, description="Hasta cuándo (ISO 8601).")
+    limite: int = Field(default=500, ge=1, le=5000, description="Cuántas muestras traer.")
 
 
 class MuestraSensor(ModeloEstricto):
