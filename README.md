@@ -698,7 +698,7 @@ Las principales están documentadas en `.env.example`:
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga al terminar |
 | `AGENTE_MAX_PASOS` | `6` | presupuesto de pasos del agente (vueltas del modelo) |
 | `AGENTE_MAX_TOKENS` | `12000` | presupuesto de tokens del agente por consulta |
-| `AGENTE_TIMEOUT_S` | `180` | timeout de la consulta al agente |
+| `AGENTE_TIMEOUT_S` | `420` | timeout de la consulta al agente (y de cada llamada al modelo) |
 | `AGENTE_NUM_CTX` | `4096` | contexto del agente (el del redactor es 2048) |
 | `AGENTE_MAX_TOKENS_SALIDA` | `700` | tokens que puede escribir el agente (el del redactor son 250) |
 | `NOTA_TIMEOUT_S` | `180` | **timeout global por nota**: desde que entra hasta que sale el parte |
@@ -851,8 +851,8 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **504 passed** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose. Sin base quedan **468 passed, 36 skipped** (los de
+Resultado actual: **523 passed** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose. Sin base quedan **486 passed, 37 skipped** (los de
 idempotencia/constraints, los del índice RAG y los de la Central y la
 trayectoria), porque necesitan la base levantada.
 

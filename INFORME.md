@@ -43,8 +43,11 @@ El sistema PIA‑3 corre junto a la planta simulada dentro de la red Docker
    cierre;
 8. el **núcleo de agentes en LangChain**: un agente que consulta las mismas
    ocho tools del MCP y **propone** una falla con sus causas y sus citas, con
-   la salida estructurada validada por Pydantic y con el registro completo de
-   la trayectoria (modelo, tools y argumentos, tokens, costo y tiempo);
+   la salida estructurada validada por Pydantic (y con un **cierre
+   estructurado** para los modelos que no llaman a la herramienta de salida),
+   con un presupuesto de pasos, tokens y tiempo cuyo corte queda escrito, y
+   con el registro completo de la trayectoria (modelo, tools y argumentos,
+   tokens, costo y tiempo);
 9. la **decisión del planificador**: la orden pendiente se reanuda cuando una
    persona la aprueba o la rechaza, desde una Central de mantenimiento
    (pantalla web y API JSON) que deja la decisión auditada con su usuario y su
@@ -1134,10 +1137,11 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **448 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **423 passed, 25 skipped** sin base: los omitidos son los tests de
-  idempotencia/constraints y los del índice RAG, que requieren PostgreSQL.
-- `ruff check .` sin observaciones.
+- **523 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **486 passed, 37 skipped** sin base: los omitidos son los tests de
+  idempotencia/constraints, los del índice RAG y los de la Central y la
+  trayectoria, que requieren PostgreSQL.
+- `ruff check src tests migrations` sin observaciones.
 
 Cobertura funcional de los tests:
 
@@ -1192,6 +1196,19 @@ Cobertura funcional de los tests:
   el monto tomado de la lista de precios del contrato y **no** del cierre, la
   idempotencia por `cierre.externa_id` y la escritura atómica del estado, la
   certificación y el habilita;
+- **núcleo de agentes**: las tools del agente son las del MCP con el mismo
+  esquema estricto, la propuesta se contrasta con el catálogo (una falla o una
+  cita inventada la descartan entera), las causas que el manual no respalda se
+  omiten sin invalidar el resto, el **cierre estructurado** arma la propuesta
+  cuando el modelo escribe prosa, el presupuesto corta (pasos, tokens y
+  timeout) y el corte queda escrito, y cada paso queda registrado con modelo,
+  herramientas, argumentos, tokens, costo y tiempo;
+- **Central de mantenimiento**: sólo se deciden órdenes pendientes, el rechazo
+  exige motivo, la decisión queda en `aprobacion` y en la trayectoria, y la
+  Central **no es una tool** (el agente no la puede alcanzar);
+- **tolerancia al garblado del ASR**: el alias pegado ("Lados" por "la dos"),
+  la palabra partida ("gol peteo") y la fonética ("gropeteo") se reconocen, sin
+  confundir "correas" con "chorrea";
 - constraints e idempotencia de la base.
 
 ### Verificación end-to-end
@@ -1800,7 +1817,7 @@ Variables principales (ver `.env.example`):
 | `PRECIO_USD_POR_MILLON` | `0` | tarifa del modelo (USD por millón de tokens): con el modelo local es 0 |
 | `AGENTE_MAX_PASOS` | `6` | presupuesto de pasos del agente (vueltas del modelo) |
 | `AGENTE_MAX_TOKENS` | `12000` | presupuesto de tokens del agente por consulta |
-| `AGENTE_TIMEOUT_S` | `180` | timeout de la consulta al agente |
+| `AGENTE_TIMEOUT_S` | `420` | timeout de la consulta al agente (y de cada llamada al modelo) |
 | `AGENTE_NUM_CTX` | `4096` | contexto del agente (el del redactor es 2048) |
 | `AGENTE_MAX_TOKENS_SALIDA` | `700` | tokens que puede escribir el agente (el del redactor son 250) |
 | `NOTA_TIMEOUT_S` | `180` | timeout global por nota (desde que entra hasta que sale el parte) |
