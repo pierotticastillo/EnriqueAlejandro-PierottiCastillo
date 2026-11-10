@@ -1139,8 +1139,9 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **530 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **493 passed, 37 skipped** sin base: los omitidos son los tests de
+- **531 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
+  compose (las 531 pasan).
+- **494 passed, 37 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints, los del índice RAG y los de la Central y la
   trayectoria, que requieren PostgreSQL.
 - `ruff check src tests migrations` sin observaciones.

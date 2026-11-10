@@ -106,7 +106,7 @@ camino determinista. La **mini spec** del flujo del parte está en
 | Fase | Estado | Avance y pendientes |
 |---|---|---|
 | 0 — Preparación del entorno | Completa | Compose (`postgres`, `migraciones`, `sistema`, `mcp`), red externa `planta-lan`, labels `academia.planta: pc`, proxy `enlace:3128` con `NO_PROXY`, presupuesto agregado 4 CPU / 8 GB y latido `sistema/estado`. |
-| 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido) e idempotencia por `evento_sistema.id`. Los tests de idempotencia/constraints, los del índice RAG y los de la Central y la trayectoria requieren base y se omiten sin `TEST_DATABASE_URL` (37 omitidos en total; con base, los 530 tests pasan). |
+| 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido) e idempotencia por `evento_sistema.id`. Los tests de idempotencia/constraints, los del índice RAG y los de la Central y la trayectoria requieren base y se omiten sin `TEST_DATABASE_URL` (37 omitidos en total; con base, los 531 tests pasan). |
 | 1 — Parte por voz | Completa y verificada | Listener MQTT, descarga de medios a disco, ASR local (`faster-whisper`), extracción determinista, resolución de nombres y unidades, preguntas de ambigüedad y conversación con tablet. La corrección del operador se aplica **a la lectura que está corrigiendo** y la conversación tiene tope: si no converge, la nota queda para revisión humana. |
 | 2 — Detección sin LLM | Completa y verificada | S1–S4 con los procedimientos del MBP-4, aviso en tablet y por radio al supervisor (canal 1), **un evento por equipo** (`parte:<nota>:<tag>`), contexto y tendencia en los escalados, sensores MQTT con límites de `/api/planta`. |
 | 3 — Tools y MCP | Completa y verificada | Siete tools de solo lectura con `extra="forbid"`, cliente HTTP con timeout/reintentos/errores tipados, búsqueda léxica de manuales y servidor MCP (streamable-http y stdio) probado en vivo. |
@@ -451,7 +451,7 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Última verificación
 
-- `python -m pytest`: **530 tests, 0 fallas** (493 pasan y 37 se omiten sin `TEST_DATABASE_URL`; con base apuntando al PostgreSQL del compose pasan los 530).
+- `python -m pytest`: **531 tests, 0 fallas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose pasan las 531; sin base: 494 pasan y 37 se omiten).
 - `ruff check src tests migrations`: **sin errores**.
 - **Corrector oficial, corrida completa (7 escenarios)**: **94,1/100 — APRUEBA**
   (`_fase11`, la corrida vigente), sin eliminatorias, 93 de 93 puntos medidos
