@@ -2376,11 +2376,14 @@ repuestos**.
     la midiera habría que sumar el canal al contrato y a la planta simulada.
     Hoy queda para **revisión manual** (tests + verificación en vivo).
 21. **El radioenlace de la planta simulada corta la conexión.** En la corrida
-    completa, cuatro consultas del agente se perdieron con «Server disconnected
-    without sending a response»: el proxy de la planta cierra los túneles y la
-    llamada se cae entera. No es un fallo del modelo ni del prompt. Con el
-    reintento (§12.4) la consulta se recupera una vez; si el enlace no vuelve,
-    el corte queda escrito en la bitácora y el sistema sigue por el camino
+    completa, consultas enteras del agente se perdieron con «Server disconnected
+    without sending a response» o «[Errno 104] Connection reset by peer»: el
+    proxy de la planta cierra los túneles y la llamada se cae. No es un fallo del
+    modelo ni del prompt. Con el reintento (§12.4) la consulta se recupera una
+    vez: en la trayectoria se ve **15 consultas completadas y 1 corte**, contra
+    **13 consultas y 4 cortes** de la corrida sin reintento. El corte que queda
+    es el caso en que **el enlace no volvió**: se reintentó y también falló;
+    ahí el corte queda escrito en la bitácora y el sistema sigue por el camino
     determinista. El presupuesto sigue mandando: el reintento no puede pasarse
     del timeout global.
 
