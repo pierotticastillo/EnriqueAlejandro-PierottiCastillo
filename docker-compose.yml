@@ -211,6 +211,21 @@ services:
       NVIDIA_MAX_TOKENS: ${NVIDIA_MAX_TOKENS:-800}
       NVIDIA_TIMEOUT_S: ${NVIDIA_TIMEOUT_S:-8}
       NVIDIA_TEMPERATURE: ${NVIDIA_TEMPERATURE:-0}
+      # Núcleo de agentes (LangChain): el tope de vueltas y tool calls por
+      # consulta. Es el presupuesto de pasos: el agente no puede seguir
+      # consultando indefinidamente.
+      AGENTE_MAX_PASOS: ${AGENTE_MAX_PASOS:-6}
+      # Presupuesto de tokens y timeout del agente por consulta.
+      AGENTE_MAX_TOKENS: ${AGENTE_MAX_TOKENS:-4000}
+      AGENTE_TIMEOUT_S: ${AGENTE_TIMEOUT_S:-120}
+      # Timeout global por nota: el plazo desde que la nota entra hasta que
+      # el parte sale publicado.
+      NOTA_TIMEOUT_S: ${NOTA_TIMEOUT_S:-180}
+      # Central de mantenimiento: donde el planificador aprueba o rechaza las
+      # órdenes que las reglas dejaron pendientes.
+      CENTRAL_ACTIVO: ${CENTRAL_ACTIVO:-true}
+      CENTRAL_HOST: ${CENTRAL_HOST:-0.0.0.0}
+      CENTRAL_PUERTO: ${CENTRAL_PUERTO:-8200}
       # Directorio de datos para audios y fotos (volumen Docker).
       DATOS_DIR: ${DATOS_DIR:-/datos}
     depends_on:
@@ -221,6 +236,9 @@ services:
     networks:
       - planta-lan
       - interna
+      # La Central se publica desde la red `debug`, igual que PostgreSQL y el
+      # servidor MCP: `planta-lan` es interna y no permite publicar puertos.
+      - debug
     deploy:
       resources:
         limits:
@@ -228,6 +246,9 @@ services:
           memory: 3G
     volumes:
       - datos:/datos
+    ports:
+      # La Central de mantenimiento, para el planificador.
+      - "${CENTRAL_PUERTO:-8200}:8200"
 
   # ----------------------------------------------------------
   # Servidor MCP: tools de solo lectura sobre la planta

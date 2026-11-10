@@ -40,12 +40,25 @@ El sistema PIA‑3 corre junto a la planta simulada dentro de la red Docker
    con diferencias sustantivas (vuelve a la contratista con el motivo) y
    `Certificada` con el **habilita** `HAB-AAAA-NNNN` y el monto tomado de la
    orden y de la lista de precios del contrato (CT-SVP-2025 §2.1), no del
-   cierre.
+   cierre;
+8. el **núcleo de agentes en LangChain**: un agente que consulta las mismas
+   ocho tools del MCP y **propone** una falla con sus causas y sus citas, con
+   la salida estructurada validada por Pydantic y con el registro completo de
+   la trayectoria (modelo, tools y argumentos, tokens, costo y tiempo);
+9. la **decisión del planificador**: la orden pendiente se reanuda cuando una
+   persona la aprueba o la rechaza, desde una Central de mantenimiento
+   (pantalla web y API JSON) que deja la decisión auditada con su usuario y su
+   motivo.
 
 La transcripción, la detección de seguridad, las tools, el RAG, el análisis y
 el control del cierre son locales: el modelo de embeddings corre en el
 contenedor, sin salir a internet. Las decisiones de aprobación y las de
 certificación no pasan por un LLM.
+
+**El agente tampoco decide.** Consulta y propone; las seis reglas de
+aprobación siguen evaluándose en código y el prompt del agente nunca lleva
+texto libre del operador. La Central de mantenimiento **no es una tool**: el
+agente no tiene forma de aprobar nada.
 
 ---
 
@@ -62,6 +75,7 @@ certificación no pasan por un LLM.
 | 5 | Anomalías y borrador de orden | Completa y verificada |
 | 6 | Operación sin enlace y cola | Completa y verificada |
 | 7 | Cierre y certificación | Completa y verificada |
+| — | Núcleo de agentes (LangChain), trayectoria, Central y presupuesto | Completa y verificada |
 
 ### Fase 2 — lo que hay
 
@@ -993,7 +1007,7 @@ responde, el aviso sale igual y la foto queda sin describir. Si la tarifa de
 la cuenta cambia, no cambia el comportamiento del sistema: cambia lo que
 cuesta describir una foto.
 
-En la **corrida oficial de los 7 escenarios** (§13), la planta publicó una
+En la **corrida oficial de los 7 escenarios** (§14), la planta publicó una
 sola foto (en `fuga-sin-enlace`) y la llamada **falló** porque el proxy del
 enlace se había caído junto con el enlace: quedó `indeterminado`, con 0
 tokens, y la alerta S1 se publicó igual. El consumo de la nube en esa corrida
@@ -1212,7 +1226,7 @@ corrida guardada:
 | `scripts/probar_cierre.py` | el cierre en vivo: publica una orden de contratista, escucha `planta/cierres` y muestra el estado final, el cierre, la certificación y el habilita |
 
 Los resultados de la corrida end-to-end sobre la planta simulada se resumen en
-la sección 13.
+la sección 14.
 
 ---
 
@@ -1517,7 +1531,140 @@ vuelve a la contratista.
 
 ---
 
-## 12. Configuración
+## 12. Núcleo de agentes, trayectoria, Central y presupuesto
+
+Esta sección cubre lo que el enunciado y su anexo piden por encima de las
+siete fases: el núcleo de agentes en LangChain (restricción 04), el registro
+de la trayectoria (sección F), el canal de decisión del planificador
+(sección D) y las condiciones de corte con su presupuesto (anexo Entrega 1,
+1.4).
+
+### 12.1 El núcleo de agentes (`src/agente/`)
+
+El enunciado pide *"Python 3.11 o superior, con LangChain para el núcleo de
+agentes"*. El paquete `src/agente/` es ese núcleo: un agente de LangChain
+(`create_agent` de `langchain.agents`) que, ante un escalado, **consulta** las
+herramientas y **propone** una falla con sus causas y sus citas.
+
+| Pieza | Qué hace |
+|---|---|
+| `agente/nucleo.py` | El agente (`AgenteAnalisis`), su instrucción de sistema y la validación de la propuesta |
+| `agente/tools.py` | Las tools del agente, tomadas de `tools.registro.REGISTRO` |
+| `agente/modelos.py` | `PropuestaAgente` (salida estructurada) y `PropuestaValidada` |
+| `agente/trayectoria.py` | `RegistradorTrayectoria` y `TrazaAgente` (callbacks de LangChain) |
+| `agente/presupuesto.py` | El presupuesto de pasos, tokens y tiempo |
+| `agente/formato.py` | El formato de la justificación en la bitácora de la orden |
+
+Tres decisiones que sostienen el diseño:
+
+1. **No hay una segunda definición de las tools.** El agente usa el mismo
+   registro que publica el servidor MCP y los mismos modelos Pydantic
+   estrictos (`extra="forbid"`): el contrato que ve el modelo es el mismo
+   que ve un cliente MCP, con `additionalProperties: false` en el esquema.
+2. **El RAG no se migra.** Se conserva el híbrido BM25 + pgvector ya medido
+   (hit@5 0,873 contra 0,845) y el agente consulta el recuperador ya armado.
+3. **El agente no decide.** Lo que propone se contrasta con el catálogo antes
+   de usarse: una falla que no está en el catálogo o una cita que no está en
+   la lista de permitidas **descarta la propuesta entera**; las causas que el
+   manual no respalda se omiten sin invalidar el resto. Las seis reglas de
+   `analisis/aprobacion.py` no se tocan.
+
+El agente corre en el hilo de redacción (`_cola_redaccion`): la orden ya está
+publicada con su estado decidido, así que **no** agrega latencia al camino
+crítico ni puede cambiar el resultado de las reglas.
+
+**La Central no es una tool.** No está en `tools.registro.REGISTRO` ni en el
+servidor MCP, así que el agente no tiene forma de aprobar nada. Y el prompt
+**nunca** lleva texto libre del operador: sólo mediciones estructuradas, la
+ficha de la falla, las causas del catálogo, las tareas ya decididas y el
+resultado de las reglas.
+
+### 12.2 El registro de la trayectoria
+
+El enunciado, sección F: *"cada decisión queda registrada con el modelo
+usado, las herramientas llamadas y sus argumentos, los tokens, el costo y el
+tiempo de cada paso"*.
+
+La tabla `registro_trayectoria` (migración `0007`) tiene una fila por paso:
+
+| Tipo | Modelo | Herramienta | Argumentos | Tokens | Costo | Tiempo | Error |
+|---|---|---|---|---|---|---|---|
+| `modelo` | sí | — | el prompt | entrada y salida | sí | sí | si falló |
+| `tool` | — | sí | sí | — | — | sí | si falló |
+| `corte` | — | — | el resumen del presupuesto | — | — | — | por qué se cortó |
+| `decision` | — | — | la decisión, el usuario y el motivo | — | — | — | — |
+
+Las filas se escriben con los callbacks de LangChain: toda llamada al modelo
+y toda llamada a una herramienta dejan su fila, sin instrumentar nada a mano.
+Los índices por `orden_id` y por `etapa` permiten seguir el recorrido de una
+orden y medir el gasto de cada tipo de paso.
+
+El costo se guarda en USD. Con el modelo local (Ollama en la planta) el costo
+es 0; la columna queda para el caso de un modelo de nube, y el total por
+orden se puede sumar con una consulta.
+
+### 12.3 La Central de mantenimiento
+
+El enunciado, sección D: *"mientras una orden está pendiente, el proceso queda
+suspendido y persistido: sobrevive a un reinicio del sistema y se reanuda
+cuando el planificador la aprueba o la rechaza"*.
+
+Persistir y sobrevivir al corte ya estaba hecho. Lo que faltaba era **el
+canal de la decisión**, y ése es el de la Central (`src/planta/central.py`):
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /` | La pantalla: las órdenes con sus tareas, repuestos y motivo, y los botones aprobar / rechazar. Se refresca cada 20 s. |
+| `GET /api/ordenes` | Las mismas órdenes en JSON. |
+| `POST /api/ordenes/<id>/decision` | `{"decision": "aprobar" \| "rechazar", "motivo": "...", "usuario": "..."}`. |
+
+Reglas:
+
+- Sólo se pueden decidir órdenes **`Pendiente de aprobacion`**. Una orden ya
+  decidida no se toca: el `UPDATE` lleva la condición del estado.
+- **Rechazar exige motivo**: si no hay motivo, se rechaza la petición.
+- La decisión queda en `aprobacion` con su `usuario` y su `motivo`, y en el
+  registro de la trayectoria (tipo `decision`).
+- La orden se vuelve a publicar por MQTT con el estado nuevo y **el mismo id**.
+
+El servidor es el de la biblioteca estándar (`ThreadingHTTPServer`): una
+dependencia menos en una planta con 8 GB. La Central corre en su propio hilo
+y su apagado es limpio.
+
+### 12.4 Presupuesto y condiciones de corte
+
+El anexo de la Entrega 1, 1.4: *"condiciones de corte, presupuesto de pasos y
+tokens, y timeout global por nota"*.
+
+`agente/presupuesto.py` es un objeto con tres límites y un reloj:
+
+| Presupuesto | Tope | Variable | Qué acota |
+|---|---:|---|---|
+| Pasos | 6 | `AGENTE_MAX_PASOS` | las vueltas del modelo por consulta |
+| Tokens | 4 000 | `AGENTE_MAX_TOKENS` | el gasto de la consulta |
+| Timeout de la consulta | 120 s | `AGENTE_TIMEOUT_S` | el reloj del agente |
+| **Timeout global por nota** | 180 s | `NOTA_TIMEOUT_S` | desde que la nota entra hasta que el parte sale |
+
+Cuando se agota uno, el corte es una **condición prevista**: el motivo queda
+escrito en la bitácora (tipo `corte`) y el sistema sigue por el camino
+determinista. La nota que se pasa de plazo sale con lo que hay (como cuando
+el ASR falla), y la orden conserva su texto determinista si el agente se
+corta.
+
+El `recursion_limit` de LangChain (`pasos × 2 + 2`) acota el ciclo del
+agente por debajo; el presupuesto es la segunda red, y la que **deja
+constancia** de por qué se cortó.
+
+### 12.5 La mini spec
+
+[`docs/spec-parte.md`](docs/spec-parte.md) es la especificación corta del
+flujo del parte (Spec-Driven Development): las once etapas, qué decide el
+código y qué decide el modelo, las diez condiciones de corte, el presupuesto
+y los criterios de aceptación con el test que los fija.
+
+---
+
+## 13. Configuración
 
 Variables principales (ver `.env.example`):
 
@@ -1558,6 +1705,12 @@ Variables principales (ver `.env.example`):
 | `OLLAMA_TIMEOUT_S` | `90` | timeout de la llamada |
 | `OLLAMA_SEED` | `42` | semilla fija (salida reproducible) |
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga de memoria al terminar |
+| `AGENTE_MAX_PASOS` | `6` | presupuesto de pasos del agente (vueltas del modelo) |
+| `AGENTE_MAX_TOKENS` | `4000` | presupuesto de tokens del agente por consulta |
+| `AGENTE_TIMEOUT_S` | `120` | timeout de la consulta al agente |
+| `NOTA_TIMEOUT_S` | `180` | timeout global por nota (desde que entra hasta que sale el parte) |
+| `CENTRAL_ACTIVO` | `true` | levanta la Central de mantenimiento |
+| `CENTRAL_HOST` / `CENTRAL_PUERTO` | `0.0.0.0` / `8200` | escucha de la Central |
 | `NVIDIA_API_KEY` | (vacío) | clave del modelo de nube con visión; va en el `.env` local, que Git ignora |
 | `NVIDIA_MODELO` | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | modelo de visión (el de la lista cerrada; si no coincide, no se llama a la nube) |
 | `NVIDIA_URL` | `https://integrate.api.nvidia.com/v1` | API de NVIDIA (la llamada sale por el proxy del enlace) |
@@ -1579,7 +1732,7 @@ Persiste los binarios de las notas entre reinicios:
 
 ---
 
-## 13. Resultados end-to-end
+## 14. Resultados end-to-end
 
 ### Corrector oficial
 
@@ -1927,7 +2080,7 @@ repuestos**.
 
 ---
 
-## 14. Limitaciones y próximos pasos
+## 15. Limitaciones y próximos pasos
 
 ### Limitaciones actuales
 
@@ -1993,7 +2146,7 @@ repuestos**.
     con una **falla activa**, y el sistema sólo escala con lo que el operador
     lee (una lectura fuera de límite o un síntoma del catálogo). Un síntoma
     cualitativo que el ASR transcriba distinto de la frase del catálogo se
-    pierde: por eso `B1` quedó en 95 % y `D2` en 75 % (§13). Parte de ese hueco
+    pierde: por eso `B1` quedó en 95 % y `D2` en 75 % (§14). Parte de ese hueco
     es del **decodificador de voz**, no del sistema: la planta genera el audio
     de cada nota y lo arma en cada corrida, así que un mismo texto puede llegar
     distinto. El remedy es darle vocabulario al ASR (los nombres de los equipos,
@@ -2016,6 +2169,22 @@ repuestos**.
     que miden el comportamiento del sistema (`D1`, `B2`, `E1`, `E3`, `F1`,
     `F2`, `F3`, `G1`) están en 100 % en todas las corridas. La comparación
     entre corridas tiene que leer el detalle por criterio, no sólo el total.
+17. **El agente de LangChain es un auxiliar, no una decisión.** Corre en el
+    hilo de redacción (después de que la orden ya salió con su estado
+    decidido) y lo que propone se contrasta con el catálogo antes de usarse.
+    Con el modelo local (`qwen2.5:3b-instruct`) la justificación que produce
+    es **menos específica** que la del cruce léxico con el catálogo, porque el
+    modelo de 3B tiende a resumir de más. Por eso la del agente **no reemplaza**
+    al texto determinista: se agrega, y la del catálogo sigue siendo la base.
+    En una planta con un modelo más grande, el orden puede invertirse.
+18. **La Central de mantenimiento no tiene autenticación.** Es una pantalla
+    interna de la planta, en la red de depuración, para que el planificador
+    apruebe o rechace. Si la planta tuviera que exponerla fuera de la red
+    interna, habría que ponerle autenticación y control de acceso por rol: hoy
+    la decisión queda auditada (usuario, motivo, orden), pero no autenticada.
+19. **El costo en USD de la trayectoria es 0 con el modelo local.** La columna
+    queda para el caso de un modelo de nube; con Ollama en la planta, lo que
+    se mide es el tiempo y los tokens.
 
 ### Próximos pasos
 
@@ -2035,13 +2204,20 @@ repuestos**.
    fallas activas por equipo, que la planta no publica.
 6. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar`
    cuando cambie la planta.
+7. Medir el **agente contra el baseline** (la justificación determinista) con
+   el mismo corpus de la corrida de 93,1: hoy el agente está verificado con
+   tests, pero todavía no con la corrida completa.
+8. Ponerle **autenticación** a la Central si la planta la expone fuera de la
+   red interna.
 
 ---
 
-## 15. Referencias
+## 16. Referencias
 
 - Estado de implementación (bitácora de avance, decisiones y verificación):
   [`docs/estado_de_implementacion.md`](docs/estado_de_implementacion.md).
+- Mini spec del flujo del parte (Spec-Driven Development):
+  [`docs/spec-parte.md`](docs/spec-parte.md).
 - Plan de implementación: documento interno del curso, conservado fuera de este
   repositorio (`Plan_de_implementación/`, ignorado por Git).
 - Contrato: `planta-contrato` 0.2.0, commit

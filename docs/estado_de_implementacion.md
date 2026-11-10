@@ -50,6 +50,29 @@ que el desvío de horas queda a la vista pero no detiene el cierre. Verificado
 en vivo contra la planta simulada, con el flujo completo de una orden de
 contratista con diferencias.
 
+El **núcleo de agentes (LangChain)** quedó implementado y verificado: el
+agente consulta las mismas ocho tools del MCP (con los mismos esquemas
+Pydantic estrictos) y propone una falla con sus causas y sus citas; lo que
+propone se contrasta con el catálogo antes de usarse. Corre en el hilo de
+redacción, así que no agrega latencia al camino crítico.
+
+El **registro de la trayectoria** quedó implementado (`registro_trayectoria`,
+migración `0007`): una fila por paso con el modelo, las tools y sus
+argumentos, los tokens, el costo y el tiempo, más el motivo de cada corte y
+la decisión del planificador.
+
+La **Central de mantenimiento** quedó implementada: es el canal de decisión
+del planificador para las órdenes pendientes (pantalla web y API JSON), sólo
+toca órdenes `Pendiente de aprobacion`, el rechazo exige motivo y la
+decisión queda auditada con su usuario.
+
+El **presupuesto y las condiciones de corte** quedaron implementados
+(`agente/presupuesto.py`): pasos, tokens y timeout del agente, y el **timeout
+global por nota** (desde que la nota entra hasta que el parte sale). Un
+corte es una condición prevista: queda escrito y el sistema sigue por el
+camino determinista. La **mini spec** del flujo del parte está en
+[`docs/spec-parte.md`](spec-parte.md).
+
 ## Avance por fase
 
 | Fase | Estado | Avance y pendientes |
@@ -63,6 +86,7 @@ contratista con diferencias.
 | 5 — Análisis y borrador de orden | **Completa y verificada** | Catálogo de fallas parseado de los manuales de la planta (18 fallas vigentes, con cita), cruce con la evidencia del parte, causas probables ordenadas con lo que falta confirmar, borrador de orden con tareas/repuestos/costo y **las seis reglas de aprobación evaluadas en código**, publicación en `sistema/ordenes` y persistencia auditada. |
 | 6 — Operación sin enlace | **Completa y verificada** | La cola en PostgreSQL es **la salida de la planta**: eventos, órdenes y avisos. Si el bus no está, el mensaje queda en la base (no se pierde en la memoria del proceso) y sale cuando vuelve. Orden **por destino**: el radio espera al enlace y conserva su orden entre sí; los eventos y las órdenes no quedan bloqueados detrás del radio. Índice único **parcial** (`WHERE estado = 'pendiente'`): no hay dos copias esperando, pero un mensaje ya enviado se puede volver a encolar. `idempotency_key` deja escrito qué salió. Hilo dedicado `cola-salida` (`COLA_SONDEO_S=5`) y drenaje al reconectar. `pendientes_sincronizar` visible en el latido. Verificado en vivo (encolado, drenaje en orden, llegada al bus, enlace caído y restaurado, re-encolado). |
 | 7 — Cierre y certificación | **Completa y verificada** | Suscripción a `planta/cierres`, transcripción local con el vocabulario de la planta, parseo del cierre (tareas, repuestos con cantidad, horas, prueba final), **comparación contra la orden** y decisión en código: `Cerrada` (propio), `Observada` (contratista con diferencias sustantivas, con motivo y sin habilita) y `Certificada` (contratista sin diferencias, con habilita `HAB-AAAA-NNNN` y el monto de `CT-SVP-2025 §2.1`). Idempotente por `cierre.externa_id` (restricción única) y escritura atómica del estado, la certificación y el habilita. Verificado en vivo con el flujo completo de una contratista con diferencias. |
+| — — Núcleo de agentes, trayectoria, Central y presupuesto | **Completa y verificada** | Agente de LangChain (`create_agent`) que consulta las ocho tools del MCP y propone con citas (lo que propone se contrasta con el catálogo); registro `registro_trayectoria` con modelo, tools y argumentos, tokens, costo y tiempo; Central de mantenimiento (pantalla + API) como canal de decisión del planificador; presupuesto de pasos, tokens y timeout global por nota, con el corte escrito en la bitácora. Mini spec en `docs/spec-parte.md`. |
 
 ## Decisiones que conviene no perder de vista
 
@@ -88,6 +112,9 @@ contratista con diferencias.
 20. **La cola es la salida de la planta, y el orden es por destino.** Todo lo que se publica pasa por `outbox_cola`: si el bus está, sale en el acto; si no, queda en PostgreSQL. El aviso por radio necesita el radioenlace y **espera**; el evento y la orden van por el bus local y **no esperan al radio**. Un aviso de radio no puede salir después del aviso de radio que lo sigue.
 21. **La idempotencia de la cola es "no encolar dos veces mientras está pendiente".** El índice único es **parcial** (`WHERE estado = 'pendiente'`): el anterior, único sobre todas las filas, impedía re-encolar un mensaje ya enviado y lo perdía en una segunda caída del bus. Lo que se audita es `idempotency_key` (`outbox:<tipo>:<id>` → fila).
 22. **El bus de la planta y el radioenlace son dos enlaces distintos.** Por eso la cola se vacía desde un hilo dedicado (`cola-salida`), no sólo desde el latido: un evento no tiene por qué esperar a que vuelva el radio.
+23. **El agente consulta y propone; no decide.** Es un agente de LangChain que usa las mismas ocho tools del MCP y los mismos esquemas estrictos: no hay una segunda definición de las tools. Lo que propone se contrasta con el catálogo (una falla o una cita inventada descarta la propuesta entera) y sólo se usa como **justificación** de una orden que ya salió con su estado decidido.
+24. **La Central de mantenimiento no es una tool.** No está en `tools.registro.REGISTRO` ni en el MCP: el agente no tiene forma de aprobar nada. La decisión la toma una persona y queda auditada con su usuario y su motivo.
+25. **Cortar es parte del diseño.** Los presupuestos (pasos, tokens y timeout global por nota) no son sólo límites: cuando se agotan, el motivo queda escrito en la trayectoria y el sistema sigue por el camino determinista. Un corte escrito es mejor que un proceso que se queda consultando.
 
 ## Lista cerrada de modelos — qué quedó hecho
 
@@ -394,7 +421,7 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Última verificación
 
-- `python -m pytest`: **448 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **423 pasaron, 25 omitidas**.
+- `python -m pytest`: **504 pasaron, 0 omitidas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose). Sin base: **468 pasaron, 36 omitidas**.
 - `ruff check .`: **sin errores**.
 - **Corrector oficial, corrida completa (7 escenarios)**: **93,1/100 — APRUEBA**
   (`_fase10`, la corrida vigente), sin eliminatorias, 93 de 93 puntos medidos

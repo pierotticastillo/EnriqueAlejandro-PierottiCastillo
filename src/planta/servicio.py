@@ -20,6 +20,7 @@ from planta_contrato import (
     TipoEvento,
 )
 
+from agente.presupuesto import Presupuesto
 from analisis.servicio import ServicioAnalisis
 from analisis.vision import ClienteVision
 from config import Settings
@@ -68,6 +69,7 @@ class ServicioParteVoz:
         enlace_ok_fn: Callable[[], bool] | None = None,
         analisis: ServicioAnalisis | None = None,
         vision: ClienteVision | None = None,
+        registrador: Any = None,
     ) -> None:
         self._settings = settings
         self._repo = repositorio
@@ -77,6 +79,9 @@ class ServicioParteVoz:
         self._planta = planta
         self._historiador = historiador
         self._analisis = analisis
+        # El registro de la trayectoria: los cortes del presupuesto global por
+        # nota quedan escritos ahí, no se pierden en el log.
+        self._registrador = registrador
         # Modelo de nube con visión: sólo describe las fotos. Es opcional:
         # sin clave o sin modelo, el aviso de seguridad sale igual que siempre.
         self._vision = vision
@@ -95,6 +100,9 @@ class ServicioParteVoz:
         # llegar por MQTT y no se transcribe dos veces.
         self._notas_en_curso: set[str] = set()
         self._candado_notas = threading.Lock()
+        # El presupuesto global de cada nota: el plazo que corre desde que la
+        # nota entra hasta que el parte sale publicado (anexo Entrega 1).
+        self._presupuestos: dict[str, Presupuesto] = {}
         # Cola aparte para la redacción con el modelo local: la cola de notas
         # no puede esperar a que un modelo de 3B termine de responder.
         self._cola_redaccion: queue.Queue[tuple[object, object] | None] = queue.Queue()
@@ -255,18 +263,73 @@ class ServicioParteVoz:
         return True
 
     def _preparar_nota(self, nota: NotaRecorrida) -> None:
-        """Mete la nota en la cola de transcripción."""
+        """Mete la nota en la cola de transcripción.
+
+        Acá arranca el **timeout global por nota**: el plazo que corre desde
+        que la nota entra al sistema hasta que el parte sale publicado. Si
+        se pasa, la condición de corte queda escrita y el sistema sigue con
+        lo que ya tenía.
+        """
         if not self._chequear_nota(nota):
             return
         logger.info("Procesando nota %s de %s", nota.id, nota.operador)
+        self._abrir_presupuesto(nota.id)
         self._cola_asr.put(nota)
+
+    def _abrir_presupuesto(self, nota_id: str) -> None:
+        """Arranca el plazo global de la nota."""
+        with self._candado_notas:
+            self._presupuestos[nota_id] = Presupuesto(
+                timeout_s=self._settings.nota_timeout_s,
+            )
+
+    def _presupuesto_de(self, nota_id: str) -> Presupuesto | None:
+        """El presupuesto global de la nota, si todavía está en curso."""
+        with self._candado_notas:
+            return self._presupuestos.get(nota_id)
+
+    def _cortar_si_se_paso_el_plazo(self, nota_id: str, etapa: str) -> bool:
+        """Si el plazo global de la nota ya se pasó, deja el corte escrito.
+
+        Devuelve ``True`` cuando el plazo se pasó: la etapa que llama a esto
+        tiene que cortar (o seguir con lo parcial) en vez de seguir esperando.
+        """
+        presupuesto = self._presupuesto_de(nota_id)
+        if presupuesto is None:
+            return False
+        if not presupuesto.agotado():
+            return False
+        motivo = presupuesto.motivo_corte() or "se agotó el plazo"
+        logger.warning(
+            "Nota %s: corte por presupuesto en %s (%s)",
+            nota_id,
+            etapa,
+            motivo,
+        )
+        if self._registrador is not None:
+            self._registrador.registrar(
+                etapa="nota",
+                tipo="corte",
+                argumentos={"nota": nota_id, "etapa": etapa, **presupuesto.resumen()},
+                salida={"corte": motivo},
+                error=motivo,
+            )
+        return True
 
     def _transcribir(self, nota: NotaRecorrida) -> tuple[str, list[Path | None]]:
         """Descarga el audio y las fotos y transcribe la nota.
 
         Va en el hilo de transcripción: la descarga y la decodificación son
         las partes lentas y no pueden frenar al hilo de la planta.
+
+        El **timeout global por nota** manda: si el plazo ya se pasó, no se
+        transcribe y el parte sale con lo que haya (como cuando el ASR
+        falla).
         """
+        if self._cortar_si_se_paso_el_plazo(nota.id, "transcripcion"):
+            # No se descarga ni se decodifica el audio: el plazo ya se pasó.
+            # Las fotos sí se guardan, porque el parte las necesita.
+            return "", self._almacen.guardar_fotos(nota.id, nota.fotos)
         audio = self._almacen.guardar_audio(nota.id, nota.audio_url)
         fotos_locales = self._almacen.guardar_fotos(nota.id, nota.fotos)
 
@@ -287,9 +350,16 @@ class ServicioParteVoz:
         texto: str,
         fotos_locales: list[Path | None],
     ) -> None:
-        """Con la transcripción lista, arma el parte y lo publica."""
+        """Con la transcripción lista, arma el parte y lo publica.
+
+        El plazo global por nota se comprueba una vez más: si se pasó
+        mientras transcribía, el corte queda escrito y el parte sale igual
+        (el camino determinista no se interrumpe: el operador tiene que ver
+        la nota).
+        """
         with self._candado_notas:
             self._notas_en_curso.discard(nota.id)
+        self._cortar_si_se_paso_el_plazo(nota.id, "parte")
         extraccion = self._extractor.extraer(texto, nota.fotos)
         nota_id = self._repo.guardar_nota(
             nota,
@@ -299,8 +369,15 @@ class ServicioParteVoz:
         )
         if extraccion.seguridad:
             self._publicar_alerta_seguridad(nota_id, nota, extraccion, texto, fotos_locales)
+            self._cerrar_presupuesto(nota.id)
             return
         self._iniciar_conversacion(nota_id, nota, extraccion, fotos_locales)
+        self._cerrar_presupuesto(nota.id)
+
+    def _cerrar_presupuesto(self, nota_id: str) -> None:
+        """Libera el presupuesto global de la nota."""
+        with self._candado_notas:
+            self._presupuestos.pop(nota_id, None)
 
     def procesar_nota(self, nota: NotaRecorrida) -> None:
         """Procesa la nota de punta a punta, sin pasar por las colas.
@@ -312,6 +389,7 @@ class ServicioParteVoz:
         if not self._chequear_nota(nota):
             return
         logger.info("Procesando nota %s de %s", nota.id, nota.operador)
+        self._abrir_presupuesto(nota.id)
         texto, fotos_locales = self._transcribir(nota)
         self._completar_nota(nota, texto, fotos_locales)
 

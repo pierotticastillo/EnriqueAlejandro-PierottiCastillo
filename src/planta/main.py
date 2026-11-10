@@ -13,6 +13,8 @@ import httpx
 from planta_contrato import LecturaSensor, OrdenSistema, Repuesto
 from sqlalchemy.engine import Engine
 
+from agente.nucleo import crear_agente
+from agente.trayectoria import RegistradorTrayectoria
 from analisis.catalogo import CatalogoManuales
 from analisis.estado import EstadoBombas
 from analisis.llm import crear_modelo
@@ -24,6 +26,7 @@ from db.session import crear_engine
 from deteccion.sensores import DetectorSensores
 from modelos_lista import LISTA_CERRADA
 from planta.almacenamiento import Almacenamiento
+from planta.central import Central
 from planta.cierre import ServicioCierre
 from planta.cola import DrenadorCola
 from planta.heartbeat import Heartbeat, comprobar_enlace
@@ -146,12 +149,19 @@ def _orden_recuperada(
     fila: dict[str, Any],
     catalogo: CatalogoManuales,
     estado_bombas: dict[str, str],
+    *,
+    estado: str | None = None,
 ) -> OrdenSistema:
-    """La orden pendiente que se vuelve a publicar después de un corte.
+    """La orden que se vuelve a publicar, desde la base.
 
     Sale de la base: mismo id, mismo estado, mismas tareas y repuestos. Lo que
     no se guarda en la base (el ejecutor, si la orden baja la inyección) se
     vuelve a calcular con el catálogo y con el estado de las bombas.
+
+    ``estado`` es el estado del contrato. Por omisión es
+    ``PendienteAprobacion``: es el caso de la orden que se recupera después de
+    un corte. Cuando la decisión la tomó el planificador, se pasa el estado
+    nuevo.
     """
     equipo = str(fila.get("equipo") or "")
     tareas = [str(tarea) for tarea in (fila.get("tareas") or [])]
@@ -164,13 +174,13 @@ def _orden_recuperada(
     reduce = False
     if detiene and estado_bombas.get(equipo) == "marcha":
         reduce = not any(
-            tag != equipo and estado == "parada"
-            for tag, estado in estado_bombas.items()
+            tag != equipo and estado_bomba == "parada"
+            for tag, estado_bomba in estado_bombas.items()
         )
     return OrdenSistema(
         id=str(fila.get("id")),
         ts=fila.get("creada_en") or fila.get("actualizada_en"),
-        estado="PendienteAprobacion",
+        estado=estado or "PendienteAprobacion",
         equipo=equipo,
         evento_ids=[str(fila.get("evento_id"))] if fila.get("evento_id") else [],
         tareas=tareas,
@@ -278,9 +288,22 @@ def main() -> None:
     logger.info("Lista de precios del contrato: %s ítem(s)", len(precios))
     estado_bombas = EstadoBombas(settings.planta_api_url)
     recuperador = RecuperadorDiferido()
+    # El registro de la trayectoria: cada paso, con su modelo, sus tools, sus
+    # tokens, su costo y su tiempo (enunciado, sección F).
+    registrador = RegistradorTrayectoria(engine)
     # El modelo de lenguaje local es un auxiliar de redacción. Si no está
     # activo o no responde, el sistema sigue con el texto determinista.
     modelo = crear_modelo(settings)
+    # El núcleo de agentes (LangChain): consulta los manuales y el historial
+    # con herramientas y propone con citas. Si no está activo, el sistema
+    # sigue igual: la decisión la toman las reglas, en código.
+    agente = crear_agente(
+        settings,
+        cliente=cliente_api,
+        corpus=CorpusManuales(cliente_api),
+        recuperador=recuperador,
+        catalogo=catalogo,
+    )
     analisis = ServicioAnalisis(
         catalogo,
         estado=estado_bombas,
@@ -288,9 +311,15 @@ def main() -> None:
         recuperador=recuperador,
         planta=planta,
         modelo=modelo,
+        agente=agente,
+        registrador=registrador,
+        agente_max_tokens=settings.agente_max_tokens,
+        agente_timeout_s=settings.agente_timeout_s,
     )
     if modelo is not None:
         logger.info("Modelo local de redacción activo: %s", modelo.nombre)
+    if agente is not None:
+        logger.info("Núcleo de agentes activo (LangChain): %s", agente.nombre_modelo)
     # El modelo de nube con visión describe las fotos; no decide nada. Si no
     # hay clave, o el modelo no es el de la lista cerrada, no se llama a la nube.
     vision = crear_cliente_vision(settings)
@@ -384,6 +413,34 @@ def main() -> None:
         enlace_ok_fn=lambda: comprobar_enlace(settings),
     )
     referencia["drenador"] = drenador
+
+    # ------------------------------------------------- Central de mantenimiento
+    #
+    # El enunciado pide que la orden pendiente "se reanuda cuando el
+    # planificador la aprueba o la rechaza". La Central es ese canal: una
+    # página con las órdenes que esperan decisión y una API JSON. No es una
+    # tool: el agente no puede llegar a acá.
+    def _publicar_orden_decidida(fila: dict[str, Any], estado: str) -> None:
+        """La orden, con la decisión del planificador, sale por el bus."""
+        orden = _orden_recuperada(
+            fila,
+            catalogo,
+            estado_bombas.de_bombas(),
+            estado=estado,
+        )
+        cliente_ref["cliente"].publicar_orden(orden)
+        logger.info("Orden %s con la decisión del planificador: %s", orden.id, estado)
+
+    central = Central(
+        repositorio,
+        publicar_orden=_publicar_orden_decidida,
+        registrar_paso=registrador.registrar,
+        host=settings.central_host,
+        puerto=settings.central_puerto,
+    )
+    if settings.central_activo:
+        central.iniciar()
+
     servicio = ServicioParteVoz(
         settings,
         repositorio,
@@ -394,6 +451,7 @@ def main() -> None:
         historiador=historiador,
         analisis=analisis,
         vision=vision,
+        registrador=registrador,
     )
     referencia["servicio"] = servicio
     # Cierre de órdenes por voz (Fase 7): el técnico cierra la orden hablando
@@ -463,6 +521,7 @@ def main() -> None:
     parar.wait()
 
     logger.info("Deteniendo PIA-3")
+    central.detener()
     servicio.detener()
     servicio_cierre.detener()
     cliente.detener()

@@ -1012,6 +1012,140 @@ class Repositorio:
             )
         return [dict(fila) for fila in filas]
 
+    def decidir_orden(
+        self,
+        orden_id: str,
+        decision: str,
+        *,
+        motivo: str | None = None,
+        usuario: str | None = None,
+    ) -> dict[str, Any] | None:
+        """La decisión del planificador sobre una orden pendiente.
+
+        Es la única escritura sobre órdenes que **no** viene de las reglas:
+        la decisión de una persona (el enunciado, sección D: la orden pendiente
+        *"se reanuda cuando el planificador la aprueba o la rechaza"*).
+
+        * Sólo toca órdenes que están ``Pendiente de aprobacion``: una orden
+          ya decidida no se cambia.
+        * El rechazo necesita motivo.
+        * La decisión queda en la tabla ``aprobacion`` con su usuario y su
+          motivo, así que se puede auditar quién decidió qué.
+        """
+        estado = _ESTADO_ORDEN_DB.get(decision)
+        if estado not in ("Aprobada", "Rechazada"):
+            raise ValueError(f"Decisión inválida: {decision!r}")
+        motivo = (motivo or "").strip() or None
+        if estado == "Rechazada" and not motivo:
+            raise ValueError("El rechazo de una orden necesita un motivo")
+        with self._engine.begin() as conexion:
+            fila = (
+                conexion.execute(
+                    text(
+                        """
+                        UPDATE orden
+                        SET estado = :estado,
+                            motivo = :motivo,
+                            actualizada_en = now()
+                        WHERE id = :id AND estado = 'Pendiente de aprobacion'
+                        RETURNING id, evento_id, equipo, estado, motivo,
+                                  costo_estimado, detencion, creada_en, actualizada_en,
+                                  COALESCE(
+                                      (SELECT json_agg(t.tarea_id ORDER BY t.tarea_id)
+                                       FROM orden_tarea t WHERE t.orden_id = orden.id),
+                                      '[]'::json
+                                  ) AS tareas,
+                                  COALESCE(
+                                      (SELECT json_agg(
+                                          json_build_object(
+                                              'codigo', r.repuesto_id,
+                                              'cantidad', r.cantidad
+                                          ) ORDER BY r.repuesto_id
+                                       )
+                                       FROM orden_repuesto r WHERE r.orden_id = orden.id),
+                                      '[]'::json
+                                  ) AS repuestos
+                        """
+                    ),
+                    {
+                        "id": orden_id,
+                        "estado": estado,
+                        "motivo": motivo if estado == "Rechazada" else None,
+                    },
+                )
+                .mappings()
+                .first()
+            )
+            if fila is None:
+                return None
+            conexion.execute(
+                text(
+                    """
+                    INSERT INTO aprobacion (orden_id, decision, motivo, reglas_evaluadas, usuario)
+                    SELECT :orden, :decision, :motivo,
+                           COALESCE(
+                               (SELECT reglas_evaluadas FROM aprobacion
+                                WHERE orden_id = :orden ORDER BY creada_en DESC LIMIT 1),
+                               '{}'::jsonb
+                           ),
+                           :usuario
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM aprobacion
+                        WHERE orden_id = :orden AND decision = :decision
+                          AND COALESCE(usuario, '') = COALESCE(:usuario, '')
+                    )
+                    """
+                ),
+                {
+                    "orden": orden_id,
+                    "decision": decision,
+                    "motivo": motivo,
+                    "usuario": usuario,
+                },
+            )
+        return dict(fila)
+
+    def ordenes_para_central(self, limite: int = 50) -> list[dict[str, Any]]:
+        """Las órdenes que el planificador tiene a la vista.
+
+        Primero las que esperan decisión y después las más recientes: es lo
+        que muestra la Central de mantenimiento.
+        """
+        with self._engine.connect() as conexion:
+            filas = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT o.id, o.equipo, o.estado, o.motivo, o.costo_estimado,
+                               o.creada_en, o.actualizada_en,
+                               COALESCE(
+                                   (SELECT json_agg(t.tarea_id ORDER BY t.tarea_id)
+                                     FROM orden_tarea t WHERE t.orden_id = o.id),
+                                   '[]'::json
+                               ) AS tareas,
+                               COALESCE(
+                                   (SELECT json_agg(
+                                       json_build_object(
+                                           'codigo', r.repuesto_id,
+                                           'cantidad', r.cantidad
+                                       ) ORDER BY r.repuesto_id
+                                   )
+                                    FROM orden_repuesto r WHERE r.orden_id = o.id),
+                                   '[]'::json
+                               ) AS repuestos
+                        FROM orden o
+                        ORDER BY (o.estado = 'Pendiente de aprobacion') DESC,
+                                 o.actualizada_en DESC
+                        LIMIT :limite
+                        """
+                    ),
+                    {"limite": max(1, int(limite))},
+                )
+                .mappings()
+                .all()
+            )
+        return [dict(fila) for fila in filas]
+
     # ------------------------------------------------------------------ cola
 
     def encolar_outbox(

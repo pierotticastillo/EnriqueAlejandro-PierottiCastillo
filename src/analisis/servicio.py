@@ -23,6 +23,9 @@ from typing import Any
 
 from planta_contrato import EstadoOrden, EventoSistema, OrdenSistema, Repuesto
 
+from agente.formato import formatear as formatear_propuesta
+from agente.nucleo import AgenteAnalisis
+from agente.presupuesto import Presupuesto
 from analisis.aprobacion import Contexto, evaluar
 from analisis.catalogo import CatalogoManuales
 from analisis.causas import causalizar
@@ -80,6 +83,10 @@ class ServicioAnalisis:
         recuperador: Any = None,
         planta: dict[str, Any] | None = None,
         modelo: AnalysisModel | None = None,
+        agente: AgenteAnalisis | None = None,
+        registrador: Any = None,
+        agente_max_tokens: int = 4000,
+        agente_timeout_s: float = 120.0,
     ) -> None:
         self._catalogo = catalogo
         self._estado = estado
@@ -89,6 +96,14 @@ class ServicioAnalisis:
         # El modelo de lenguaje es un auxiliar de redacción. Si no hay, el
         # sistema funciona igual: las reglas están en código.
         self._modelo = modelo
+        # El núcleo de agentes (LangChain) consulta los manuales y el
+        # historial con herramientas y propone con citas. Como el modelo, es
+        # un auxiliar: la decisión la toman las reglas, en código.
+        self._agente = agente
+        self._registrador = registrador
+        # El presupuesto de la consulta al agente: pasos, tokens y tiempo.
+        self._agente_max_tokens = agente_max_tokens
+        self._agente_timeout_s = agente_timeout_s
 
     # ------------------------------------------------------------------ análisis
 
@@ -287,21 +302,158 @@ class ServicioAnalisis:
 
     @property
     def nombre_modelo(self) -> str | None:
-        """El nombre del modelo de redacción, si hay uno."""
+        """El nombre del modelo: el del agente si hay, si no el del redactor."""
+        if self._agente is not None:
+            return self._agente.nombre_modelo
         return getattr(self._modelo, "nombre", None)
 
     def redactar(self, analisis: Analisis) -> str | None:
-        """La justificación técnica de la orden, escrita por el modelo local.
+        """La justificación técnica de la orden.
 
-        Devuelve ``None`` si no hay modelo, si no responde o si lo que devuelve
-        no valida: en los tres casos la orden queda como está, con su texto
-        determinista. Esta redacción **no** cambia el estado de la orden ni el
-        motivo: las reglas ya se evaluaron en código.
+        El camino normal es el **agente** (LangChain): consulta los manuales
+        y el historial con herramientas y propone con citas. Si no hay agente,
+        o si no respondió, se cae al modelo sin herramientas; y si tampoco
+        hay modelo, no hay justificación. En los tres casos la orden ya está
+        publicada con su estado decidido: esto es un agregado, no una
+        decisión.
         """
+        texto = self._justificar_con_agente(analisis)
+        if texto:
+            return texto
         if self._modelo is None:
             return None
         tareas = self._nombres_de_tareas(analisis.borrador.tareas, analisis.borrador.equipo)
         return redactar(self._modelo, analisis, tareas=tareas)
+
+    def _justificar_con_agente(self, analisis: Analisis) -> str | None:
+        """La justificación que propone el agente de LangChain.
+
+        El agente **propone**; el código **dispone**. Lo que devuelve se
+        contrasta con el catálogo y con las citas conocidas antes de usarse: una
+        cita inventada descarta la propuesta entera.
+        """
+        if self._agente is None:
+            return None
+        permitidas = tuple(analisis.citas)
+        callbacks: list[Any] = []
+        # El presupuesto de la consulta: pasos, tokens y timeout. Cuando se
+        # agota, el corte queda escrito y la orden conserva su texto
+        # determinista.
+        presupuesto = Presupuesto(
+            max_pasos=self._agente.max_pasos,
+            max_tokens=self._agente_max_tokens,
+            timeout_s=self._agente_timeout_s,
+        )
+        if self._registrador is not None:
+            from agente.trayectoria import TrazaAgente
+
+            callbacks.append(
+                TrazaAgente(
+                    self._registrador,
+                    etapa="agente",
+                    orden_id=analisis.borrador.id,
+                    evento_id=analisis.evento_id,
+                    equipo=analisis.equipo,
+                    presupuesto=presupuesto,
+                    modelo=self._agente.nombre_modelo,
+                )
+            )
+        tareas = self._nombres_de_tareas(analisis.borrador.tareas, analisis.borrador.equipo)
+        try:
+            propuesta = self._agente.consultar(
+                self._prompt_agente(analisis, tareas),
+                permitidas=permitidas,
+                callbacks=callbacks,
+                presupuesto=presupuesto,
+            )
+        except Exception:  # noqa: BLE001 - el agente no puede tumbar el análisis
+            logger.warning("Falló la consulta al agente", exc_info=True)
+            return None
+        if self._registrador is not None:
+            # El corte queda en la bitácora: no se borra en silencio. Si la
+            # consulta llegó bien, lo que queda es el resumen del presupuesto.
+            self._registrador.registrar(
+                etapa="agente",
+                tipo="corte" if presupuesto.corte else "consulta",
+                argumentos=presupuesto.resumen(),
+                salida={"corte": presupuesto.corte},
+                error=presupuesto.corte,
+                orden_id=analisis.borrador.id,
+                evento_id=analisis.evento_id,
+                equipo=analisis.equipo,
+            )
+        if propuesta is None or propuesta.vacia:
+            return None
+        return formatear_propuesta(propuesta, permitidas)
+
+    def _prompt_agente(self, analisis: Analisis, tareas: dict[str, str]) -> str:
+        """El prompt del agente: material confiable, sin texto del operador.
+
+        Es el mismo material que se le da al modelo de redacción (la ficha de
+        la falla, las mediciones, las tareas y el resultado de las reglas) con
+        un pedido distinto: en vez de redactar, el agente **consulta** con
+        herramientas y **propone**.
+        """
+        borrador = analisis.borrador
+        falla = analisis.falla
+        lineas: list[str] = []
+        lineas.append(f"Equipo: {borrador.equipo}")
+        lineas.append(
+            "Tipo de orden: "
+            + ("detiene el equipo" if borrador.detiene_equipo else "no detiene el equipo")
+        )
+        if falla is not None:
+            lineas.append("")
+            lineas.append("FICHA DE LA FALLA (catálogo de manuales)")
+            lineas.append(f"- Código: {falla.codigo}")
+            lineas.append(f"- Título: {falla.titulo}")
+            lineas.append(f"- Síntoma: {falla.sintoma}")
+            if falla.causas:
+                lineas.append("- Causas que lista el manual: " + "; ".join(falla.causas))
+            if falla.accion:
+                lineas.append("- Acción del manual: " + falla.accion)
+            lineas.append(f"- Documento: {falla.documento}")
+            lineas.append(f"- Cita: {falla.cita}")
+        else:
+            lineas.append("")
+            lineas.append(
+                "FICHA DE LA FALLA: no se identificó una falla del catálogo; "
+                "la orden es una inspección."
+            )
+        if analisis.mediciones:
+            lineas.append("")
+            lineas.append("MEDICIONES DE PLANTA (sólo valores; no hay texto del operador)")
+            for medicion in analisis.mediciones:
+                valor = "-" if medicion.valor is None else f"{medicion.valor:g}"
+                desvio = f" · desvío: {medicion.direccion}" if medicion.direccion else ""
+                lineas.append(
+                    f"- {medicion.variable}: {valor} {medicion.unidad or ''}{desvio}".rstrip()
+                )
+        if analisis.causas:
+            lineas.append("")
+            lineas.append("CAUSAS QUE YA PROPUSO EL CRUCE CON EL CATÁLOGO")
+            for causa in analisis.causas:
+                lineas.append(f"- {causa.causa} (cita: {causa.cita})")
+        lineas.append("")
+        lineas.append("TAREAS DEL PLAN (ya decididas)")
+        for tarea in borrador.tareas:
+            detalle = tareas.get(tarea)
+            lineas.append(f"- {tarea}" + (f": {detalle}" if detalle else ""))
+        lineas.append("")
+        lineas.append("REGLAS DE APROBACIÓN (evaluadas en código; el resultado no se cambia)")
+        for regla in analisis.evaluacion.reglas:
+            lineas.append(f"- {regla.nombre}: {'cumple' if regla.cumple else 'no cumple'}")
+        permitidas = tuple(analisis.citas)
+        lineas.append("")
+        lineas.append("CITAS PERMITIDAS (sólo podés usar estas): " + ", ".join(permitidas))
+        lineas.append("")
+        lineas.append(
+            "Consultá los manuales y el historial con las herramientas y después "
+            "proponé la falla, las causas y las citas de las que sale. "
+            "No cambies las tareas, los repuestos, los costos ni el resultado de "
+            "las reglas."
+        )
+        return "\n".join(lineas)
 
     def _nombres_de_tareas(self, tareas: tuple[str, ...], equipo: str) -> dict[str, str]:
         """El nombre y el procedimiento de cada tarea, del catálogo del plan."""

@@ -94,6 +94,8 @@ class Settings(BaseSettings):
     ollama_modelo: str = "qwen2.5:3b-instruct"
     ollama_num_ctx: int = 2048
     ollama_num_thread: int = 2
+    # Tope de tokens de la respuesta: el modelo no puede escribir un tratado.
+    ollama_max_tokens: int = 250
     # Timeout de la llamada. Medido en la simulación (el Ollama del host se
     # alcanza por el proxy del enlace): ~40 s por vuelta con `keep_alive=0`,
     # porque el modelo se carga en cada llamada (~9 s) y genera a ~8 tok/s.
@@ -104,6 +106,29 @@ class Settings(BaseSettings):
     # 0 = el modelo se descarga de memoria en cuanto termina de responder.
     # Con 8 GB de RAM en la planta no puede quedar residente.
     ollama_keep_alive: int = 0
+
+    # Núcleo de agentes (LangChain). El presupuesto de pasos es el tope de
+    # vueltas y tool calls del agente por consulta: es el "presupuesto de
+    # pasos" que pide el anexo de la Entrega 1.
+    agente_max_pasos: int = 6
+    # Presupuesto de tokens del agente por consulta. Si se pasa, la consulta
+    # se corta y queda escrito el corte.
+    agente_max_tokens: int = 4000
+    # Timeout de la consulta al agente: es el reloj del presupuesto. Corta
+    # antes que el timeout del modelo, para que el corte sea del presupuesto
+    # y no un error de red.
+    agente_timeout_s: float = 120.0
+
+    # Timeout global por nota: el plazo que corre desde que la nota entra al
+    # sistema hasta que el parte sale publicado. Acota la transcripción (que
+    # es la parte lenta) y deja escrita la condición de corte si se pasa.
+    nota_timeout_s: float = 180.0
+
+    # Central de mantenimiento: donde el planificador aprueba o rechaza las
+    # órdenes que las reglas dejaron pendientes.
+    central_activo: bool = True
+    central_host: str = "0.0.0.0"
+    central_puerto: int = 8200
 
     # Modelo de nube con visión (NVIDIA). Es un auxiliar: **describe** la foto
     # para que quien la revise sepa qué está mirando. No decide, no aprueba y

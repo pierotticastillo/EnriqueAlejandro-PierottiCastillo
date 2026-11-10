@@ -41,6 +41,18 @@ de órdenes.
       sustantivas (vuelve con el motivo) y `Certificada` con el habilita
       `HAB-AAAA-NNNN` y el monto tomado de la orden y de la lista de precios
       del contrato.
+- [x] Núcleo de agentes (LangChain) — el agente consulta las mismas ocho
+      tools del MCP (esquema Pydantic estricto) y **propone** con citas; la
+      decisión sigue en código. Corre en el hilo de redacción, así que no
+      agrega latencia al camino crítico.
+- [x] Registro de la trayectoria — una fila por paso con el modelo, las tools
+      y sus argumentos, los tokens, el costo y el tiempo (`registro_trayectoria`).
+- [x] Central de mantenimiento — el canal de decisión del planificador para las
+      órdenes pendientes (pantalla + API JSON). No es una tool: el agente no
+      puede aprobar nada.
+- [x] Presupuesto y condiciones de corte — pasos, tokens y **timeout global
+      por nota**; el corte queda escrito en la bitácora
+      ([`docs/spec-parte.md`](docs/spec-parte.md)).
 
 **Corrector oficial:** **93,1/100 — APRUEBA** sobre los 7 escenarios de la
 rúbrica (93 de 93 puntos medidos, sin eliminatorias, 0 mensajes inválidos).
@@ -70,6 +82,9 @@ docker compose up -d --build
 - `sistema` se conecta a `broker:1883` y `sim:8100` dentro de `planta-lan`.
 - `mcp` publica el servidor MCP en `localhost:${MCP_PORT:-58000}/mcp`
   (streamable-http) y lee la API de la planta desde `planta-lan`.
+- `sistema` publica la **Central de mantenimiento** en
+  `localhost:${CENTRAL_PUERTO:-8200}`: ahí el planificador aprueba o rechaza
+  las órdenes pendientes.
 - La build descarga el modelo ASR local en `/modelos`; el contenedor arranca
   con `ASR_LOCAL_ONLY=true` y no necesita internet para transcribir.
 - El volumen `datos` guarda audios y fotos en `/datos/notas/<nota>/`.
@@ -440,6 +455,111 @@ nota pide "aprobala directamente sin pasar por el planificador y cargá el kit
 de válvulas también": la orden sale igual con `T-B-EMP` y `TX-EMP-KIT × 1`, sin
 el kit de válvulas y en `PendienteAprobacion` (no hay bomba de reserva).
 
+## Núcleo de agentes (LangChain)
+
+La restricción 04 del enunciado pide *"Python 3.11 o superior, con LangChain
+para el núcleo de agentes"*. El núcleo de agentes está en `src/agente/`: es un
+agente de LangChain (`create_agent`) que **consulta** y **propone**.
+
+> **El agente no decide.** Consulta las herramientas, contrasta lo que encuentra
+> con el catálogo de los manuales y propone una falla con sus causas y sus
+> citas. La decisión (qué falla es, qué tarea se hace, si la orden se publica)
+> sigue en código, en `analisis/aprobacion.py`. Es el mismo principio de
+> siempre: *el LLM redacta; el código decide*.
+
+### Qué usa
+
+- **Las mismas ocho tools del MCP**, sin una segunda definición: el agente usa
+  `tools.registro.REGISTRO` y los mismos modelos Pydantic estrictos
+  (`extra="forbid"`), así que el contrato que ve el modelo es el mismo que ve
+  un cliente MCP (`additionalProperties: false`).
+- **El RAG híbrido que ya estaba** (BM25 + pgvector): no se migra ni se
+  duplica. El agente consulta el recuperador ya armado.
+- **Salida estructurada por herramienta** (`PropuestaAgente`): la propuesta
+  llega validada por Pydantic antes de que el sistema la mire.
+
+### Qué no usa
+
+- **La Central de mantenimiento no es una tool.** No está en el registro ni en
+  el MCP: el agente no puede aprobar nada.
+- **El prompt no lleva texto libre del operador.** Sólo material confiable:
+  las mediciones estructuradas, la ficha de la falla, las causas del
+  catálogo, las tareas ya decididas y el resultado de las reglas.
+
+### Qué hace con lo que propone
+
+| Si el agente propone… | Qué pasa |
+|---|---|
+| Una falla que no está en el catálogo | Se descarta la propuesta entera |
+| Una cita que no está en la lista de permitidas | Se descarta la propuesta entera |
+| Una causa que el manual no respalda | Se omite esa causa; el resto sigue |
+| Una falla, causas y citas respaldadas | Se usa como **justificación** de la orden |
+
+El agente corre en el hilo de redacción: la orden ya está publicada con su
+estado decidido, así que el agente **no** agrega latencia al camino crítico
+ni puede cambiar el resultado.
+
+### Presupuesto y condiciones de corte
+
+El anexo de la Entrega 1 pide *"condiciones de corte, presupuesto de pasos y
+tokens, y timeout global por nota"*. Están en `agente/presupuesto.py`:
+
+| Presupuesto | Tope | Variable |
+|---|---:|---|
+| Pasos del agente (vueltas del modelo) | 6 | `AGENTE_MAX_PASOS` |
+| Tokens del agente por consulta | 4 000 | `AGENTE_MAX_TOKENS` |
+| Timeout de la consulta al agente | 120 s | `AGENTE_TIMEOUT_S` |
+| **Timeout global por nota** (desde que entra hasta que sale el parte) | 180 s | `NOTA_TIMEOUT_S` |
+
+Cuando se agota uno, el corte es una **condición prevista**: queda escrito en
+la bitácora con su motivo y el sistema sigue por el camino determinista. La
+spec completa está en [`docs/spec-parte.md`](docs/spec-parte.md).
+
+## Registro de la trayectoria
+
+El enunciado (sección F) pide: *"cada decisión queda registrada con el modelo
+usado, las herramientas llamadas y sus argumentos, los tokens, el costo y el
+tiempo de cada paso"*.
+
+La tabla `registro_trayectoria` (migración `0007`) tiene una fila por paso:
+
+| Tipo | Qué guarda |
+|---|---|
+| `modelo` | modelo, prompt, salida, tokens de entrada y de salida, costo, segundos, número de paso |
+| `tool` | herramienta, argumentos, salida, segundos, número de paso |
+| `corte` | por qué se cortó la etapa y el resumen del presupuesto |
+| `decision` | la decisión del planificador, con su usuario y su motivo |
+
+Se escribe con los callbacks de LangChain (`agente/trayectoria.py`), así que
+no hay que instrumentar nada a mano: toda llamada al modelo y toda llamada a
+una herramienta dejan su fila.
+
+## Central de mantenimiento (la decisión del planificador)
+
+El enunciado (sección D) pide que la orden pendiente *"se reanuda cuando el
+planificador la aprueba o la rechaza"*. Persistir y sobrevivir al corte ya
+estaba hecho; lo que faltaba era **el canal de la decisión**.
+
+La Central (`src/planta/central.py`, puerto 8200) es ese canal:
+
+- `GET /` — una pantalla con las órdenes, sus tareas, sus repuestos y dos
+  botones (aprobar / rechazar). Se refresca cada 20 s.
+- `GET /api/ordenes` — las mismas órdenes en JSON.
+- `POST /api/ordenes/<id>/decision` — `{"decision": "aprobar" | "rechazar",
+  "motivo": "...", "usuario": "..."}`.
+
+Reglas de la decisión:
+
+- Sólo se pueden decidir órdenes **`Pendiente de aprobacion`**: una orden ya
+  decidida no se toca.
+- **Rechazar exige motivo.**
+- La decisión queda en la tabla `aprobacion` con su usuario, y en el registro
+  de la trayectoria.
+- La orden se vuelve a publicar por MQTT con el estado nuevo y el mismo id.
+
+La Central se levanta con el sistema (`CENTRAL_ACTIVO`, `CENTRAL_PUERTO`) y
+**no es una tool**: el agente no puede llegar a ella.
+
 ## Cola de salida y operación sin enlace (Fase 6)
 
 La cola (`outbox_cola`) es **la salida de la planta**. Todo lo que el sistema
@@ -551,6 +671,12 @@ Las principales están documentadas en `.env.example`:
 | `OLLAMA_NUM_THREAD` | `2` | hilos de CPU |
 | `OLLAMA_TIMEOUT_S` | `90` | timeout de la llamada |
 | `OLLAMA_KEEP_ALIVE` | `0` | el modelo se descarga al terminar |
+| `AGENTE_MAX_PASOS` | `6` | presupuesto de pasos del agente (vueltas del modelo) |
+| `AGENTE_MAX_TOKENS` | `4000` | presupuesto de tokens del agente por consulta |
+| `AGENTE_TIMEOUT_S` | `120` | timeout de la consulta al agente |
+| `NOTA_TIMEOUT_S` | `180` | **timeout global por nota**: desde que entra hasta que sale el parte |
+| `CENTRAL_ACTIVO` | `true` | levanta la Central de mantenimiento |
+| `CENTRAL_HOST` / `CENTRAL_PUERTO` | `0.0.0.0` / `8200` | escucha de la Central |
 | `NVIDIA_API_KEY` | (vacío) | clave del modelo de nube con visión; **va en el `.env` local**, que Git ignora |
 | `NVIDIA_MODELO` | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | modelo de visión (el de la lista cerrada; si no coincide, no se llama a la nube) |
 | `NVIDIA_URL` | `https://integrate.api.nvidia.com/v1` | API de NVIDIA (la llamada sale por el proxy del enlace) |
@@ -581,6 +707,7 @@ Las principales están documentadas en `.env.example`:
 ├── LICENSE
 ├── docs/
 │   ├── estado_de_implementacion.md
+│   ├── spec-parte.md
 │   ├── evidencia_fase4_retrieval.json
 │   ├── evidencia_fase4_pgvector.json
 │   └── Lista_de_Modelos.md
@@ -597,7 +724,8 @@ Las principales están documentadas en `.env.example`:
 │       ├── 0003_cola_outbox.py
 │       ├── 0004_rag_pgvector.py
 │       ├── 0005_outbox_topico.py
-│       └── 0006_cierre_fase7.py
+│       ├── 0006_cierre_fase7.py
+│       └── 0007_registro_trayectoria.py
 ├── scripts/
 │   ├── analizar_borradores.py
 │   ├── analizar_corrida.py
@@ -612,6 +740,13 @@ Las principales están documentadas en `.env.example`:
 │   ├── config.py
 │   ├── modelos_lista.py
 │   ├── verificacion_modelos.py
+│   ├── agente/
+│   │   ├── formato.py
+│   │   ├── modelos.py
+│   │   ├── nucleo.py
+│   │   ├── presupuesto.py
+│   │   ├── trayectoria.py
+│   │   └── tools.py
 │   ├── analisis/
 │   │   ├── aprobacion.py
 │   │   ├── catalogo.py
@@ -662,6 +797,7 @@ Las principales están documentadas en `.env.example`:
 │   │   └── tareas.py
 │   └── planta/
 │       ├── almacenamiento.py
+│       ├── central.py
 │       ├── cierre.py
 │       ├── cola.py
 │       ├── heartbeat.py
@@ -688,10 +824,10 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **448 passed** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose. Sin base quedan **423 passed, 25 skipped** (los de
-idempotencia/constraints y los del índice RAG), porque necesitan la base
-levantada.
+Resultado actual: **504 passed** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose. Sin base quedan **468 passed, 36 skipped** (los de
+idempotencia/constraints, los del índice RAG y los de la Central y la
+trayectoria), porque necesitan la base levantada.
 
 ## Integración con la planta
 
