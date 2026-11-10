@@ -141,6 +141,12 @@ class Settings(BaseSettings):
     # espacio y el modelo no llegaba a responder.
     agente_num_ctx: int = 4096
     agente_max_tokens_salida: int = 700
+    # Cuántos intentos tiene cada llamada al modelo y cuánto espera entre
+    # ellos. El radioenlace se cae: el proxy de la planta cierra los túneles
+    # y la llamada al modelo se pierde. Un reintento deja que el agente
+    # sobreviva a la tormenta; si vuelve a caerse, el corte queda escrito.
+    agente_max_intentos: int = 2
+    agente_espera_reintento_s: float = 15.0
 
     # Timeout global por nota: el plazo que corre desde que la nota entra al
     # sistema hasta que el parte sale publicado. Acota la transcripción (que

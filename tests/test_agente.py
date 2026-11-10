@@ -18,9 +18,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import httpx
 import pytest
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from agente.formato import formatear
@@ -523,6 +524,118 @@ def test_una_cita_con_titulo_de_un_documento_desconocido_se_descarta() -> None:
         justificacion="porque sí",
     )
     assert agente.validar(propuesta, permitidas=("MBP-4 §13.2",)) is None
+
+
+# ------------------------------------------------------------------ el reintento
+
+
+def test_un_error_de_red_se_reintenta() -> None:
+    """El enlace se cae: la llamada se reintenta y el agente sigue.
+
+    En la planta simulada el radioenlace se cae y el proxy cierra los
+    túneles: el cliente ve «Server disconnected without sending a response».
+    No es un fallo del modelo: es el enlace, que es lo que la planta simula.
+    """
+    from agente.nucleo import _es_transitorio
+
+    error = httpx.RemoteProtocolError("Server disconnected without sending a response.")
+    assert _es_transitorio(error) is True
+
+
+def test_un_error_del_modelo_no_se_reintenta() -> None:
+    """Lo que no es de la red no se reintenta: se propaga."""
+    from agente.nucleo import _es_transitorio
+
+    assert _es_transitorio(ValueError("el esquema no validó")) is False
+
+
+def test_el_reintento_deja_la_consulta_standing(monkeypatch) -> None:
+    """Con un reintento, la consulta sigue y la respuesta llega.
+
+    Se simula una caída del enlace en la primera llamada: la llamada al
+    modelo falla con un error de red y, al reintentar, responde.
+    """
+    from langchain_ollama import ChatOllama
+
+    from agente.nucleo import _ModeloConReintentos
+
+    respuesta = ChatResult(
+        generations=[ChatGeneration(message=AIMessage(content="hola", usage_metadata=_USO))]
+    )
+    llamadas: list[int] = []
+
+    def _generate(self: Any, *args: Any, **kwargs: Any) -> Any:
+        llamadas.append(1)
+        if len(llamadas) == 1:
+            raise httpx.RemoteProtocolError(
+                "Server disconnected without sending a response."
+            )
+        return respuesta
+
+    monkeypatch.setattr(ChatOllama, "_generate", _generate)
+    modelo = _ModeloConReintentos(
+        model="qwen2.5:3b-instruct",
+        base_url="http://localhost:11434",
+        max_intentos=2,
+        espera_reintento_s=0.01,
+    )
+    salida = modelo.invoke([HumanMessage(content="probá")])
+    assert salida.content == "hola"
+    assert len(llamadas) == 2
+
+
+def test_sin_reintento_la_llamada_se_corta(monkeypatch) -> None:
+    """Sin reintento, la caída del enlace corta la llamada."""
+    from langchain_ollama import ChatOllama
+
+    from agente.nucleo import _ModeloConReintentos
+
+    llamadas: list[int] = []
+
+    def _generate(self: Any, *args: Any, **kwargs: Any) -> Any:
+        llamadas.append(1)
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+
+    monkeypatch.setattr(ChatOllama, "_generate", _generate)
+    modelo = _ModeloConReintentos(
+        model="qwen2.5:3b-instruct",
+        base_url="http://localhost:11434",
+        max_intentos=1,
+        espera_reintento_s=0.01,
+    )
+    with pytest.raises(httpx.RemoteProtocolError):
+        modelo.invoke([HumanMessage(content="probá")])
+    assert len(llamadas) == 1
+
+
+def test_el_reintento_respeta_el_presupuesto() -> None:
+    """Si ya no queda tiempo, el reintento no arranca.
+
+    El presupuesto manda: un reintento que se pasa del timeout global
+    rompería el corte que el anexo pide. Cuando el plazo se agota, la
+    consulta se corta y queda anotado como condición de corte.
+    """
+    from agente.nucleo import _con_reintento
+    from agente.presupuesto import PresupuestoAgotado
+
+    llamadas: list[int] = []
+    restos = [10.0, 0.0]
+
+    def _accion() -> None:
+        llamadas.append(1)
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+
+    def _restante() -> float:
+        return restos.pop(0) if restos else 0.0
+
+    with pytest.raises(PresupuestoAgotado):
+        _con_reintento(
+            _accion,
+            intentos=2,
+            espera_s=0.01,
+            restante=_restante,
+        )
+    assert len(llamadas) == 1
 
 
 def test_el_agente_recoge_las_citas_de_las_herramientas() -> None:

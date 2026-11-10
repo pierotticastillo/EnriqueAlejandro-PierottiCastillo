@@ -224,6 +224,10 @@ services:
       # después cierra la propuesta en un esquema.
       AGENTE_NUM_CTX: ${AGENTE_NUM_CTX:-4096}
       AGENTE_MAX_TOKENS_SALIDA: ${AGENTE_MAX_TOKENS_SALIDA:-700}
+      # Reintentos de cada llamada al modelo: el radioenlace se cae y el
+      # proxy cierra los túneles.
+      AGENTE_MAX_INTENTOS: ${AGENTE_MAX_INTENTOS:-2}
+      AGENTE_ESPERA_REINTENTO_S: ${AGENTE_ESPERA_REINTENTO_S:-15}
       # Timeout global por nota: el plazo desde que la nota entra hasta que
       # el parte sale publicado.
       NOTA_TIMEOUT_S: ${NOTA_TIMEOUT_S:-180}

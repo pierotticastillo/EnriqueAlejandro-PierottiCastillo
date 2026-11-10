@@ -24,12 +24,16 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from contextvars import ContextVar
 from typing import Any
 
+import httpx
 from langchain.agents import create_agent
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_ollama import ChatOllama
 from pydantic import ValidationError
 
 from agente.modelos import MAX_CARACTERES, MAX_ITEMS, PropuestaAgente, PropuestaValidada
@@ -58,6 +62,129 @@ class _GuardaPresupuesto(BaseCallbackHandler):
 
     def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], **kwargs: Any) -> None:
         self._presupuesto.exigir_vivo()
+
+
+class _ModeloConReintentos(ChatOllama):
+    """El modelo local, con un reintento para las llamadas que se caen.
+
+    En la planta simulada el **radioenlace** se cae: el proxy de la planta
+    cierra los túneles y el cliente ve «Server disconnected without sending a
+    response». No es un fallo del modelo ni del prompt: es el enlace, que es
+    justamente lo que la planta simula.
+
+    El reintento vive acá, en la llamada al modelo, y no en el agente: así
+    cubre **todas** las vueltas (la consulta y el cierre) sin repetir las
+    consultas a las herramientas, que ya se hicieron.
+
+    Sólo se reintenta lo que es **transitorio** (la red se cayó). Un error
+    del modelo (un esquema inválido, say) no se reintenta: se propaga.
+    """
+
+    #: Cuántos intentos tiene cada llamada (1 = sin reintento).
+    max_intentos: int = 2
+    #: Cuánto espera entre intento e intento.
+    espera_reintento_s: float = 15.0
+
+    def _generate(self, *args: Any, **kwargs: Any) -> Any:
+        # El ``super()`` sin argumentos se resuelve acá, en el método: dentro
+        # de la lambda ya no encuentra la clase y revienta.
+        llamar = super()._generate
+        return _con_reintento(
+            lambda: llamar(*args, **kwargs),
+            intentos=self.max_intentos,
+            espera_s=self.espera_reintento_s,
+            restante=_restante,
+        )
+
+
+def _con_reintento(
+    accion: Any,
+    *,
+    intentos: int,
+    espera_s: float,
+    restante: Any = None,
+) -> Any:
+    """Ejecuta la acción y reintenta si lo que falló fue **la red**.
+
+    Un error del modelo (un esquema inválido, say) no se reintenta: se
+    propaga. Un corte del enlace sí: el radioenlace se cae y la planta
+    simulada cierra los túneles, así que la llamada se pierde sin que el
+    modelo haya hecho nada malo.
+
+    El reintento **respeta el presupuesto**: si ya no queda tiempo para la
+    consulta, no se reintenta y el corte queda anotado como tal. Un reintento
+    que se pasa del plazo global rompería el timeout que el anexo pide.
+    """
+    ultimo: Exception | None = None
+    total = max(1, intentos)
+    for intento in range(total):
+        if restante is not None and restante() <= 0:
+            raise PresupuestoAgotado(
+                "se agotó el timeout global antes de reintentar la llamada al modelo"
+            )
+        try:
+            return accion()
+        except Exception as exc:  # noqa: BLE001 - se decide más abajo
+            ultimo = exc
+            if not _es_transitorio(exc) or intento + 1 >= total:
+                raise
+            logger.warning(
+                "La llamada al modelo se cayó (%s): se reintenta en %.0f s",
+                exc,
+                espera_s,
+            )
+            _esperar(espera_s, restante)
+    raise ultimo if ultimo is not None else RuntimeError("la llamada al modelo falló")
+
+
+def _esperar(espera_s: float, restante: Any = None) -> None:
+    """Espera entre intento e intento, sin pasarse del plazo."""
+    if restante is not None:
+        espera_s = min(espera_s, max(0.0, restante()))
+    if espera_s > 0:
+        time.sleep(espera_s)
+
+
+def _es_transitorio(exc: BaseException) -> bool:
+    """Si el error es de la red (y conviene reintentar).
+
+    Se mira la cadena de excepciones: el cliente de Ollama envuelve el error
+    de ``httpx`` y el que llega al callback no siempre es el de red. Por eso
+    se busca también en el mensaje: la planta simulada corta la conexión y
+    el texto es el del corte.
+    """
+    candidato: BaseException | None = exc
+    while candidato is not None:
+        if isinstance(candidato, httpx.TransportError):
+            return True
+        candidato = candidato.__cause__ or candidato.__context__
+    texto = str(exc).lower()
+    return any(
+        marca in texto
+        for marca in (
+            "server disconnected",
+            "connection reset",
+            "connection aborted",
+            "connection refused",
+            "remote protocol error",
+            "incomplete read",
+        )
+    )
+
+
+#: El plazo (monotónico) de la consulta en curso. Vive en el **contexto** y
+#: no en el modelo: así dos consultas simultáneas no se pisan, y el reintento
+#: puede preguntarle al presupuesto cuánto tiempo queda.
+_deadline: ContextVar[float | None] = ContextVar("agente_deadline", default=None)
+
+
+def _restante() -> float:
+    """Cuánto tiempo le queda a la consulta en curso (infinito si no tiene)."""
+    limite = _deadline.get()
+    if limite is None:
+        return float("inf")
+    return limite - time.monotonic()
+
 
 #: Cuántas **vueltas del modelo** puede dar el agente como máximo. Es el
 #: "presupuesto de pasos" del anexo: el agente no puede seguir consultando
@@ -177,41 +304,51 @@ class AgenteAnalisis:
             # La guarda va siempre: el presupuesto es el que corta, haya
             # bitácora o no.
             handlers.insert(0, _GuardaPresupuesto(presupuesto))
+        # El plazo de la consulta queda a la vista del modelo: el reintento
+        # no puede pasarse del timeout global.
+        token = _deadline.set(
+            time.monotonic() + presupuesto.timeout_s
+            if presupuesto is not None and presupuesto.timeout_s > 0
+            else None
+        )
         mensajes: list[Any] = []
         try:
-            resultado = self._agente.invoke(
-                {"messages": [{"role": "user", "content": prompt}]},
-                config={
-                    "recursion_limit": self._max_pasos * 2 + 2,
-                    "callbacks": handlers,
-                },
-            )
-            mensajes = resultado.get("messages") or []
-            propuesta = resultado.get("structured_response")
+            try:
+                resultado = self._agente.invoke(
+                    {"messages": [{"role": "user", "content": prompt}]},
+                    config={
+                        "recursion_limit": self._max_pasos * 2 + 2,
+                        "callbacks": handlers,
+                    },
+                )
+                mensajes = resultado.get("messages") or []
+                propuesta = resultado.get("structured_response")
+                if not isinstance(propuesta, PropuestaAgente):
+                    # Los modelos pequeños no llaman a la herramienta de salida:
+                    # escriben prosa. La propuesta se cierra con la salida
+                    # estructurada nativa, sobre la misma conversación.
+                    propuesta = self._cerrar(mensajes, handlers)
+            except PresupuestoAgotado as exc:
+                # Condición de corte: se anota y se sigue con lo que había.
+                logger.warning("La consulta al agente se cortó: %s", exc)
+                if presupuesto is not None:
+                    presupuesto.anotar_corte(str(exc))
+                return None
+            except Exception as exc:  # noqa: BLE001 - el agente no puede tumbar el análisis
+                logger.warning("El agente no pudo consultarse: %s", exc)
+                if presupuesto is not None:
+                    presupuesto.anotar_corte(f"el modelo falló: {exc}")
+                return None
             if not isinstance(propuesta, PropuestaAgente):
-                # Los modelos pequeños no llaman a la herramienta de salida:
-                # escriben prosa. La propuesta se cierra con la salida
-                # estructurada nativa, sobre la misma conversación.
-                propuesta = self._cerrar(mensajes, handlers)
-        except PresupuestoAgotado as exc:
-            # Condición de corte: se anota y se sigue con lo que había.
-            logger.warning("La consulta al agente se cortó: %s", exc)
-            if presupuesto is not None:
-                presupuesto.anotar_corte(str(exc))
-            return None
-        except Exception as exc:  # noqa: BLE001 - el agente no puede tumbar el análisis
-            logger.warning("El agente no pudo consultarse: %s", exc)
-            if presupuesto is not None:
-                presupuesto.anotar_corte(f"el modelo falló: {exc}")
-            return None
-        if not isinstance(propuesta, PropuestaAgente):
-            logger.warning("El agente no devolvió una propuesta válida")
-            return None
-        return self.validar(
-            propuesta,
-            permitidas=permitidas,
-            vistas=_citas_vistas(mensajes),
-        )
+                logger.warning("El agente no devolvió una propuesta válida")
+                return None
+            return self.validar(
+                propuesta,
+                permitidas=permitidas,
+                vistas=_citas_vistas(mensajes),
+            )
+        finally:
+            _deadline.reset(token)
 
     # ------------------------------------------------------------------- cierre
 
@@ -374,7 +511,6 @@ def crear_agente(
     """
     if not getattr(settings, "llm_activo", False):
         return None
-    from langchain_ollama import ChatOllama
 
     # El timeout de **cada llamada** al modelo es el presupuesto entero de la
     # consulta, no el timeout del redactor: medido en la planta simulada, una
@@ -393,7 +529,7 @@ def crear_agente(
         # y sólo ése.
         cliente_kwargs["proxy"] = proxy
         cliente_kwargs["trust_env"] = False
-    modelo = ChatOllama(
+    modelo = _ModeloConReintentos(
         model=settings.ollama_modelo,
         base_url=settings.ollama_url,
         temperature=0,
@@ -411,6 +547,8 @@ def crear_agente(
         ),
         keep_alive=settings.ollama_keep_alive,
         client_kwargs=cliente_kwargs,
+        max_intentos=getattr(settings, "agente_max_intentos", 2),
+        espera_reintento_s=getattr(settings, "agente_espera_reintento_s", 15.0),
     )
     return AgenteAnalisis(
         modelo,
