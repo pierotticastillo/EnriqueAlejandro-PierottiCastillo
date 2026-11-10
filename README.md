@@ -54,10 +54,11 @@ de órdenes.
       por nota**; el corte queda escrito en la bitácora
       ([`docs/spec-parte.md`](docs/spec-parte.md)).
 
-**Corrector oficial:** **93,1/100 — APRUEBA** sobre los 7 escenarios de la
+**Corrector oficial:** **94,1/100 — APRUEBA** sobre los 7 escenarios de la
 rúbrica (93 de 93 puntos medidos, sin eliminatorias, 0 mensajes inválidos).
-`D2` («orden adecuada a la falla») y el bloque G (`orden_ejecutada`) quedaron
-en **100 %**: todos los cierres por voz pasaron su orden a `Ejecutada`.
+`A1` (cobertura), `D2` («orden adecuada a la falla») y el bloque G
+(`orden_ejecutada`) quedaron en **100 %**: todas las notas tuvieron borrador y
+todos los cierres por voz pasaron su orden a `Ejecutada`.
 
 ## Requisitos
 
