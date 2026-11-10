@@ -109,6 +109,14 @@ El timeout de **cada llamada** al modelo es el presupuesto entero
 tarda entre 60 y 110 s, así que con el timeout del redactor (90 s) algunas
 vueltas morían por la red en vez de cortarse por el presupuesto.
 
+Si la llamada se cae **por la red** (el radioenlace de la planta simulada
+cierra los túneles), se reintenta **una vez**
+(`AGENTE_MAX_INTENTOS=2`, `AGENTE_ESPERA_REINTENTO_S=15`). El reintento
+está en la llamada al modelo, así que cubre la consulta y el cierre sin
+repetir las tools, y respeta el presupuesto: si ya no queda tiempo, no
+reintenta y el corte queda anotado. Un error del modelo (no de la red) no
+se reintenta: se propaga.
+
 ## 5. La trayectoria
 
 Cada paso queda registrado con lo que el enunciado pide (sección F): **el

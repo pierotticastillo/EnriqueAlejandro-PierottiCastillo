@@ -1137,8 +1137,8 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **523 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
-- **486 passed, 37 skipped** sin base: los omitidos son los tests de
+- **530 passed** con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose.
+- **493 passed, 37 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints, los del índice RAG y los de la Central y la
   trayectoria, que requieren PostgreSQL.
 - `ruff check src tests migrations` sin observaciones.
@@ -1764,6 +1764,26 @@ con 90 s algunas vueltas morían **por la red** y el corte quedaba escrito
 como un fallo del modelo en vez de una condición de corte del presupuesto.
 Con 420 s, quien corta es siempre el presupuesto.
 
+**Lo que se cae es el enlace, no el modelo.** En la planta simulada el
+radioenlace se cae y el proxy de la planta cierra los túneles: el cliente ve
+«Server disconnected without sending a response» y la consulta se pierde
+entera, aunque el modelo no haya hecho nada malo. Por eso la llamada al
+modelo reintenta **una vez** (`AGENTE_MAX_INTENTOS=2`, con
+`AGENTE_ESPERA_REINTENTO_S=15` entre intento e intento).
+
+El reintento está en tres capas, para que no rompa nada de lo demás:
+
+* **Sólo lo transitorio.** Una caída de red se reintenta; un error del modelo
+  (un esquema inválido, say) se propaga. El error se reconoce por su tipo
+  (`httpx.TransportError`) y, para el caso de la planta, por su texto.
+* **En la llamada, no en el agente.** Así cubre las dos vueltas y el cierre
+  estructurado **sin** repetir las consultas a las herramientas, que ya se
+  hicieron y ya están registradas.
+* **Respetando el presupuesto.** El plazo de la consulta se pasa al modelo
+  por el contexto de la llamada: si ya no queda tiempo, el reintento no
+  arranca y el corte queda anotado como condición de corte. Un reintento que
+  se pasa del timeout global rompería el corte que el anexo pide.
+
 ### 12.5 La mini spec
 
 [`docs/spec-parte.md`](docs/spec-parte.md) es la especificación corta del
@@ -1820,6 +1840,8 @@ Variables principales (ver `.env.example`):
 | `AGENTE_TIMEOUT_S` | `420` | timeout de la consulta al agente (y de cada llamada al modelo) |
 | `AGENTE_NUM_CTX` | `4096` | contexto del agente (el del redactor es 2048) |
 | `AGENTE_MAX_TOKENS_SALIDA` | `700` | tokens que puede escribir el agente (el del redactor son 250) |
+| `AGENTE_MAX_INTENTOS` | `2` | intentos por llamada al modelo: el radioenlace se cae y el proxy cierra los túneles |
+| `AGENTE_ESPERA_REINTENTO_S` | `15` | espera entre intento e intento (el reintento respeta el presupuesto) |
 | `NOTA_TIMEOUT_S` | `180` | timeout global por nota (desde que entra hasta que sale el parte) |
 | `CENTRAL_ACTIVO` | `true` | levanta la Central de mantenimiento |
 | `CENTRAL_HOST` / `CENTRAL_PUERTO` | `0.0.0.0` / `8200` | escucha de la Central |

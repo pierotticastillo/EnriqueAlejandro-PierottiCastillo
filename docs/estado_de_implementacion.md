@@ -71,6 +71,16 @@ opcionales, y el agente tiene contexto y salida propios
 (`AGENTE_NUM_CTX=4096`, `AGENTE_MAX_TOKENS_SALIDA=700`): el del redactor no
 alcanzaba para una consulta con herramientas.
 
+La **causa raíz de los cortes** que aparecieron en la corrida completa fue el
+radioenlace: el proxy de la planta simulada cierra los túneles y el cliente ve
+«Server disconnected without sending a response». No es un fallo del modelo ni
+del prompt, así que la llamada al modelo **reintenta una vez**
+(`AGENTE_MAX_INTENTOS=2`, `AGENTE_ESPERA_REINTENTO_S=15`). El reintento vive
+en la llamada, así que cubre la consulta y el cierre sin repetir las
+consultas a las tools; sólo se reintenta lo **transitorio** (la red), y
+respeta el presupuesto: si ya no queda tiempo, no reintenta y el corte queda
+anotado.
+
 El **registro de la trayectoria** quedó implementado (`registro_trayectoria`,
 migración `0007`): una fila por paso con el modelo, las tools y sus
 argumentos, los tokens, el costo y el tiempo, más el motivo de cada corte y
@@ -93,7 +103,7 @@ camino determinista. La **mini spec** del flujo del parte está en
 | Fase | Estado | Avance y pendientes |
 |---|---|---|
 | 0 — Preparación del entorno | Completa | Compose (`postgres`, `migraciones`, `sistema`, `mcp`), red externa `planta-lan`, labels `academia.planta: pc`, proxy `enlace:3128` con `NO_PROXY`, presupuesto agregado 4 CPU / 8 GB y latido `sistema/estado`. |
-| 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido) e idempotencia por `evento_sistema.id`. Los tests de idempotencia/constraints, los del índice RAG y los de la Central y la trayectoria requieren base y se omiten sin `TEST_DATABASE_URL` (37 omitidos en total; con base, los 523 tests pasan). |
+| 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido) e idempotencia por `evento_sistema.id`. Los tests de idempotencia/constraints, los del índice RAG y los de la Central y la trayectoria requieren base y se omiten sin `TEST_DATABASE_URL` (37 omitidos en total; con base, los 530 tests pasan). |
 | 1 — Parte por voz | Completa y verificada | Listener MQTT, descarga de medios a disco, ASR local (`faster-whisper`), extracción determinista, resolución de nombres y unidades, preguntas de ambigüedad y conversación con tablet. La corrección del operador se aplica **a la lectura que está corrigiendo** y la conversación tiene tope: si no converge, la nota queda para revisión humana. |
 | 2 — Detección sin LLM | Completa y verificada | S1–S4 con los procedimientos del MBP-4, aviso en tablet y por radio al supervisor (canal 1), **un evento por equipo** (`parte:<nota>:<tag>`), contexto y tendencia en los escalados, sensores MQTT con límites de `/api/planta`. |
 | 3 — Tools y MCP | Completa y verificada | Siete tools de solo lectura con `extra="forbid"`, cliente HTTP con timeout/reintentos/errores tipados, búsqueda léxica de manuales y servidor MCP (streamable-http y stdio) probado en vivo. |
