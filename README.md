@@ -63,6 +63,12 @@ la diferencia es la **varianza del audio** de la planta simulada, que se
 regenera en cada corrida (está medida nota por nota en el
 [`INFORME.md`](INFORME.md), §14).
 
+El último defecto corregido salió al volver a medir **todo** el corpus de
+corridas (1289 notas): el ASR escribe «cero» como «ceo» y el diferencial se
+leía diez veces mayor (3,0 kg/cm² en vez de 0,3), así que el filtro se
+**escalaba donde no había novedad**. Ya está corregido con su test; el detalle
+está en el [`INFORME.md`](INFORME.md), §14.
+
 ## Requisitos
 
 - Docker Engine + Docker Compose v2.
@@ -866,8 +872,8 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **531 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose (las 531 pasan). Sin base quedan **494 passed, 37
+Resultado actual: **533 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose (las 533 pasan). Sin base quedan **496 passed, 37
 skipped** (los de idempotencia/constraints, los del índice RAG y los de la
 Central y la trayectoria), porque necesitan la base levantada.
 

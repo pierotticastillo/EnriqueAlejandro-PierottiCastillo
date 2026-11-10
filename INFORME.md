@@ -1139,9 +1139,9 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **531 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
-  compose (las 531 pasan).
-- **494 passed, 37 skipped** sin base: los omitidos son los tests de
+- **533 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
+  compose (las 533 pasan).
+- **496 passed, 37 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints, los del índice RAG y los de la Central y la
   trayectoria, que requieren PostgreSQL.
 - `ruff check src tests migrations` sin observaciones.
@@ -1972,12 +1972,13 @@ falló. Ahí el corte queda escrito en la bitácora y el sistema sigue por el
 camino determinista: es exactamente lo que pide el anexo (condiciones de corte
 y presupuesto), y no un fallo silencioso.
 
-#### Los dieciséis defectos que encontraron las corridas, y que están corregidos
+#### Los diecisiete defectos que encontraron las corridas, y que están corregidos
 
 La corrida completa de los siete escenarios no sólo mide: también **enseña**.
-Salieron dieciséis defectos reales del sistema, cada uno con un test que lo
-fija: trece los encontró la corrida de los siete escenarios y tres salieron al
-volver a medir **todas** las corridas sobre el mismo corpus.
+Salieron diecisiete defectos reales del sistema, cada uno con un test que lo
+fija: trece los encontró la corrida de los siete escenarios, tres salieron al
+volver a medir **todas** las corridas sobre el mismo corpus y uno más al
+repetir la medición con la Entrega 1 ya dentro.
 
 | # | Defecto | Qué pasaba | Arreglo |
 |---|---|---|---|
@@ -1997,6 +1998,7 @@ volver a medir **todas** las corridas sobre el mismo corpus.
 | 14 | **La fila de ruido se perdía cuando la cláusula traía la medición** | El ASR a veces pierde la coma entre las dos ideas: «el rodamiento me dio 61 grados con la pistola, hace un golpeteo metálico» llega como **una sola cláusula**. La cláusula se tomaba como una temperatura y el síntoma se perdía: la fila de ruido no se publicaba y el equipo **no se escalaba**, aunque la verdad de campo diga que hay que escalarlo. | La cláusula se parte donde arranca la frase del síntoma (el verbo del técnico más la palabra del síntoma) y cada idea va en su fila, en el orden en que se dijeron (`planta/parte_extractor.py`). |
 | 15 | **El artículo «un» se leía como el número uno** | «Tiene un cubilo claro de rodamiento» publicaba una temperatura de **1,0 °C** que tapaba la lectura buena (96 °C) de la misma fila: el operador no confirmaba el borrador porque el número no era el que dijo. Y en «la un está en 115 kilos de descarga» el artículo se comía la medición. | El lector de números distingue el artículo del número: el «un» es número cuando lo une la «y» («cincuenta y un»), cuando lo sigue un decimal («un con tres») o una unidad («un metro»). Las **cantidades** se leen sin esa regla: «usé un kit» es un kit (`planta/numeros.py`, `analisis/cierre.py`). |
 | 16 | **«50 y un grados» se leía 50** | El ASR escribe la parte entera en dígitos y la que sigue en palabras («cincuenta y un grados» → «50 y un grados»): la temperatura del rodamiento quedaba un grado abajo (50 en vez de 51) y el operador **no confirmaba** el borrador, porque la comparación con la verdad de campo tiene una tolerancia de 0,05 °C y 50 no es 51. | En la rama de dígitos, si sigue «y» + «un/uno» + una unidad, el valor es el entero más uno («3 horas y un minuto» sigue siendo 3) (`planta/numeros.py`). |
+| 17 | **El ASR escribe «cero» como «ceo» y el decimal salía diez veces mayor** | El decodificador transcribe «cero coma tres de diferencial» como «ceo coma 3 de diferencial»: la parte entera se perdía y el diferencial se publicaba como **3,0 kg/cm²** con la observación «diferencial alto», cuando la verdad de campo era 0,3. El filtro se **escalaba donde no había novedad** (y lo mismo con 9,0 en vez de 0,9). | La palabra «ceo» se lee como «cero» en la normalización del texto, junto a los otros artefactos del ASR («reservoir» por «reserva»); «ceo» no existe en el español de la planta (`planta/texto.py`). |
 
 Todos son **defectos del sistema, no del ASR**: ocurrían con transcripciones
 correctas (el 5 y el 6 con las correcciones del propio operador virtual, el 8
@@ -2037,6 +2039,15 @@ Las dos que mejoran son la `NOTA-00010` de `contratista` (corrida `_fase6`) y la
 `NOTA-00011` de `tormenta-perfecta` (corrida `_fase9`): en las dos, el ASR había
 perdido la coma entre la medición y el síntoma.
 
+El defecto 17 salió al repetir la misma medición con la Entrega 1 ya
+dentro. Sobre el corpus completo (**1289 notas** de 22 corridas, 2498 lecturas),
+el arreglo **corrige 9 notas y no empeora ninguna**: en las nueve, el diferencial
+deja de salir como 3,0 o 9,0 y sale como 0,3 o 0,9, y la observación falsa
+«diferencial alto» —la que hacía **escalar** el filtro— desaparece. La
+completitud global del corpus no cambia (1995 de 2498 lecturas) porque esas
+nueve notas ya fallaban por otras razones del decodificador (el ASR también
+escribió «rogamiento» por «rodamiento» y «chorea» por «chorrea»).
+
 La corrida `_fase10` (93,1) **no encontró ningún defecto nuevo en los
 criterios**: los cinco errores de `B1` que quedaron son del decodificador
 (tres síntomas «golpeteo metálico» garblados y una nota que llegó al final
@@ -2058,6 +2069,26 @@ psi —la lectura es plausible, la fila existe, el borrador se ve bien— pero
 1,6 psi dispara la alarma de presión baja y el evento sale `Escalado` donde
 la verdad era `SinNovedad`. Pasa por lo mismo con «kg»: la fila quedaba sin
 la unidad que dijo el técnico y se comparaba con la del manómetro.
+
+#### Las corridas que vinieron después
+
+Después de corregir los tres defectos que encontró la medición del corpus
+(14, 15 y 16) se volvió a correr el corrector oficial. La tabla compara las
+corridas de los siete escenarios: la nota, los criterios que dependen de lo
+que dijo el operador y las decisiones de `B1` que salieron bien:
+
+| Corrida | Commit | Nota | `A1` | `A2` | `A3` | `B1` | `D2` | `G1` | `B1` bien | Qué pasó |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `_fase10` | `527ed31` | **93,1** | 99,4 % | 60,8 % | 82 % | 97,6 % | 100 % | 100 % | 141/146 | La anterior: el decimal «0 con 3» ya se lee como 0,3 (el defecto 13), `A4b` volvió al 100 % y `D2` llegó al 100 %. |
+| `_fase12a` | `602c4a4` | **93,0** | 100 % | 61,1 % | 80,9 % | 96,4 % | 100 % | 100 % | 139/146 | Con los defectos 14, 15 y 16 ya corregidos, sobre el árbol con el trabajo de la Entrega 1 en vuelo. `A1` subió al **100 %** (las 83 notas tuvieron borrador) y `B1` bajó al 96 %: **ninguno de los dos es una regresión del sistema**, son del decodificador (tres decisiones las pierden transcripciones como «Lados» por «la dos» o una frase cortada) y de dos notas que llegaron al final del escenario. |
+| `_fase12b` | `602c4a4` | **93,3** | 99,4 % | 62,2 % | 82 % | 97,6 % | 100 % | 100 % | 141/146 | La misma versión de `_fase12a`, corrida desde un worktree limpio del commit `602c4a4` (sin el trabajo en vuelo de otra sesión): mide cuánto de la diferencia entre corridas es **varianza del audio**. |
+
+Los errores que quedan en `B1` **no son decisiones del sistema**: son
+transcripciones que el decodificador garbló («Lados» y «La dosa» por «la dos»,
+«golpe teometaico» por el síntoma del golpe) y notas que llegaron al final
+del escenario, cuando el operador virtual ya no alcanzó a contestar. La
+diferencia entre corridas es **varianza del audio**, que la planta regenera
+en cada corrida (§15, punto 16).
 
 #### Por qué dos corridas del mismo código dan notas distintas
 
@@ -2164,6 +2195,8 @@ defectos que iba enseñando la corrida. La progresión:
 | `_fase10` | 93,1 | La corrida anterior: el decimal «0 con 3» ya se lee como 0,3 (el defecto 13), `A4b` volvió al 100 %, `B1` quedó en el 98 % (5 errores de 146 decisiones) y `D2` llegó al 100 %. |
 | `_fase11` | 94,1 | La corrida de la Entrega 1 (núcleo de agentes, trayectoria, Central y presupuesto): `A1` llegó al **100 %**, `B1` quedó en el 99 % (1 error de 158 decisiones) y `D2` siguió en el 100 %. |
 | `_fase11b` | **92,6** | La corrida que se reporta arriba: la misma Entrega 1 **con el reintento del enlace**. La nota bajó 1,5 puntos y la causa está medida: es el **audio de la planta**, que cambia entre corridas (§15, punto 16). Los criterios que miden el comportamiento del sistema (`D1`, `B2`, `E1`, `E3`, `F1`, `F2`, `F3`, `G1`) siguen en **100 %**. |
+| `_fase12a` | 93,0 | Los tres defectos que encontró la medición del corpus (14, 15 y 16) ya corregidos, sobre el árbol con la Entrega 1 en vuelo. `A1` subió al **100 %** y `B1` bajó al 96 %: **no es una regresión del sistema** (tres transcripciones garbladas y dos notas que llegaron al final del escenario). |
+| `_fase12b` | **93,3** | La misma versión de `_fase12a`, corrida desde un worktree limpio del commit `602c4a4` (sin el trabajo en vuelo de otra sesión): sirve para medir cuánto de la diferencia entre corridas es **varianza del audio**. |
 
 Que la nota baje al corregir algo no es raro: `B1` y `D2` miden **decisiones**,
 y un arreglo que cambia una clasificación puede moverlas en las dos

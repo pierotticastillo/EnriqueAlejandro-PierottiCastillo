@@ -454,7 +454,7 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Última verificación
 
-- `python -m pytest`: **531 tests, 0 fallas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose pasan las 531; sin base: 494 pasan y 37 se omiten).
+- `python -m pytest`: **533 tests, 0 fallas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose pasan las 533; sin base: 496 pasan y 37 se omiten).
 - `ruff check src tests migrations`: **sin errores**.
 - **Corrector oficial, corrida completa (7 escenarios)**: **92,6/100 — APRUEBA**
   (`_fase11b`, la corrida vigente, con el reintento del enlace), sin
@@ -534,6 +534,15 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
   confirmaba. La medición es sobre las **925 notas de las 19 corridas**
   (1791 lecturas: el texto verdadero de campo y la transcripción real del
   ASR): **1390 → 1392 notas completas, 0 empeoran**.
+- **El ASR escribe «cero» como «ceo» y el decimal salía diez veces mayor**
+  (defecto 17, ya corregido con un test): la transcripción real del
+  decodificador decía «el filtro A, medio ceo, coma 3 de diferencial» y el
+  diferencial se publicaba como **3,0 kg/cm²** con la observación «diferencial
+  alto», cuando la verdad de campo era 0,3: el filtro se **escalaba donde no
+  había novedad**. La palabra «ceo» se lee como «cero» en la normalización
+  del texto, junto a los otros artefactos del ASR. Salió en 7 notas de 5
+  corridas distintas; sobre el corpus completo (1289 notas de 22 corridas,
+  2498 lecturas) el arreglo **corrige 9 notas y no empeora ninguna**.
 - Servidor MCP probado en vivo contra la planta: **8 tools**, todas con `additionalProperties: false` y `structuredContent` válido (`scripts/probar_mcp.py`).
 - Extractor contrastado contra la verdad de campo con las transcripciones reales del ASR (`scripts/analizar_notas.py`): el valor y la unidad coinciden en todas las filas comparables (la única que no se puede comparar es la de una nota que dice «la bomba», donde el sistema pregunta cuál de las tres es). El tipo de evento lo midió el **corrector oficial**: **141 de las 146 decisiones de B1** dan el tipo que espera (las 5 que no son las del §13: síntomas garblados por el ASR y una nota sin confirmar).
 - Índice RAG cargado contra la planta simulada y retrieval medido sobre la tabla `rag_chunk` real (704 fragmentos, 71 preguntas).
@@ -580,6 +589,24 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 6. **Cerrar el hueco de `B1`/`D2`**: el corrector espera «Escalado» en cualquier nota que mencione un equipo con una falla activa, y el sistema sólo escala con lo que el operador lee. El camino corto es reconocer más síntomas cualitativos del catálogo (ruido, golpepeo, no arranca) como anomalía —y que el decodificador escriba esas frases: los síntomas ya están en el prompt del ASR—; el camino largo es pedirle al curso la lista de fallas activas por equipo, que la planta no publica.
 
 ## Historial
+
+- **2026-11-10 (defecto 17 y las corridas que lo midieron):** al repetir la
+  medición del corpus entero con la Entrega 1 ya dentro salió un defecto más
+  del sistema: el **ASR escribe «cero» como «ceo»**, y el diferencial se
+  publicaba como **3,0 kg/cm²** (o 9,0) con la observación «diferencial alto»
+  en vez de 0,3 (o 0,9) —el filtro se **escalaba donde no había novedad**. La
+  palabra «ceo» se lee ahora como «cero» en la normalización del texto, junto
+  a los otros artefactos del ASR, y hay un test que lo fija. Salió en 7 notas
+  de 5 corridas distintas; sobre el corpus completo (**1289 notas** de 22
+  corridas, 2498 lecturas) el arreglo **corrige 9 notas y no empeora ninguna**.
+  Además se corrigieron los defectos **14, 15 y 16** (la fila de ruido que se
+  perdía cuando la cláusula traía la medición y el síntoma juntos, el
+  artículo «un» leído como el número uno, y «50 y un grados» leído 50), y se
+  corrieron dos veces el corrector oficial sobre los **7 escenarios** para
+  medir el árbol sin el trabajo en vuelo de otra sesión: **93,0** (`_fase12a`) y
+  **93,3** (`_fase12b`). Los errores que quedan en `B1` en las dos son del
+  **decodificador** (síntomas garblados, frases cortadas) y de notas que
+  llegaron al final del escenario: **ningún defecto nuevo del sistema**.
 
 - **2026-11-10 (Entrega 1; corridas `_fase11` 94,1 y `_fase11b` 92,6):** se
   implementó la **Entrega 1** del TP: el **núcleo de agentes en LangChain**
