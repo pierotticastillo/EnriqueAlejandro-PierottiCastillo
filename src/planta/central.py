@@ -31,6 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from db.repositorio import ConflictoEstado
 from planta.identidad import Actor, AutenticadorToken
 
 logger = logging.getLogger("planta.central")
@@ -163,13 +164,22 @@ class Central:
             }
         estado = DECISIONES.get(decision.strip().lower())
         if estado is None:
-            return {"ok": False, "error": f"Decisión inválida: {decision!r}"}
+            return {
+                "ok": False,
+                "error": f"Decisión inválida: {decision!r}",
+                "codigo": 400,
+            }
         if motivo is not None and not isinstance(motivo, str):
-            return {"ok": False, "error": "El motivo debe ser texto"}
+            return {
+                "ok": False,
+                "error": "El motivo debe ser texto",
+                "codigo": 400,
+            }
         if motivo is not None and len(motivo) > MAX_MOTIVO_CARACTERES:
             return {
                 "ok": False,
                 "error": f"El motivo no puede superar {MAX_MOTIVO_CARACTERES} caracteres",
+                "codigo": 400,
             }
         motivo = motivo.strip() if motivo is not None else None
         try:
@@ -180,10 +190,16 @@ class Central:
                 usuario=actor.usuario,
                 rol=actor.rol,
             )
+        except ConflictoEstado as exc:
+            return {"ok": False, "error": str(exc), "codigo": 409}
         except ValueError as exc:
-            return {"ok": False, "error": str(exc)}
+            return {"ok": False, "error": str(exc), "codigo": 400}
         if fila is None:
-            return {"ok": False, "error": "La orden no está pendiente de aprobación"}
+            return {
+                "ok": False,
+                "error": "La orden no está pendiente de aprobación",
+                "codigo": 409,
+            }
         self._registrar(orden_id, fila, estado, motivo, actor)
         self._publicar(fila, estado)
         return {"ok": True, "orden": fila}
@@ -203,7 +219,11 @@ class Central:
         elif accion in {"certificar", "observar"}:
             permitido = actor.rol == "inspector"
         else:
-            return {"ok": False, "error": f"Decisión inválida: {decision!r}"}
+            return {
+                "ok": False,
+                "error": f"Decisión inválida: {decision!r}",
+                "codigo": 400,
+            }
         if not permitido:
             return {
                 "ok": False,
@@ -211,11 +231,16 @@ class Central:
                 "codigo": 403,
             }
         if motivo is not None and not isinstance(motivo, str):
-            return {"ok": False, "error": "El motivo debe ser texto"}
+            return {
+                "ok": False,
+                "error": "El motivo debe ser texto",
+                "codigo": 400,
+            }
         if motivo is not None and len(motivo) > MAX_MOTIVO_CARACTERES:
             return {
                 "ok": False,
                 "error": f"El motivo no puede superar {MAX_MOTIVO_CARACTERES} caracteres",
+                "codigo": 400,
             }
         if self._decidir_cierre is None:
             return {
@@ -432,7 +457,8 @@ class _Handler(BaseHTTPRequestHandler):
                 motivo=motivo,
                 actor=actor,
             )
-            self._responder_json(200 if resultado.get("ok") else 400, resultado)
+            codigo = 200 if resultado.get("ok") else int(resultado.get("codigo") or 400)
+            self._responder_json(codigo, resultado)
             return
 
         # /api/cierres/<orden_id>/decision

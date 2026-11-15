@@ -16,6 +16,7 @@ import uuid
 import pytest
 from planta_contrato import EstadoOrden, OrdenSistema, Repuesto
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
 
 from db.repositorio import Repositorio
 
@@ -238,6 +239,86 @@ def test_las_ordenes_de_un_equipo_se_listan(repositorio, engine) -> None:
         ordenes = repositorio.ordenes_por_equipo("B-102")
         assert orden.id in [fila["id"] for fila in ordenes]
         assert ordenes[0]["estado"] == "Pendiente de aprobacion"
+    finally:
+        _limpiar(engine, [orden.id], evento_id)
+
+
+def test_un_reproceso_no_degrada_una_aprobacion_del_planificador(
+    repositorio,
+    engine,
+) -> None:
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id)
+    try:
+        repositorio.guardar_orden(orden, reglas={"cumple": False}, costo_usd=420)
+        repositorio.decidir_orden(
+            orden.id,
+            "Aprobada",
+            usuario="ana",
+            rol="planificador",
+        )
+
+        reprocesado = orden.model_copy(
+            update={
+                "estado": EstadoOrden.pendiente,
+                "tareas": ["T-B-ALI"],
+                "repuestos": [Repuesto(codigo="TX-VAL-KIT", cantidad=1)],
+                "motivo": "el reproceso intenta degradar la aprobación",
+            }
+        )
+        repositorio.guardar_orden(
+            reprocesado,
+            reglas={"cumple": False},
+            costo_usd=1,
+        )
+
+        guardada = repositorio.obtener_orden_completa(orden.id)
+        assert guardada["estado"] == "Aprobada"
+        assert float(repositorio.obtener_orden(orden.id)["costo_estimado"]) == 420
+        assert guardada["tareas"] == ["T-B-EMP"]
+        assert [repuesto["codigo"] for repuesto in guardada["repuestos"]] == [
+            "TX-EMP-KIT"
+        ]
+        assert guardada["motivo"] is None
+        with engine.connect() as conexion:
+            aprobaciones = conexion.execute(
+                text("SELECT count(*) FROM aprobacion WHERE orden_id = :id"),
+                {"id": orden.id},
+            ).scalar_one()
+        assert aprobaciones == 2
+    finally:
+        _limpiar(engine, [orden.id], evento_id)
+
+
+def test_postgresql_no_permite_cambiar_una_aprobacion_por_un_rechazo(
+    repositorio,
+    engine,
+) -> None:
+    """La decisión humana del planificador también es de una sola vez."""
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id)
+    try:
+        repositorio.guardar_orden(orden, reglas={"cumple": False}, costo_usd=420)
+        repositorio.decidir_orden(
+            orden.id,
+            "Aprobada",
+            usuario="ana",
+            rol="planificador",
+        )
+
+        with pytest.raises(DBAPIError, match="Aprobada -> Rechazada"):
+            with engine.begin() as conexion:
+                conexion.execute(
+                    text(
+                        "UPDATE orden SET estado = CAST('Rechazada' AS estado_orden) "
+                        "WHERE id = :id"
+                    ),
+                    {"id": orden.id},
+                )
+
+        assert repositorio.obtener_orden(orden.id)["estado"] == "Aprobada"
     finally:
         _limpiar(engine, [orden.id], evento_id)
 

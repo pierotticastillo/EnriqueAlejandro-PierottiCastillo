@@ -19,8 +19,10 @@ Sin esa variable los tests se omiten para no romper una corrida sin base.
 from __future__ import annotations
 
 import os
+import uuid
 
 import pytest
+from planta_contrato import EstadoOrden, OrdenSistema, Repuesto
 from sqlalchemy import create_engine, text
 
 from db.repositorio import Repositorio
@@ -63,6 +65,41 @@ def _mensaje(id_: str) -> dict:
         "audio_url": None,
         "espera_respuesta": False,
     }
+
+
+def _orden_pendiente(engine, repositorio: Repositorio) -> tuple[OrdenSistema, str]:
+    evento_id = f"ev-outbox-{uuid.uuid4().hex}"
+    with engine.begin() as conexion:
+        conexion.execute(
+            text(
+                """
+                INSERT INTO evento_sistema (id, origen, estado, payload)
+                VALUES (:id, 'parte', 'Escalado', '{}'::jsonb)
+                """
+            ),
+            {"id": evento_id},
+        )
+    orden = OrdenSistema(
+        id=f"ORD-OUTBOX-{uuid.uuid4().hex[:8]}",
+        ts="2026-11-15T10:00:00-03:00",
+        estado=EstadoOrden.pendiente,
+        equipo="B-103",
+        evento_ids=[evento_id],
+        tareas=["T-B-VAL"],
+        detiene_equipo=True,
+        reduce_inyeccion=False,
+        ejecutor="propio",
+        repuestos=[Repuesto(codigo="TX-VAL-KIT", cantidad=1)],
+        motivo="pendiente de aprobación",
+    )
+    repositorio.guardar_orden(orden, reglas={"cumple": False}, costo_usd=420)
+    return orden, evento_id
+
+
+def _limpiar_orden(engine, orden_id: str, evento_id: str) -> None:
+    with engine.begin() as conexion:
+        conexion.execute(text("DELETE FROM orden WHERE id = :id"), {"id": orden_id})
+        conexion.execute(text("DELETE FROM evento_sistema WHERE id = :id"), {"id": evento_id})
 
 
 def test_el_mensaje_encolado_guarda_su_topico(engine, repositorio) -> None:
@@ -187,3 +224,87 @@ def test_un_mensaje_con_error_sigue_pendiente_pero_espera(engine, repositorio) -
     assert fila["proximo_intento"] is not None
     # Todavía no sale: espera el próximo intento.
     assert repositorio.pendientes_outbox() == []
+
+
+def test_una_orden_pendiente_actualiza_el_payload_sin_duplicarse(
+    engine,
+    repositorio,
+) -> None:
+    """La fila pendiente conserva un único mensaje, con el snapshot más nuevo."""
+    _limpiar(engine)
+    orden, evento_id = _orden_pendiente(engine, repositorio)
+    try:
+        primero = repositorio.encolar_outbox(
+            "orden",
+            {
+                "id": orden.id,
+                "estado": "PendienteAprobacion",
+                "tareas": ["OBSOLETA"],
+                "repuestos": [],
+            },
+            "sistema/ordenes",
+        )
+        segundo = repositorio.encolar_outbox(
+            "orden",
+            {
+                "id": orden.id,
+                "estado": "Aprobada",
+                "tareas": ["T-B-VAL"],
+                "repuestos": [{"codigo": "TX-VAL-KIT", "cantidad": 1}],
+            },
+            "sistema/ordenes",
+        )
+
+        assert primero == segundo
+        with engine.connect() as conexion:
+            filas = conexion.execute(
+                text(
+                    "SELECT payload FROM outbox_cola "
+                    "WHERE tipo = 'orden' AND payload ->> 'id' = :id"
+                ),
+                {"id": orden.id},
+            ).mappings().all()
+        assert len(filas) == 1
+        assert filas[0]["payload"]["estado"] == "Aprobada"
+        assert filas[0]["payload"]["tareas"] == ["T-B-VAL"]
+    finally:
+        _limpiar(engine)
+        _limpiar_orden(engine, orden.id, evento_id)
+
+
+def test_una_orden_pendiente_se_relee_con_el_estado_vigente(
+    engine,
+    repositorio,
+) -> None:
+    """Al salir, la outbox superpone el estado que PostgreSQL tiene hoy."""
+    _limpiar(engine)
+    orden, evento_id = _orden_pendiente(engine, repositorio)
+    try:
+        repositorio.encolar_outbox(
+            "orden",
+            {
+                "id": orden.id,
+                "estado": "PendienteAprobacion",
+                "tareas": ["OBSOLETA"],
+                "repuestos": [],
+            },
+            "sistema/ordenes",
+        )
+        with engine.begin() as conexion:
+            conexion.execute(
+                text(
+                    "UPDATE orden SET estado = CAST('Aprobada' AS estado_orden) "
+                    "WHERE id = :id"
+                ),
+                {"id": orden.id},
+            )
+
+        pendientes = repositorio.pendientes_outbox()
+        assert len(pendientes) == 1
+        payload = pendientes[0][3]
+        assert payload["estado"] == "Aprobada"
+        assert payload["tareas"] == ["T-B-VAL"]
+        assert payload["repuestos"] == [{"codigo": "TX-VAL-KIT", "cantidad": 1.0}]
+    finally:
+        _limpiar(engine)
+        _limpiar_orden(engine, orden.id, evento_id)

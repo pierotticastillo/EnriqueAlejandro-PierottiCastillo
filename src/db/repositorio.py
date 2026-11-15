@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from planta_contrato import EventoSistema, MensajeTablet, NotaRecorrida, OrdenSistema
+from planta_contrato import (
+    EstadoOrden,
+    EventoSistema,
+    MensajeTablet,
+    NotaRecorrida,
+    OrdenSistema,
+    Repuesto,
+)
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
@@ -31,6 +38,58 @@ _ESTADO_ORDEN_DB = {
     "Cerrada": "Cerrada",
     "Certificada": "Certificada",
 }
+
+#: Estados que no se pueden degradar ni cambiar de contenido por un
+#: reproceso técnico.  ``Ejecutada`` espera una decisión humana; ``Observada``
+#: puede volver a ``Ejecutada`` únicamente mediante una nueva aclaración.
+#: ``Cerrada``, ``Certificada`` y ``Rechazada`` son terminales.
+_ESTADOS_ORDEN_PROTEGIDOS = frozenset(
+    {"Rechazada", "Ejecutada", "Observada", "Cerrada", "Certificada"}
+)
+
+#: Estados desde los que puede recibirse un cierre técnico.  ``Observada``
+#: corresponde al segundo cierre de una aclaración de la contratista.
+_ESTADOS_ORDEN_CIERRE_ADMISIBLES = frozenset({"Aprobada", "Observada"})
+
+_ESTADO_CONTRACTO = {
+    estado_db: EstadoOrden(contrato)
+    for contrato, estado_db in _ESTADO_ORDEN_DB.items()
+}
+
+
+class ConflictoEstado(ValueError):
+    """El recurso existe, pero su estado no admite la operación solicitada."""
+
+
+class AutorizacionInvalida(ValueError):
+    """El rol autenticado no puede decidir sobre el ejecutor de la orden."""
+
+
+def orden_desde_fila(orden: OrdenSistema, fila: dict[str, Any]) -> OrdenSistema:
+    """Construye la publicación desde el snapshot ya comprometido en PostgreSQL.
+
+    La orden local puede haber quedado obsoleta mientras se analizaba o se
+    redactaba.  Estado, motivo, tareas y repuestos salen siempre de la base;
+    el resto del contrato se conserva de la orden original.
+    """
+    estado_db = str(fila.get("estado") or "")
+    if estado_db not in _ESTADO_CONTRACTO:
+        raise ValueError(f"Estado de orden desconocido en PostgreSQL: {estado_db!r}")
+    repuestos = [
+        Repuesto(codigo=str(repuesto["codigo"]), cantidad=float(repuesto["cantidad"]))
+        for repuesto in (fila.get("repuestos") or [])
+    ]
+    return orden.model_copy(
+        update={
+            "estado": _ESTADO_CONTRACTO[estado_db],
+            "motivo": fila.get("motivo"),
+            "detiene_equipo": bool(fila.get("detencion")),
+            "reduce_inyeccion": bool(fila.get("reduce_inyeccion")),
+            "ejecutor": str(fila.get("ejecutor") or "propio"),
+            "tareas": [str(tarea) for tarea in (fila.get("tareas") or [])],
+            "repuestos": repuestos,
+        }
+    )
 
 
 class Repositorio:
@@ -481,11 +540,13 @@ class Repositorio:
         manifiesto: dict[str, Any] | None = None,
         analisis: dict[str, Any] | None = None,
         propuesta: dict[str, Any] | None = None,
-    ) -> bool:
-        """Persiste la orden y su evaluación de reglas, de forma idempotente.
+    ) -> dict[str, Any]:
+        """Persiste la orden y devuelve el snapshot realmente comprometido.
 
         El id de la orden es determinista (equipo + falla): si el mismo equipo
         vuelve a fallar, la orden se actualiza en vez de abrir una segunda.
+        Cuando el estado ya estaba protegido, el snapshot devuelto conserva el
+        contenido y el estado de la base, no los del objeto reprocesado.
         """
         estado_db = _ESTADO_ORDEN_DB.get(orden.estado.value)
         if estado_db is None:
@@ -498,6 +559,33 @@ class Repositorio:
             str(detalle.get("codigo")): detalle for detalle in (repuestos or [])
         }
         with self._engine.begin() as conexion:
+            # El bloqueo serializa dos reprocesos de la misma orden.  Si la
+            # orden ya está en un estado del flujo humano, el reproceso sólo
+            # puede sumar evidencia al ledger: no cambia estado, motivo,
+            # costo, tareas ni repuestos.
+            estado_previo = conexion.execute(
+                text("SELECT estado FROM orden WHERE id = :id FOR UPDATE"),
+                {"id": orden.id},
+            ).scalar_one_or_none()
+            decision_humana = conexion.execute(
+                text(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM aprobacion
+                        WHERE orden_id = :id
+                          AND usuario IS NOT NULL
+                          AND btrim(usuario) <> ''
+                    )
+                    """
+                ),
+                {"id": orden.id},
+            ).scalar_one()
+            preservar = (
+                estado_previo in _ESTADOS_ORDEN_PROTEGIDOS or bool(decision_humana)
+            )
+            estado_efectivo = estado_previo if preservar else estado_db
+
             conexion.execute(
                 text(
                     """
@@ -512,13 +600,22 @@ class Repositorio:
                         now(), now()
                     )
                     ON CONFLICT (id) DO UPDATE SET
-                        estado = EXCLUDED.estado,
-                        motivo = EXCLUDED.motivo,
-                        detencion = EXCLUDED.detencion,
-                        costo_estimado = EXCLUDED.costo_estimado,
-                        ejecutor = EXCLUDED.ejecutor,
-                        reduce_inyeccion = EXCLUDED.reduce_inyeccion,
-                        actualizada_en = now()
+                        estado = CASE
+                            WHEN :preservar THEN orden.estado ELSE EXCLUDED.estado END,
+                        motivo = CASE
+                            WHEN :preservar THEN orden.motivo ELSE EXCLUDED.motivo END,
+                        detencion = CASE
+                            WHEN :preservar THEN orden.detencion ELSE EXCLUDED.detencion END,
+                        costo_estimado = CASE
+                            WHEN :preservar THEN orden.costo_estimado
+                            ELSE EXCLUDED.costo_estimado END,
+                        ejecutor = CASE
+                            WHEN :preservar THEN orden.ejecutor ELSE EXCLUDED.ejecutor END,
+                        reduce_inyeccion = CASE
+                            WHEN :preservar THEN orden.reduce_inyeccion
+                            ELSE EXCLUDED.reduce_inyeccion END,
+                        actualizada_en = CASE
+                            WHEN :preservar THEN orden.actualizada_en ELSE now() END
                     """
                 ),
                 {
@@ -531,70 +628,72 @@ class Repositorio:
                     "costo": costo_usd,
                     "ejecutor": orden.ejecutor or "propio",
                     "reduce": orden.reduce_inyeccion,
+                    "preservar": preservar,
                 },
             )
-            conexion.execute(
-                text("DELETE FROM orden_tarea WHERE orden_id = :id"),
-                {"id": orden.id},
-            )
-            conexion.execute(
-                text("DELETE FROM orden_repuesto WHERE orden_id = :id"),
-                {"id": orden.id},
-            )
-            for tarea in orden.tareas:
+            if not preservar:
                 conexion.execute(
-                    text(
-                        """
-                        INSERT INTO orden_tarea (orden_id, tarea_id, descripcion, origen)
-                        VALUES (:orden, :tarea, :descripcion, 'catalogo')
-                        """
-                    ),
-                    {
-                        "orden": orden.id,
-                        "tarea": tarea,
-                        "descripcion": descripcion if tarea == "NO-ESTANDAR" else None,
-                    },
+                    text("DELETE FROM orden_tarea WHERE orden_id = :id"),
+                    {"id": orden.id},
                 )
-            for repuesto in orden.repuestos:
-                detalle = detalles.get(repuesto.codigo, {})
                 conexion.execute(
-                    text(
-                        """
-                        INSERT INTO orden_repuesto (
-                            orden_id, repuesto_id, cantidad, costo_unitario, disponible
-                        )
-                        VALUES (
-                            :orden, :repuesto, :cantidad, :costo, :disponible
-                        )
-                        """
-                    ),
-                    {
-                        "orden": orden.id,
-                        "repuesto": repuesto.codigo,
-                        "cantidad": repuesto.cantidad,
-                        "costo": float(detalle.get("costo_unitario") or 0.0),
-                        "disponible": bool(detalle.get("disponible", False)),
-                    },
+                    text("DELETE FROM orden_repuesto WHERE orden_id = :id"),
+                    {"id": orden.id},
                 )
-            conexion.execute(
-                text(
-                    """
-                    INSERT INTO aprobacion (orden_id, decision, motivo, reglas_evaluadas)
-                    SELECT :orden, :decision, :motivo, CAST(:reglas AS jsonb)
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM aprobacion
-                        WHERE orden_id = :orden AND decision = :decision
-                          AND COALESCE(motivo, '') = COALESCE(:motivo, '')
+                for tarea in orden.tareas:
+                    conexion.execute(
+                        text(
+                            """
+                            INSERT INTO orden_tarea (orden_id, tarea_id, descripcion, origen)
+                            VALUES (:orden, :tarea, :descripcion, 'catalogo')
+                            """
+                        ),
+                        {
+                            "orden": orden.id,
+                            "tarea": tarea,
+                            "descripcion": descripcion if tarea == "NO-ESTANDAR" else None,
+                        },
                     )
-                    """
-                ),
-                {
-                    "orden": orden.id,
-                    "decision": orden.estado.value,
-                    "motivo": orden.motivo,
-                    "reglas": reglas_json,
-                },
-            )
+                for repuesto in orden.repuestos:
+                    detalle = detalles.get(repuesto.codigo, {})
+                    conexion.execute(
+                        text(
+                            """
+                            INSERT INTO orden_repuesto (
+                                orden_id, repuesto_id, cantidad, costo_unitario, disponible
+                            )
+                            VALUES (
+                                :orden, :repuesto, :cantidad, :costo, :disponible
+                            )
+                            """
+                        ),
+                        {
+                            "orden": orden.id,
+                            "repuesto": repuesto.codigo,
+                            "cantidad": repuesto.cantidad,
+                            "costo": float(detalle.get("costo_unitario") or 0.0),
+                            "disponible": bool(detalle.get("disponible", False)),
+                        },
+                    )
+                conexion.execute(
+                    text(
+                        """
+                        INSERT INTO aprobacion (orden_id, decision, motivo, reglas_evaluadas)
+                        SELECT :orden, :decision, :motivo, CAST(:reglas AS jsonb)
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM aprobacion
+                            WHERE orden_id = :orden AND decision = :decision
+                              AND COALESCE(motivo, '') = COALESCE(:motivo, '')
+                        )
+                        """
+                    ),
+                    {
+                        "orden": orden.id,
+                        "decision": orden.estado.value,
+                        "motivo": orden.motivo,
+                        "reglas": reglas_json,
+                    },
+                )
 
             # El manifiesto y el ledger se escriben en la misma transacción
             # que la orden.  Si la evidencia no se puede dejar escrita, la
@@ -678,11 +777,14 @@ class Repositorio:
                 reglas=reglas or {},
                 actor="codigo",
                 rol="sistema",
-                estado=estado_db,
+                estado=estado_efectivo,
                 herramientas=herramientas_contexto,
                 idempotencia=f"reglas:{evento_id}:{orden.id}",
             )
-        return True
+        snapshot = self.obtener_orden_completa(orden.id)
+        if snapshot is None:
+            raise RuntimeError(f"La orden {orden.id} no quedó persistida")
+        return snapshot
 
     def _insertar_manifiesto(
         self,
@@ -967,8 +1069,8 @@ class Repositorio:
                     text(
                         """
                         SELECT o.id, o.evento_id, o.equipo, o.estado, o.motivo,
-                               o.detencion, o.ejecutor, o.reduce_inyeccion,
-                               o.creada_en, o.actualizada_en,
+                               o.detencion, o.costo_estimado, o.ejecutor,
+                               o.reduce_inyeccion, o.creada_en, o.actualizada_en,
                                COALESCE(
                                    (SELECT json_agg(t.tarea_id ORDER BY t.tarea_id)
                                     FROM orden_tarea t WHERE t.orden_id = o.id),
@@ -996,6 +1098,28 @@ class Repositorio:
         return dict(fila) if fila else None
 
     # ------------------------------------------------------------------ cierre
+
+    def _habilitacion_de_orden(
+        self,
+        conexion: Connection,
+        orden_id: str,
+    ) -> dict[str, Any] | None:
+        """Habilita vigente de una orden, si ya fue certificado."""
+        fila = conexion.execute(
+            text(
+                """
+                SELECT numero, monto
+                FROM habilitacion
+                WHERE orden_id = :orden_id
+                ORDER BY emitida_en, id
+                LIMIT 1
+                """
+            ),
+            {"orden_id": orden_id},
+        ).mappings().first()
+        if fila is None:
+            return None
+        return {"numero": str(fila["numero"]), "monto": float(fila["monto"])}
 
     def registrar_cierre(
         self,
@@ -1026,18 +1150,110 @@ class Repositorio:
         tenga una decisión humana.
         """
         with self._engine.begin() as conexion:
+            # Primero se consulta la idempotencia.  Después se bloquea la orden
+            # y se vuelve a consultar: ese segundo control cubre dos cierres
+            # iguales que llegan al mismo tiempo sin esperar un lock adicional
+            # sobre PostgreSQL.
+            existente = conexion.execute(
+                text("SELECT id, orden_id FROM cierre WHERE externa_id = :externa_id"),
+                {"externa_id": cierre_id},
+            ).mappings().first()
+            if existente is not None:
+                if existente["orden_id"] != orden_id:
+                    raise ConflictoEstado(
+                        f"El identificador de cierre {cierre_id} ya pertenece a otra orden"
+                    )
+                habilitacion = self._habilitacion_de_orden(conexion, orden_id)
+                return {
+                    "cierre_id": str(existente["id"]),
+                    "nuevo": False,
+                    "habilita": (
+                        habilitacion["numero"] if habilitacion is not None else None
+                    ),
+                    "monto_habilita_usd": (
+                        habilitacion["monto"] if habilitacion is not None else None
+                    ),
+                }
+
+            # El bloqueo serializa cierres distintos de la misma orden.  La
+            # única transición admitida desde un estado con decisión es
+            # ``Observada -> Ejecutada`` para una nueva aclaración.
+            estado_actual = conexion.execute(
+                text("SELECT estado FROM orden WHERE id = :id FOR UPDATE"),
+                {"id": orden_id},
+            ).scalar_one_or_none()
+            if estado_actual is None:
+                raise ValueError(f"La orden no existe: {orden_id}")
+
+            existente = conexion.execute(
+                text("SELECT id, orden_id FROM cierre WHERE externa_id = :externa_id"),
+                {"externa_id": cierre_id},
+            ).mappings().first()
+            if existente is not None:
+                if existente["orden_id"] != orden_id:
+                    raise ConflictoEstado(
+                        f"El identificador de cierre {cierre_id} ya pertenece a otra orden"
+                    )
+                habilitacion = self._habilitacion_de_orden(conexion, orden_id)
+                return {
+                    "cierre_id": str(existente["id"]),
+                    "nuevo": False,
+                    "habilita": (
+                        habilitacion["numero"] if habilitacion is not None else None
+                    ),
+                    "monto_habilita_usd": (
+                        habilitacion["monto"] if habilitacion is not None else None
+                    ),
+                }
+
+            if estado_actual in {"Cerrada", "Certificada"}:
+                raise ConflictoEstado(
+                    f"La orden {orden_id} ya tiene una decisión de cierre "
+                    "y no admite otro cierre"
+                )
+            if estado_actual not in _ESTADOS_ORDEN_CIERRE_ADMISIBLES:
+                raise ConflictoEstado(
+                    f"La orden {orden_id} está en estado {estado_actual} y no admite un cierre"
+                )
+
+            aclara_cierre_id: str | None = None
+            if estado_actual == "Observada":
+                observaciones = conexion.execute(
+                    text(
+                        """
+                        SELECT c.id
+                        FROM cierre c
+                        JOIN decision_cierre d ON d.cierre_id = c.id
+                        WHERE c.orden_id = :orden_id
+                          AND d.decision = 'observar'
+                          AND NOT EXISTS (
+                              SELECT 1 FROM cierre aclaracion
+                              WHERE aclaracion.aclara_cierre_id = c.id
+                          )
+                        ORDER BY c.creado_en DESC, c.id DESC
+                        FOR UPDATE OF c
+                        """
+                    ),
+                    {"orden_id": orden_id},
+                ).scalars().all()
+                if len(observaciones) != 1:
+                    raise ConflictoEstado(
+                        f"La orden {orden_id} no tiene una observación pendiente de aclaración"
+                    )
+                aclara_cierre_id = str(observaciones[0])
+
             id_cierre = conexion.execute(
                 text(
                     """
                     INSERT INTO cierre (
                         externa_id, orden_id, tecnico, empresa, transcripcion,
                         tareas_hechas, repuestos_usados, horas, prueba_final,
-                        diferencias
+                        diferencias, aclara_cierre_id
                     )
                     VALUES (
                         :externa_id, :orden_id, :tecnico, :empresa, :transcripcion,
                         CAST(:tareas AS jsonb), CAST(:repuestos AS jsonb), :horas,
-                        :prueba_final, CAST(:diferencias AS jsonb)
+                        :prueba_final, CAST(:diferencias AS jsonb), :aclara_cierre_id
                     )
                     ON CONFLICT (externa_id) DO NOTHING
                     RETURNING id
@@ -1054,28 +1270,55 @@ class Repositorio:
                     "horas": horas,
                     "prueba_final": prueba_final,
                     "diferencias": json.dumps(diferencias, ensure_ascii=False),
+                    "aclara_cierre_id": aclara_cierre_id,
                 },
             ).scalar_one_or_none()
-            nuevo = id_cierre is not None
             if id_cierre is None:
-                id_cierre = conexion.execute(
-                    text("SELECT id FROM cierre WHERE externa_id = :externa_id"),
+                existente = conexion.execute(
+                    text("SELECT id, orden_id FROM cierre WHERE externa_id = :externa_id"),
                     {"externa_id": cierre_id},
-                ).scalar_one()
+                ).mappings().one()
+                if existente["orden_id"] != orden_id:
+                    raise ConflictoEstado(
+                        f"El identificador de cierre {cierre_id} ya pertenece a otra orden"
+                    )
+                habilitacion = self._habilitacion_de_orden(conexion, orden_id)
+                return {
+                    "cierre_id": str(existente["id"]),
+                    "nuevo": False,
+                    "habilita": (
+                        habilitacion["numero"] if habilitacion is not None else None
+                    ),
+                    "monto_habilita_usd": (
+                        habilitacion["monto"] if habilitacion is not None else None
+                    ),
+                }
+            nuevo = True
 
             if nuevo:
-                conexion.execute(
+                # El estado ya fue bloqueado y validado antes de insertar el
+                # cierre.  La condición explícita mantiene la transición
+                # segura incluso si una ruta externa modifica la fila.
+                actualizado = conexion.execute(
                     text(
                         """
                         UPDATE orden
                         SET estado = CAST('Ejecutada' AS estado_orden),
                             motivo = :motivo,
                             actualizada_en = now()
-                        WHERE id = :id
+                        WHERE id = :id AND estado = :estado
                         """
                     ),
-                    {"motivo": motivo, "id": orden_id},
+                    {
+                        "motivo": motivo,
+                        "id": orden_id,
+                        "estado": estado_actual,
+                    },
                 )
+                if actualizado.rowcount != 1:
+                    raise ValueError(
+                        f"La orden {orden_id} cambió de estado mientras se registraba el cierre"
+                    )
                 orden = conexion.execute(
                     text(
                         """
@@ -1146,7 +1389,8 @@ class Repositorio:
                         """
                         SELECT id, externa_id, orden_id, tecnico, empresa,
                                transcripcion, tareas_hechas, repuestos_usados,
-                               horas, prueba_final, diferencias, creado_en
+                               horas, prueba_final, diferencias, aclara_cierre_id,
+                               creado_en
                         FROM cierre
                         WHERE orden_id = :orden_id
                         ORDER BY creado_en DESC, id DESC
@@ -1390,11 +1634,11 @@ class Repositorio:
                                c.transcripcion, c.tareas_hechas, c.repuestos_usados,
                                c.horas, c.prueba_final, c.diferencias, c.creado_en
                         FROM orden o
-                        JOIN cierre c ON c.orden_id = o.id
+                        LEFT JOIN cierre c ON c.orden_id = o.id
                         WHERE o.id = :orden_id
                         ORDER BY c.creado_en DESC, c.id DESC
                         LIMIT 1
-                        FOR UPDATE OF o, c
+                        FOR UPDATE OF o
                         """
                     ),
                     {"orden_id": orden_id},
@@ -1403,6 +1647,27 @@ class Repositorio:
                 .first()
             )
             if fila is None:
+                raise ValueError(f"La orden no existe: {orden_id}")
+
+            ejecutor = str(fila["ejecutor"] or "propio").strip().lower()
+            if accion == "cerrar":
+                if rol != "supervisor":
+                    raise AutorizacionInvalida("Sólo el supervisor puede cerrar el trabajo")
+                if ejecutor != "propio":
+                    raise AutorizacionInvalida(
+                        "El supervisor sólo puede cerrar trabajo propio"
+                    )
+            else:
+                if rol != "inspector":
+                    raise AutorizacionInvalida(
+                        "Sólo el inspector puede certificar u observar"
+                    )
+                if ejecutor == "propio":
+                    raise AutorizacionInvalida(
+                        "El inspector sólo puede certificar u observar trabajo de contratista"
+                    )
+
+            if fila["cierre_id"] is None:
                 raise ValueError("La orden no tiene un cierre técnico registrado")
 
             existente = (
@@ -1422,7 +1687,7 @@ class Repositorio:
             )
             if existente is not None:
                 if existente["decision"] != accion:
-                    raise ValueError("La orden ya tiene una decisión de cierre")
+                    raise ConflictoEstado("La orden ya tiene una decisión de cierre")
                 habilitacion = (
                     conexion.execute(
                         text(
@@ -1437,9 +1702,10 @@ class Repositorio:
                     .mappings()
                     .first()
                 )
+                orden = self.obtener_orden_completa(orden_id)
                 return {
                     "decision": dict(existente),
-                    "orden": {"id": orden_id, "estado": existente["estado_orden"]},
+                    "orden": orden,
                     "habilita": habilitacion["numero"] if habilitacion else None,
                     "monto_habilita_usd": (
                         float(habilitacion["monto"]) if habilitacion else None
@@ -1447,21 +1713,7 @@ class Repositorio:
                 }
 
             if fila["estado"] != "Ejecutada":
-                raise ValueError("La orden ya tiene una decisión de cierre")
-            ejecutor = str(fila["ejecutor"] or "propio").strip().lower()
-            if accion == "cerrar":
-                if rol != "supervisor":
-                    raise ValueError("Sólo el supervisor puede cerrar el trabajo")
-                if ejecutor != "propio":
-                    raise ValueError("El supervisor sólo puede cerrar trabajo propio")
-            else:
-                if rol != "inspector":
-                    raise ValueError("Sólo el inspector puede certificar u observar")
-                if ejecutor == "propio":
-                    raise ValueError(
-                        "El inspector sólo puede certificar u observar trabajo de contratista"
-                    )
-
+                raise ConflictoEstado("La orden ya tiene una decisión de cierre")
             diferencias = list(fila["diferencias"] or [])
             cierre_referencia = str(fila["externa_id"] or fila["cierre_id"])
             evidencia = {
@@ -1476,7 +1728,7 @@ class Repositorio:
                 "diferencias": diferencias,
                 "cierre_registrado_en": fila["creado_en"].isoformat(),
             }
-            conexion.execute(
+            decision_id = conexion.execute(
                 text(
                     """
                     INSERT INTO decision_cierre (
@@ -1487,6 +1739,7 @@ class Repositorio:
                         :cierre_id, :orden_id, :decision, CAST(:estado AS estado_orden),
                         :actor, :rol, :motivo, CAST(:evidencia AS jsonb)
                     )
+                    RETURNING id
                     """
                 ),
                 {
@@ -1499,10 +1752,11 @@ class Repositorio:
                     "motivo": motivo,
                     "evidencia": json.dumps(evidencia, ensure_ascii=False, default=str),
                 },
-            )
+            ).scalar_one()
 
+            certificacion_id: str | None = None
             if accion in {"certificar", "observar"}:
-                conexion.execute(
+                certificacion_id = conexion.execute(
                     text(
                         """
                         INSERT INTO certificacion (
@@ -1511,6 +1765,7 @@ class Repositorio:
                         VALUES (
                             :orden_id, :cierre_id, :actor, :decision, :motivo, :rol
                         )
+                        RETURNING id
                         """
                     ),
                     {
@@ -1521,7 +1776,7 @@ class Repositorio:
                         "motivo": motivo,
                         "rol": rol,
                     },
-                )
+                ).scalar_one()
 
             reglas = {
                 "tipo": "cierre_humano",
@@ -1578,12 +1833,16 @@ class Repositorio:
             if accion == "certificar":
                 if monto_usd is None:
                     raise ValueError("La certificación necesita el monto del habilita")
+                if certificacion_id is None:
+                    raise RuntimeError("La certificación no quedó registrada")
                 habilita, monto = self._emitir_habilita(
                     conexion,
                     orden_id=orden_id,
                     monto_usd=monto_usd,
                     anio=int(fila["creada_en"].year),
                     fuente=fuente_monto or "CT-SVP-2025 §2.1",
+                    decision_id=str(decision_id),
+                    certificacion_id=str(certificacion_id),
                 )
 
             manifiesto_cierre = conexion.execute(
@@ -1677,6 +1936,8 @@ class Repositorio:
         monto_usd: float,
         anio: int,
         fuente: str,
+        decision_id: str,
+        certificacion_id: str,
     ) -> tuple[str, float]:
         """Emite el habilita con su número HAB-AAAA-NNNN (CT-SVP-2025 §3.4).
 
@@ -1698,9 +1959,13 @@ class Repositorio:
                 text(
                     """
                     INSERT INTO habilitacion (
-                        orden_id, numero, monto, moneda, fuente_monto
+                        orden_id, numero, monto, moneda, fuente_monto,
+                        decision_cierre_id, certificacion_id
                     )
-                    VALUES (:orden_id, :numero, :monto, 'USD', :fuente)
+                    VALUES (
+                        :orden_id, :numero, :monto, 'USD', :fuente,
+                        :decision_id, :certificacion_id
+                    )
                     ON CONFLICT (numero) DO NOTHING
                     RETURNING numero
                     """
@@ -1710,6 +1975,8 @@ class Repositorio:
                     "numero": numero,
                     "monto": monto_usd,
                     "fuente": fuente,
+                    "decision_id": decision_id,
+                    "certificacion_id": certificacion_id,
                 },
             ).scalar_one_or_none()
             if insertado is not None:
@@ -1725,7 +1992,8 @@ class Repositorio:
                         """
                         SELECT id, externa_id, orden_id, tecnico, empresa,
                                transcripcion, tareas_hechas, repuestos_usados,
-                               horas, prueba_final, diferencias, creado_en
+                               horas, prueba_final, diferencias, aclara_cierre_id,
+                               creado_en
                         FROM cierre WHERE externa_id = :externa_id
                         """
                     ),
@@ -2084,57 +2352,73 @@ class Repositorio:
         Además queda escrito en ``idempotency_key``, que es el registro
         auditable de qué se encoló.
         """
+        payload_json = json.dumps(payload, ensure_ascii=False)
         with self._engine.begin() as conexion:
-            id_outbox = conexion.execute(
-                text(
-                    """
-                    INSERT INTO outbox_cola (tipo, payload, topico, estado)
-                    VALUES (:tipo, CAST(:payload AS jsonb), :topico, 'pendiente')
-                    ON CONFLICT DO NOTHING
-                    RETURNING id
-                    """
-                ),
-                {
-                    "tipo": tipo,
-                    "payload": json.dumps(payload, ensure_ascii=False),
-                    "topico": topico,
-                },
-            ).scalar_one_or_none()
-            if id_outbox is None:
-                # El mensaje ya estaba en la cola: se devuelve su fila, no se
-                # encola otra vez. Sólo se buscan los pendientes: una fila
-                # ya enviada es historia, no una copia de este mensaje.
+            id_outbox = None
+            for _ in range(3):
                 id_outbox = conexion.execute(
                     text(
                         """
-                        SELECT id FROM outbox_cola
-                        WHERE tipo = :tipo
-                          AND payload ->> 'id' = :mensaje_id
-                          AND estado = 'pendiente'
-                        LIMIT 1
+                        INSERT INTO outbox_cola (tipo, payload, topico, estado)
+                        VALUES (:tipo, CAST(:payload AS jsonb), :topico, 'pendiente')
+                        ON CONFLICT DO NOTHING
+                        RETURNING id
                         """
                     ),
-                    {"tipo": tipo, "mensaje_id": payload.get("id", "")},
-                ).scalar_one()
-            else:
-                # El registro de idempotencia deja escrito qué mensaje se
-                # encoló y en qué fila: así no se encola dos veces y se puede
-                # auditar qué salió de la planta.
-                conexion.execute(
+                    {"tipo": tipo, "payload": payload_json, "topico": topico},
+                ).scalar_one_or_none()
+                if id_outbox is not None:
+                    break
+                # La fila pendiente es la misma orden, no una copia: se
+                # actualiza con el snapshot más reciente para no publicar un
+                # estado viejo cuando vuelva el bus.
+                id_outbox = conexion.execute(
                     text(
                         """
-                        INSERT INTO idempotency_key (clave, tipo, referencia_id)
-                        VALUES (:clave, :tipo, :referencia)
-                        ON CONFLICT (clave) DO UPDATE
-                        SET referencia_id = EXCLUDED.referencia_id
+                        UPDATE outbox_cola
+                        SET payload = CAST(:payload AS jsonb)
+                        WHERE id = (
+                            SELECT id FROM outbox_cola
+                            WHERE tipo = :tipo
+                              AND payload ->> 'id' = :mensaje_id
+                              AND estado = 'pendiente'
+                            ORDER BY creado_en, id
+                            LIMIT 1
+                            FOR UPDATE
+                        )
+                        RETURNING id
                         """
                     ),
                     {
-                        "clave": f"outbox:{tipo}:{payload.get('id', '')}",
                         "tipo": tipo,
-                        "referencia": str(id_outbox),
+                        "payload": payload_json,
+                        "mensaje_id": payload.get("id", ""),
                     },
+                ).scalar_one_or_none()
+                if id_outbox is not None:
+                    break
+            if id_outbox is None:
+                raise RuntimeError(
+                    f"No se pudo encolar el mensaje {payload.get('id', '')!r}"
                 )
+            # El registro de idempotencia deja escrito qué mensaje se
+            # encoló y en qué fila: así no se encola dos veces y se puede
+            # auditar qué salió de la planta.
+            conexion.execute(
+                text(
+                    """
+                    INSERT INTO idempotency_key (clave, tipo, referencia_id)
+                    VALUES (:clave, :tipo, :referencia)
+                    ON CONFLICT (clave) DO UPDATE
+                    SET referencia_id = EXCLUDED.referencia_id
+                    """
+                ),
+                {
+                    "clave": f"outbox:{tipo}:{payload.get('id', '')}",
+                    "tipo": tipo,
+                    "referencia": str(id_outbox),
+                },
+            )
         return str(id_outbox)
 
     def pendientes_outbox(
@@ -2150,11 +2434,55 @@ class Repositorio:
                 conexion.execute(
                     text(
                         """
-                        SELECT id, tipo, topico, payload
-                        FROM outbox_cola
-                        WHERE estado = 'pendiente'
-                          AND (proximo_intento IS NULL OR proximo_intento <= now())
-                        ORDER BY creado_en, id
+                        SELECT q.id, q.tipo, q.topico,
+                               CASE
+                                   WHEN q.tipo = 'orden' AND o.id IS NOT NULL THEN
+                                       q.payload || jsonb_build_object(
+                                           'estado', CASE o.estado
+                                               WHEN 'Pendiente de aprobacion'
+                                                   THEN 'PendienteAprobacion'
+                                               ELSE o.estado::text
+                                           END,
+                                           'motivo', o.motivo,
+                                           'detiene_equipo', o.detencion,
+                                           'reduce_inyeccion', o.reduce_inyeccion,
+                                           'ejecutor', o.ejecutor,
+                                           'tareas', COALESCE(
+                                               (SELECT json_agg(t.tarea_id ORDER BY t.tarea_id)
+                                                FROM orden_tarea t WHERE t.orden_id = o.id),
+                                               '[]'::json
+                                           ),
+                                           'repuestos', COALESCE(
+                                               (SELECT json_agg(
+                                                   json_build_object(
+                                                       'codigo', r.repuesto_id,
+                                                       'cantidad', r.cantidad
+                                                   ) ORDER BY r.repuesto_id
+                                               )
+                                                FROM orden_repuesto r
+                                                WHERE r.orden_id = o.id),
+                                               '[]'::json
+                                           ),
+                                           'habilita', h.numero,
+                                           'monto_habilita_usd', h.monto
+                                       )
+                                   ELSE q.payload
+                               END AS payload
+                        FROM outbox_cola q
+                        LEFT JOIN orden o
+                          ON q.tipo = 'orden' AND o.id = q.payload ->> 'id'
+                        LEFT JOIN LATERAL (
+                            SELECT numero, monto
+                            FROM habilitacion
+                            WHERE orden_id = o.id
+                            ORDER BY emitida_en
+                            LIMIT 1
+                        ) h ON q.tipo = 'orden'
+                        WHERE q.estado = 'pendiente'
+                          AND (
+                              q.proximo_intento IS NULL OR q.proximo_intento <= now()
+                          )
+                        ORDER BY q.creado_en, q.id
                         LIMIT :limite
                         """
                     ),

@@ -40,7 +40,9 @@ de órdenes.
       final es humana y autenticada: el supervisor cierra trabajo propio y el
       inspector certifica u observa trabajo de contratista; sólo la
       certificación emite el habilita `HAB-AAAA-NNNN` con el monto tomado de
-      la orden y de la lista de precios del contrato.
+      la orden y de la lista de precios del contrato. Un reproceso no degrada
+      una decisión humana, un cierre terminal no se reabre y la migración
+      `0010` hace append-only la decisión y su evidencia.
 - [x] Núcleo de agentes (LangChain) — el agente consulta las mismas ocho
       tools del MCP (esquema Pydantic estricto) y **propone** con citas; la
       decisión sigue en código. Corre en el hilo de redacción, así que no
@@ -252,6 +254,10 @@ envía un borrador seguro y no se genera error.
 - `migrations/versions/0009_manifiesto_evidencia_ledger.py`: manifiesto
   inmutable con hash SHA-256, ledger append-only, triggers de PostgreSQL y
   backfill histórico.
+- `migrations/versions/0010_integridad_decisiones_auditables.py`: decisiones
+  humanas append-only frente a `UPDATE`/`DELETE`/`TRUNCATE`, FK compuesta
+  decisión/cierre/orden, transiciones protegidas y un único habilita por
+  orden.
 
 ```bash
 # aplicar migraciones manualmente (el puerto es el de POSTGRES_PORT del .env)
@@ -861,11 +867,13 @@ Las principales están documentadas en `.env.example`:
 │       ├── 0006_cierre_fase7.py
 │       ├── 0007_registro_trayectoria.py
 │       ├── 0008_identidad_y_cierre_humano.py
-│       └── 0009_manifiesto_evidencia_ledger.py
+│       ├── 0009_manifiesto_evidencia_ledger.py
+│       └── 0010_integridad_decisiones_auditables.py
 ├── scripts/
 │   ├── analizar_borradores.py
 │   ├── analizar_corrida.py
 │   ├── analizar_notas.py
+│   ├── correr_correccion_oficial.py
 │   ├── medir_vision.py
 │   ├── probar_cierre.py
 │   ├── probar_cola.py
@@ -962,11 +970,40 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **577 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose (las 577 pasan). Sin base quedan **535 passed, 42
+Resultado actual: **606 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose (las 606 pasan). Sin base quedan **545 passed, 61
 skipped** (los de idempotencia/constraints, los del índice RAG y los de la
 Central, la trayectoria, el cierre y la evidencia), porque necesitan la base
 levantada.
+
+## Corrida oficial reproducible
+
+`scripts/correr_correccion_oficial.py` ejecuta el corrector de la Academia sin
+modificar su repositorio. Hace dos ajustes controlados **en memoria**:
+
+1. reemplaza, sólo en la función `reglas_aprobacion` del scorer oficial,
+   `bien += ok` por `bien += bool(ok)` para evitar el `TypeError: int + str`
+   cuando una orden pendiente válida trae motivo;
+2. antes de que el corrector elimine el volumen PostgreSQL de cada escenario,
+   archiva trayectoria, llamadas de tools, tokens, costo y latencia por
+   escenario.
+
+`integridad_correccion.json` deja constancia de los hashes SHA-256 de
+`corregir.py`, `puntuar.py`, `rubrica.yaml` y `retrieval.json`, del commit
+publicado, del estado Git y de ambos ajustes. No se archivan credenciales.
+
+```powershell
+.venv\Scripts\python scripts\correr_correccion_oficial.py `
+  --correccion-dir C:\ruta\academia2026-tp\correccion `
+  --repo C:\ruta\EnriqueAlejandro-PierottiCastillo `
+  --salida C:\ruta\evidencia\p0-06
+```
+
+El repositorio de la solución debe ser un checkout limpio del commit publicado
+y conservar el basename `EnriqueAlejandro-PierottiCastillo`, porque el nombre
+del proyecto Compose oficial se deriva de él. El `.env` local —con la clave de
+NVIDIA y la configuración de PostgreSQL— se copia al checkout, pero Git lo
+ignora y nunca forma parte de la evidencia.
 
 ## Integración con la planta
 

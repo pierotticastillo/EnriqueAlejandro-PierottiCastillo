@@ -16,6 +16,7 @@ import pytest
 from planta_contrato import NotaCierre, OrdenSistema
 
 from analisis.catalogo import CatalogoManuales
+from db.repositorio import AutorizacionInvalida, ConflictoEstado
 from manuales import documentos
 from planta.cierre import ServicioCierre
 from tools.precios import ListaPrecios, precios_desde_texto
@@ -140,6 +141,32 @@ class RepositorioFalso:
             "habilita": habilita,
             "monto_habilita_usd": monto,
         }
+
+
+class RepositorioConError(RepositorioFalso):
+    def __init__(self, orden: dict[str, Any], error: Exception) -> None:
+        super().__init__(orden)
+        self.error = error
+
+    def decidir_cierre_humano(self, **datos: Any) -> dict[str, Any]:
+        raise self.error
+
+
+class RepositorioEnCarrera(RepositorioFalso):
+    """Simula que otra decisión certificó la orden entre precheck y escritura."""
+
+    def registrar_cierre(self, **datos: Any) -> dict[str, Any]:
+        self.orden["estado"] = "Certificada"
+        self.orden["motivo"] = "certificada por otra persona"
+        return {
+            "cierre_id": datos["cierre_id"],
+            "nuevo": False,
+            "habilita": "HAB-2026-0009",
+            "monto_habilita_usd": 1150.0,
+        }
+
+    def obtener_habilitacion(self, orden_id: str) -> dict[str, Any] | None:
+        return {"numero": "HAB-2026-0009", "monto": 1150.0}
 
 
 # ------------------------------------------------------------------- fixtures
@@ -388,3 +415,82 @@ def test_un_cierre_sin_audio_no_tumba_la_planta(catalogo, precios) -> None:
     assert len(repositorio.registros) == 1
     assert repositorio.registros[0]["transcripcion"] == ""
     assert [orden.estado.value for orden in cliente.ordenes] == ["Ejecutada"]
+
+
+def test_el_precheck_de_ejecutor_precede_a_la_existencia_del_cierre(
+    catalogo,
+    precios,
+) -> None:
+    """Un inspector no puede certificar trabajo propio, haya cierre o no."""
+    repositorio = RepositorioFalso(_fila_orden(ejecutor="propio"))
+    cliente = ClienteFalso()
+    servicio, _ = _servicio(repositorio, cliente, catalogo, precios)
+
+    resultado = servicio.decidir_cierre(
+        "ORD-F-201A-FC-T01",
+        "certificar",
+        actor="marta",
+        rol="inspector",
+    )
+
+    assert resultado["ok"] is False
+    assert resultado["codigo"] == 403
+    assert repositorio.registros == []
+    assert cliente.ordenes == []
+
+
+def test_un_conflicto_del_repositorio_se_traduce_a_409(catalogo, precios) -> None:
+    repositorio = RepositorioConError(
+        _fila_orden(ejecutor="Servipat"),
+        ConflictoEstado("la orden ya fue decidida"),
+    )
+    cliente = ClienteFalso()
+    servicio, _ = _servicio(repositorio, cliente, catalogo, precios)
+    servicio.procesar_cierre(_nota(empresa="Servipat", id="CIERRE-CONFLICTO"))
+    cliente.ordenes.clear()
+
+    resultado = servicio.decidir_cierre(
+        "ORD-F-201A-FC-T01",
+        "certificar",
+        actor="marta",
+        rol="inspector",
+    )
+
+    assert resultado["ok"] is False
+    assert resultado["codigo"] == 409
+    assert cliente.ordenes == []
+
+
+def test_un_error_de_autorizacion_se_traduce_a_403(catalogo, precios) -> None:
+    repositorio = RepositorioConError(
+        _fila_orden(ejecutor="Servipat"),
+        AutorizacionInvalida("el ejecutor no corresponde"),
+    )
+    cliente = ClienteFalso()
+    servicio, _ = _servicio(repositorio, cliente, catalogo, precios)
+    servicio.procesar_cierre(_nota(empresa="Servipat", id="CIERRE-AUTORIZACION"))
+    cliente.ordenes.clear()
+
+    resultado = servicio.decidir_cierre(
+        "ORD-F-201A-FC-T01",
+        "certificar",
+        actor="marta",
+        rol="inspector",
+    )
+
+    assert resultado["ok"] is False
+    assert resultado["codigo"] == 403
+    assert cliente.ordenes == []
+
+
+def test_un_cierre_duplicado_no_republica_un_estado_obsoleto(catalogo, precios) -> None:
+    """Si el cierre se-certificó en una carrera, sale ese estado, no Ejecutada."""
+    repositorio = RepositorioEnCarrera(_fila_orden(ejecutor="Servipat"))
+    cliente = ClienteFalso()
+    servicio, _ = _servicio(repositorio, cliente, catalogo, precios)
+
+    servicio.procesar_cierre(_nota(empresa="Servipat", id="CIERRE-CARRERA"))
+
+    assert [orden.estado.value for orden in cliente.ordenes] == ["Certificada"]
+    assert cliente.ordenes[0].habilita == "HAB-2026-0009"
+    assert cliente.ordenes[0].monto_habilita_usd == 1150.0

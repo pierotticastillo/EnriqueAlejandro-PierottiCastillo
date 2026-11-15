@@ -157,12 +157,27 @@ def _manifiesto(evento_id: str, orden_id: str) -> dict[str, Any]:
 
 
 def _limpiar(engine, orden_id: str, evento_id: str) -> None:
+    """Limpia la orden si todavía no tiene una decisión humana terminal.
+
+    ``decision_cierre`` es append-only y, desde la migración ``0010``, impide
+    que sus padres se borren por cascada.  La prueba conserva esa evidencia.
+    """
     with engine.begin() as conexion:
-        conexion.execute(text("DELETE FROM orden WHERE id = :id"), {"id": orden_id})
-        conexion.execute(
-            text("DELETE FROM evento_sistema WHERE id = :id"),
+        decidida = conexion.execute(
+            text("SELECT count(*) FROM decision_cierre WHERE orden_id = :id"),
+            {"id": orden_id},
+        ).scalar_one()
+        if not decidida:
+            conexion.execute(text("DELETE FROM orden WHERE id = :id"), {"id": orden_id})
+        referencias = conexion.execute(
+            text("SELECT count(*) FROM orden WHERE evento_id = :id"),
             {"id": evento_id},
-        )
+        ).scalar_one()
+        if not referencias:
+            conexion.execute(
+                text("DELETE FROM evento_sistema WHERE id = :id"),
+                {"id": evento_id},
+            )
 
 
 def test_manifiesto_y_ledger_permiten_reconstruir_la_orden(
@@ -244,6 +259,12 @@ def test_manifiesto_y_ledger_permiten_reconstruir_la_orden(
                     text("DELETE FROM ledger_decisiones WHERE orden_id = :id"),
                     {"id": orden.id},
                 )
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as conexion:
+                conexion.execute(text("TRUNCATE TABLE manifiesto_evidencia"))
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as conexion:
+                conexion.execute(text("TRUNCATE TABLE ledger_decisiones"))
 
         decision = repositorio.decidir_orden(
             orden.id,

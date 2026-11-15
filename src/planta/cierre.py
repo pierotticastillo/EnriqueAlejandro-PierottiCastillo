@@ -42,7 +42,7 @@ from analisis.provenance import (
     hash_sha256_archivo,
     identificador_foto,
 )
-from db.repositorio import Repositorio
+from db.repositorio import AutorizacionInvalida, ConflictoEstado, Repositorio
 from planta.almacenamiento import Almacenamiento
 from planta.mqtt_listener import ClientePlanta
 from planta.transcriber import Transcriber
@@ -57,6 +57,17 @@ EJECUTOR_PROPIO = "propio"
 # El estado con el que se arma la orden para comparar el cierre: el que tiene
 # en la base (Aprobada, Pendiente de aprobación...).
 ESTADO_INICIAL = "Aprobada"
+
+_ESTADO_CONTRACTO = {
+    "Borrador": "Borrador",
+    "Pendiente de aprobacion": "PendienteAprobacion",
+    "Aprobada": "Aprobada",
+    "Rechazada": "Rechazada",
+    "Ejecutada": "Ejecutada",
+    "Observada": "Observada",
+    "Cerrada": "Cerrada",
+    "Certificada": "Certificada",
+}
 
 
 class ServicioCierre:
@@ -129,7 +140,16 @@ class ServicioCierre:
         la base, para que la planta quede al día aunque el sistema se haya
         reiniciado entre guardar y publicar.
         """
-        if self._repo.obtener_cierre(nota.id) is not None:
+        existente = self._repo.obtener_cierre(nota.id)
+        if existente is not None:
+            if str(existente.get("orden_id")) != str(nota.orden_id):
+                logger.error(
+                    "El cierre %s pertenece a %s, no a %s; no se republica",
+                    nota.id,
+                    existente.get("orden_id"),
+                    nota.orden_id,
+                )
+                return
             logger.info("El cierre %s ya estaba registrado; se republica el estado", nota.id)
             self._republicar(nota.orden_id)
             return
@@ -150,7 +170,7 @@ class ServicioCierre:
         motivo = comparacion.resumen or None
         fotos = self._fotos_de_cierre(nota)
 
-        self._repo.registrar_cierre(
+        resultado = self._repo.registrar_cierre(
             cierre_id=nota.id,
             orden_id=orden.id,
             anio=orden.ts.year,
@@ -179,8 +199,17 @@ class ServicioCierre:
             fotos=fotos,
             motivo=motivo,
         )
+        if not resultado.get("nuevo"):
+            # Una carrera puede haber registrado el cierre entre el precheck y
+            # la escritura. Se publica el estado actual, nunca el "Ejecutada"
+            # calculado desde una lectura anterior.
+            self._republicar(nota.orden_id)
+            return
 
-        ejecutada = _orden_desde_fila(fila, "Ejecutada", motivo=motivo)
+        actual = self._repo.obtener_orden_completa(orden.id)
+        if actual is None:
+            return
+        ejecutada = _orden_desde_fila(actual, "Ejecutada", motivo=actual.get("motivo"))
         self._cliente.publicar_orden(ejecutada)
         rol = "supervisor" if (orden.ejecutor or "propio").lower() == "propio" else "inspector"
         logger.info(
@@ -209,10 +238,35 @@ class ServicioCierre:
         fila = self._repo.obtener_orden_completa(orden_id)
         if fila is None:
             return {"ok": False, "error": "La orden no existe", "codigo": 404}
+        orden = _orden_desde_fila(fila, "Ejecutada")
+        accion = str(decision or "").strip().lower()
+        rol = str(rol or "").strip().lower()
+        ejecutor = str(orden.ejecutor or "propio").strip().lower()
+        # La autorización se comprueba antes que la existencia del cierre:
+        # un actor sin permiso recibe 403 y no puede usar la ausencia del
+        # cierre para distinguir un caso que no puede operar.
+        if accion == "cerrar":
+            if rol != "supervisor" or ejecutor != "propio":
+                return {
+                    "ok": False,
+                    "error": "El supervisor sólo puede cerrar trabajo propio",
+                    "codigo": 403,
+                }
+        elif accion in {"certificar", "observar"}:
+            if rol != "inspector" or ejecutor == "propio":
+                return {
+                    "ok": False,
+                    "error": (
+                        "El inspector sólo puede certificar u observar "
+                        "trabajo de contratista"
+                    ),
+                    "codigo": 403,
+                }
+        else:
+            return {"ok": False, "error": f"Decisión inválida: {decision!r}", "codigo": 400}
         cierre = self._repo.obtener_cierre_de_orden(orden_id)
         if cierre is None:
             return {"ok": False, "error": "La orden no tiene un cierre registrado", "codigo": 409}
-        orden = _orden_desde_fila(fila, "Ejecutada")
         try:
             transicion = validar_decision_cierre(
                 decision=decision,
@@ -247,10 +301,14 @@ class ServicioCierre:
                 monto_usd=monto,
                 fuente_monto="CT-SVP-2025 §2.1",
             )
+        except ConflictoEstado as exc:
+            return {"ok": False, "error": str(exc), "codigo": 409}
+        except AutorizacionInvalida as exc:
+            return {"ok": False, "error": str(exc), "codigo": 403}
         except ValueError as exc:
             return {"ok": False, "error": str(exc), "codigo": 400}
 
-        orden_final = resultado.get("orden") or self._repo.obtener_orden_completa(orden.id)
+        orden_final = self._repo.obtener_orden_completa(orden.id)
         if orden_final is None:
             return {"ok": False, "error": "La orden ya no existe", "codigo": 404}
         decision_registrada = resultado.get("decision") or {}
@@ -340,9 +398,10 @@ class ServicioCierre:
         if fila is None:
             return
         habilitacion = self._repo.obtener_habilitacion(orden_id)
+        estado_db = str(fila.get("estado") or "Ejecutada")
         orden = _orden_desde_fila(
             fila,
-            str(fila.get("estado") or "Ejecutada"),
+            _ESTADO_CONTRACTO.get(estado_db, "Ejecutada"),
             motivo=fila.get("motivo"),
             habilita=str(habilitacion["numero"]) if habilitacion else None,
             monto=float(habilitacion["monto"]) if habilitacion else None,

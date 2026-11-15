@@ -169,6 +169,7 @@ def test_una_orden_que_no_esta_pendiente_no_se_decide() -> None:
     )
 
     assert resultado["ok"] is False
+    assert resultado["codigo"] == 409
     assert "pendiente" in resultado["error"].lower()
     assert publicadas == []
 
@@ -187,6 +188,7 @@ def test_una_decision_invalida_no_se_acepta() -> None:
     resultado = central.decidir("ORD-1", "ejecutar", actor=ACTOR_PLANIFICADOR)
 
     assert resultado["ok"] is False
+    assert resultado["codigo"] == 400
     assert repositorio.llamadas == []
 
 
@@ -323,6 +325,27 @@ def test_la_api_decide_una_orden(central_viva: Any) -> None:
         datos = json.loads(respuesta.read().decode("utf-8"))
     assert datos["ok"] is True
     assert datos["orden"]["estado"] == "Aprobada"
+    assert len(publicadas) == 1
+
+
+def test_http_una_orden_ya_decidida_responde_409(central_viva: Any) -> None:
+    """La decisión del planificador es de una sola vez."""
+    central, _repositorio, publicadas, _registradas = central_viva
+    cuerpo = json.dumps({"decision": "aprobar"}).encode("utf-8")
+    peticion = urllib.request.Request(
+        _url(central, "/api/ordenes/ORD-1/decision"),
+        data=cuerpo,
+        headers={"Content-Type": "application/json", **_headers()},
+        method="POST",
+    )
+    with urllib.request.urlopen(peticion, timeout=5) as respuesta:
+        assert respuesta.status == 200
+
+    with pytest.raises(urllib.error.HTTPError) as error:
+        urllib.request.urlopen(peticion, timeout=5)
+    assert error.value.code == 409
+    datos = json.loads(error.value.read().decode("utf-8"))
+    assert datos["ok"] is False
     assert len(publicadas) == 1
 
 

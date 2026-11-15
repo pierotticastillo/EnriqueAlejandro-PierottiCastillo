@@ -374,6 +374,60 @@ def test_el_inspector_no_puede_cerrar_trabajo_propio(central_viva: Any) -> None:
     assert cierres == []
 
 
+def test_http_un_conflicto_de_cierre_conserva_el_codigo_409(
+    central_viva: Any,
+    monkeypatch: Any,
+) -> None:
+    central, _, _ = central_viva
+    monkeypatch.setattr(
+        central,
+        "_decidir_cierre",
+        lambda *args, **kwargs: {
+            "ok": False,
+            "error": "la orden ya tiene una decisión de cierre",
+            "codigo": 409,
+        },
+    )
+
+    codigo, datos, _ = _peticion(
+        central,
+        "/api/cierres/ORD-1/decision",
+        token=TOKEN_SUPERVISOR,
+        cuerpo={"decision": "cerrar"},
+        method="POST",
+    )
+
+    assert codigo == 409
+    assert datos["codigo"] == 409
+
+
+def test_http_un_error_de_autorizacion_conserva_el_codigo_403(
+    central_viva: Any,
+    monkeypatch: Any,
+) -> None:
+    central, _, _ = central_viva
+    monkeypatch.setattr(
+        central,
+        "_decidir_cierre",
+        lambda *args, **kwargs: {
+            "ok": False,
+            "error": "el ejecutor no corresponde",
+            "codigo": 403,
+        },
+    )
+
+    codigo, datos, _ = _peticion(
+        central,
+        "/api/cierres/ORD-1/decision",
+        token=TOKEN_INSPECTOR,
+        cuerpo={"decision": "certificar"},
+        method="POST",
+    )
+
+    assert codigo == 403
+    assert datos["codigo"] == 403
+
+
 def test_la_sesion_devuelve_el_actor_autenticado(central_viva: Any) -> None:
     central = central_viva[0]
 

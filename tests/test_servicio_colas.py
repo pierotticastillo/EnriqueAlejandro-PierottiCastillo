@@ -60,6 +60,9 @@ class RepositorioFalso:
     def __init__(self) -> None:
         self.notas: list[str] = []
         self.ordenes: list[object] = []
+        self.snapshot: dict[str, object] | None = None
+        self.error_guardado: Exception | None = None
+        self.redacciones: list[tuple[str, str, str]] = []
 
     def obtener_conversacion_por_nota(self, nota_id: str) -> None:
         return None
@@ -80,8 +83,33 @@ class RepositorioFalso:
     def actualizar_estado_nota(self, nota_id: str, estado: str) -> None:
         pass
 
-    def guardar_orden(self, orden, **kwargs) -> None:
+    def guardar_orden(self, orden, **kwargs) -> dict[str, object]:
+        if self.error_guardado is not None:
+            raise self.error_guardado
         self.ordenes.append(orden)
+        if self.snapshot is not None:
+            return dict(self.snapshot)
+        return {
+            "id": orden.id,
+            "estado": "Pendiente de aprobacion",
+            "motivo": orden.motivo,
+            "detencion": orden.detiene_equipo,
+            "reduce_inyeccion": orden.reduce_inyeccion,
+            "ejecutor": orden.ejecutor,
+            "tareas": list(orden.tareas),
+            "repuestos": [
+                {"codigo": repuesto.codigo, "cantidad": repuesto.cantidad}
+                for repuesto in orden.repuestos
+            ],
+        }
+
+    def obtener_orden_completa(self, orden_id: str) -> dict[str, object] | None:
+        if self.snapshot is not None:
+            return dict(self.snapshot)
+        return None
+
+    def guardar_redaccion_orden(self, orden_id: str, texto: str, *, modelo: str) -> None:
+        self.redacciones.append((orden_id, texto, modelo))
 
     def registrar_evento(self, evento, *, nota_id=None) -> bool:
         return True
@@ -102,9 +130,15 @@ class ClienteFalso:
         pass
 
 
+class ResultadoDeAnalisisFalso:
+    falla = None
+
+
 class AnalisisFalso:
     def __init__(self) -> None:
         self.eventos: list[object] = []
+        self.redaccion = ""
+        self.resultado = ResultadoDeAnalisisFalso()
 
     def analizar_evento(
         self,
@@ -117,7 +151,7 @@ class AnalisisFalso:
         tendencias=None,
     ):
         self.eventos.append(evento)
-        return "analisis"
+        return self.resultado
 
     def analizar_alerta_seguridad(
         self,
@@ -128,7 +162,7 @@ class AnalisisFalso:
         evidencia_vision=(),
         tendencias=None,
     ):
-        return "analisis"
+        return self.resultado
 
     def orden_sistema(self, analisis):
         return OrdenSistema(
@@ -149,7 +183,7 @@ class AnalisisFalso:
         return {}
 
     def redactar(self, analisis) -> str:
-        return ""
+        return self.redaccion
 
     @property
     def nombre_modelo(self) -> str:
@@ -165,6 +199,30 @@ def _nota(numero: str, *, con_audio: bool = True) -> NotaRecorrida:
         fotos=[],
         recorrida_id=f"REC-{numero}",
     )
+
+
+def _evento_sensor() -> EventoSistema:
+    return EventoSistema(
+        id="sensor:B-103:presion_descarga",
+        ts=datetime(2026, 11, 5, 10, 0, tzinfo=UTC),
+        tipo=TipoEvento.escalado,
+        equipo="B-103",
+        origen="sensor",
+        resumen="presión fuera de rango",
+    )
+
+
+def _snapshot(estado: str) -> dict[str, object]:
+    return {
+        "id": "ORD-1",
+        "estado": estado,
+        "motivo": "motivo vigente",
+        "detencion": False,
+        "reduce_inyeccion": False,
+        "ejecutor": "propio",
+        "tareas": ["I-VAL"],
+        "repuestos": [],
+    }
 
 
 def _servicio(
@@ -271,3 +329,49 @@ def test_el_camino_sincronico_procesa_la_nota_entera() -> None:
 
     assert transcriptor.llamadas == ["audio.wav"]
     assert repo.notas == ["NOTA-00001"]
+
+
+def test_si_la_persistencia_falla_no_se_publica_una_orden() -> None:
+    """Sin evidencia auditada no sale una orden al bus."""
+    transcriptor = TranscriptorFalso()
+    servicio, cliente, repo, _analisis = _servicio(transcriptor)
+    repo.error_guardado = RuntimeError("PostgreSQL no disponible")
+
+    servicio.generar_orden(_evento_sensor())
+
+    assert repo.ordenes == []
+    assert cliente.ordenes == []
+
+
+def test_la_orden_publicada_tiene_el_estado_comprometido_en_postgresql() -> None:
+    """La planta recibe el snapshot de la base, no el objeto local obsoleto."""
+    transcriptor = TranscriptorFalso()
+    servicio, cliente, repo, _analisis = _servicio(transcriptor)
+    repo.snapshot = _snapshot("Aprobada")
+
+    servicio.generar_orden(_evento_sensor())
+
+    assert len(cliente.ordenes) == 1
+    assert cliente.ordenes[0].estado.value == "Aprobada"
+    assert cliente.ordenes[0].tareas == ["I-VAL"]
+
+
+def test_la_redaccion_publica_el_estado_vigente_y_no_reabre_un_terminal() -> None:
+    """La redacción tardía usa la base y no degrada una orden ya decidida."""
+    transcriptor = TranscriptorFalso()
+    servicio, cliente, repo, analisis = _servicio(transcriptor)
+    analisis.redaccion = "Justificación técnica"
+    orden = analisis.orden_sistema("analisis")
+
+    repo.snapshot = _snapshot("Aprobada")
+    servicio._redactar_orden("analisis", orden)
+    assert len(cliente.ordenes) == 1
+    assert cliente.ordenes[0].estado.value == "Aprobada"
+
+    repo.snapshot = _snapshot("Rechazada")
+    servicio._redactar_orden("analisis", orden)
+    assert len(cliente.ordenes) == 1
+    assert repo.redacciones == [
+        ("ORD-1", "Justificación técnica", "ninguno"),
+        ("ORD-1", "Justificación técnica", "ninguno"),
+    ]

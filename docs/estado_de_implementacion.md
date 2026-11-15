@@ -1,6 +1,6 @@
 # Estado de implementación
 
-**Actualizado:** 2026-11-14
+**Actualizado:** 2026-11-15
 **Plan de referencia:** documento interno del curso (no se publica en este
 repositorio). La segunda entrega sigue el **Plan de implementación 2**; el detalle
 de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
@@ -123,28 +123,40 @@ reconstruir la cadena evento → evidencia → análisis → propuesta → regla
 actor/rol → estado, con modelo, tools, tokens, costo y tiempo. La migración
 `0009` agrega esas tablas, sus triggers y el backfill histórico; se aplicó,
 se probó con datos históricos sintéticos y se verificó el ciclo
-`0008 → 0009 → 0008 → 0009` sin dejar filas de prueba. La suite completa quedó
-en **577 aprobadas con PostgreSQL** y **535 aprobadas + 42 omitidas sin
-base**, sin fallas. P0-06 (corrida anclada al commit final) sigue pendiente.
+`0008 → 0009 → 0008 → 0009` sin dejar filas de prueba. Un cuarto avance
+corrigió los bloqueadores encontrados por una auditoría independiente: el
+reproceso ya no degrada una decisión humana, un cierre terminal no se reabre,
+sólo existe un habilita por orden y las tres tablas de auditoría bloquean
+`UPDATE`, `DELETE` y `TRUNCATE`. La migración `0010` incorpora esas garantías;
+el ciclo `0009 → 0010 → 0009 → 0010` y una instalación limpia
+`0001 → 0010` quedaron verificados. La suite completa quedó en **606
+aprobadas con PostgreSQL** y **545 aprobadas + 61 omitidas sin base**, sin
+fallas. Para cerrar P0-06 se preparó `scripts/correr_correccion_oficial.py`: ejecuta
+el corrector oficial sin modificarlo en disco, corrige en memoria el error
+`TypeError: int + str` de su scorer y captura trayectoria, tokens, costo y
+latencia de PostgreSQL justo antes de que cada escenario elimine su volumen.
+El manifiesto `integridad_correccion.json` fija los hashes del corrector, scorer,
+rúbrica y suite RAG, el commit y los dos ajustes. La corrida oficial anclada al
+commit publicado sigue pendiente.
 
 ## Avance por fase
 
 | Fase | Estado | Avance y pendientes |
 |---|---|---|
 | 0 — Preparación del entorno | Completa | Compose (`postgres`, `migraciones`, `sistema`, `mcp`), red externa `planta-lan`, labels `academia.planta: pc`, proxy `enlace:3128` con `NO_PROXY`, presupuesto agregado 4 CPU / 8 GB y latido `sistema/estado`. |
-| 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido, trayectoria, roles, decisiones de cierre, manifiestos y ledger) e idempotencia por `evento_sistema.id`. La revisión vigente es `0009`. Los tests de persistencia, constraints, RAG, Central, trayectoria, cierre y evidencia requieren base: sin `TEST_DATABASE_URL` quedan **42 omitidos**; con PostgreSQL, los **577 tests** pasan. |
+| 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido, trayectoria, roles, decisiones de cierre, manifiestos y ledger) e idempotencia por `evento_sistema.id`. La revisión vigente es `0010`. Los tests de persistencia, constraints, RAG, Central, trayectoria, cierre y evidencia requieren base: sin `TEST_DATABASE_URL` quedan **61 omitidos**; con PostgreSQL, los **606 tests** pasan. |
 | 1 — Parte por voz | Completa y verificada | Listener MQTT, descarga de medios a disco, ASR local (`faster-whisper`), extracción determinista, resolución de nombres y unidades, preguntas de ambigüedad y conversación con tablet. La corrección del operador se aplica **a la lectura que está corrigiendo** y la conversación tiene tope: si no converge, la nota queda para revisión humana. |
 | 2 — Detección sin LLM | Completa y verificada | S1–S4 con los procedimientos del MBP-4, aviso en tablet y por radio al supervisor (canal 1), **un evento por equipo** (`parte:<nota>:<tag>`), contexto y tendencia en los escalados, sensores MQTT con límites de `/api/planta`. |
 | 3 — Tools y MCP | Completa y verificada | Siete tools de solo lectura con `extra="forbid"`, cliente HTTP con timeout/reintentos/errores tipados, búsqueda léxica de manuales y servidor MCP (streamable-http y stdio) probado en vivo. |
 | 4 — RAG, contexto y memoria | **Completa y verificada** | Índice híbrido (BM25 + embeddings) en PostgreSQL + pgvector con metadatos (`equipo`, `fabricante`, `documento`, `seccion`, `cita`, `vigente`), evaluación contra el baseline oficial, citas obligatorias en el context builder, política de memoria escrita y tool `busqueda_rag` expuesta por MCP. |
 | 5 — Análisis y borrador de orden | **Completa y verificada** | Catálogo de fallas parseado de los manuales de la planta (18 fallas vigentes, con cita), cruce con la evidencia del parte, causas probables ordenadas con lo que falta confirmar, borrador de orden con tareas/repuestos/costo y **las seis reglas de aprobación evaluadas en código**, publicación en `sistema/ordenes` y persistencia auditada. |
 | 6 — Operación sin enlace | **Completa y verificada** | La cola en PostgreSQL es **la salida de la planta**: eventos, órdenes y avisos. Si el bus no está, el mensaje queda en la base (no se pierde en la memoria del proceso) y sale cuando vuelve. Orden **por destino**: el radio espera al enlace y conserva su orden entre sí; los eventos y las órdenes no quedan bloqueados detrás del radio. Índice único **parcial** (`WHERE estado = 'pendiente'`): no hay dos copias esperando, pero un mensaje ya enviado se puede volver a encolar. `idempotency_key` deja escrito qué salió. Hilo dedicado `cola-salida` (`COLA_SONDEO_S=5`) y drenaje al reconectar. `pendientes_sincronizar` visible en el latido. Verificado en vivo (encolado, drenaje en orden, llegada al bus, enlace caído y restaurado, re-encolado). |
-| 7 — Cierre y certificación | **Completa; G2/G3 reforzada en el Plan 2** | Suscripción a `planta/cierres`, transcripción local con el vocabulario de la planta, parseo del cierre (tareas, repuestos con cantidad, horas, prueba final) y comparación contra la orden. La comparación prepara evidencia; la decisión final es humana: `supervisor` cierra trabajo propio e `inspector` certifica u observa trabajo de contratista. `Observada` exige motivo y el habilita se emite únicamente al certificar, en la misma transacción de la decisión. Idempotente por `cierre.externa_id` y por `decision_cierre.cierre_id`. |
+| 7 — Cierre y certificación | **Completa y verificada tras auditoría** | El cierre técnico deja `Ejecutada`; `supervisor` cierra trabajo propio e `inspector` certifica u observa trabajo de contratista. La corrección `0010` impide que un reproceso degrade una decisión humana, que un segundo cierre reabra una orden terminal y que una orden tenga más de un habilita. `Observada → Ejecutada → Certificada` queda permitido únicamente como ciclo explícito de aclaración. |
 | — — Núcleo de agentes, trayectoria, Central y presupuesto | **Completa y verificada** | Agente de LangChain (`create_agent`) que consulta las ocho tools del MCP y propone con citas (lo que propone se contrasta con el catálogo), con **cierre estructurado** para los modelos que no llaman a la herramienta de salida; registro `registro_trayectoria` con modelo, tools y argumentos, tokens, costo y tiempo (el costo sale de los tokens medidos por la tarifa del modelo); Central de mantenimiento autenticada por token Bearer y RBAC, como canal de decisión humana del planificador, supervisor e inspector; presupuesto de pasos, tokens y timeout global por nota, con el corte escrito en la bitácora y la comprobación **antes** de cada vuelta. Mini spec en `docs/spec-parte.md`. |
 
 | 8 — Alineación de Entrega 2 | En espera de información externa | Se registra la fecha, el alcance, los escenarios y la rúbrica cuando el usuario los comunique después de confirmarlos con la Academia. La implementación de los P0 independientes continúa sin esperar esta respuesta. |
-| 9 — Gobierno humano y seguridad | **Implementada y verificada** | P0-01: el cierre técnico deja `Ejecutada` y la decisión final la toma un `supervisor` o `inspector` autenticado, con motivo/evidencia auditados y habilita sólo tras certificación. P0-04: tokens Bearer opacos, un token por persona, cuatro roles y 401/403; la identidad sale sólo del token. P0-05: DOM sin `innerHTML`, CSP con nonce, cabeceras defensivas y motivo acotado. Verificado en PostgreSQL y con la suite completa. |
-| 10 — Evidencia y provenance | **Implementada y verificada** | P0-02: una foto con daño estructural o un resultado indeterminado fuerza revisión humana en escalados ordinarios; una salida válida sin daño no agrega revisión y sin fotos no se activa el gate. P0-03: `construir_contexto` participa del análisis productivo; manifiesto canónico por orden/cierre/decisión con parte, filas, fotos hasheadas, salida y modelo de visión, tendencia con ventana/fuente, fragmentos y citas; ledger transaccional append-only con nueve tipos y reconstrucción autenticada desde la Central. La migración `0009`, su backfill y su rollback quedaron verificados. |
+| 9 — Gobierno humano y seguridad | **Implementada y verificada tras auditoría** | P0-01: el cierre técnico deja `Ejecutada` y la decisión final la toma un `supervisor` o `inspector` autenticado, con motivo/evidencia auditados y habilita sólo tras certificación. La migración `0010` y las guardas de aplicación preservan estado, motivo, costo, tareas y repuestos frente a reprocesos; impiden cierres terminales duplicados y fijan un habilita por orden. P0-04 y P0-05 siguen verificados. |
+| 10 — Evidencia y provenance | **Implementada y verificada tras auditoría** | P0-02: una foto con daño estructural o un resultado indeterminado fuerza revisión humana en escalados ordinarios; una salida válida sin daño no agrega revisión y sin fotos no se activa el gate. P0-03: manifiesto canónico, ledger transaccional y reconstrucción autenticada. La migración `0010` completa el append-only de `decision_cierre`, manifiesto y ledger contra `UPDATE`, `DELETE` y `TRUNCATE`, y vincula decisión, cierre y orden con una FK compuesta restrictiva. |
 | 11 — Evaluación, red team y calidad | Pendiente | Benchmark del agente contra baseline, grounding, visión con fotos reales, trayectoria y red team con costo/latencia. |
 | 12 — Operación y cierre | Pendiente | Outbox transaccional, PUBACK, constraints, observabilidad, CI/CD, corrida oficial y documentación canónica. |
 
@@ -152,12 +164,12 @@ base**, sin fallas. P0-06 (corrida anclada al commit final) sigue pendiente.
 
 | ID | Estado actual | Evidencia o próximo paso |
 |---|---|---|
-| P0-01 — G2/G3 con decisión humana | **Implementado y verificado** | El cierre técnico sólo deja `Ejecutada`. El `supervisor` cierra trabajo propio; el `inspector` certifica u observa trabajo de contratista; observar exige motivo y el habilita sólo se emite al certificar. Actor, rol, motivo, evidencia y fecha quedan en `decision_cierre`; la decisión no se cambia. |
+| P0-01 — G2/G3 con decisión humana | **Implementado y verificado tras corrección** | El cierre técnico sólo deja `Ejecutada`. El `supervisor` cierra trabajo propio; el `inspector` certifica u observa trabajo de contratista; observar exige motivo y el habilita sólo se emite al certificar. Actor, rol, motivo, evidencia y fecha quedan en `decision_cierre`; la decisión no se cambia. La migración `0010` y las guardas de aplicación impiden degradarla por reproceso, reabrirla con otro cierre o duplicar el habilita. |
 | P0-02 — Daño estructural en escalados ordinarios | **Implementado y verificado** | El gate fotográfico está en código: daño estructural validado o resultado indeterminado fuerza revisión humana; salida válida sin daño no la agrega y sin fotos no se activa. El resultado, la foto y el modelo quedan en la evidencia persistida de la orden; una prueba de integración confirma su recuperación desde PostgreSQL. |
-| P0-03 — Evidencia y provenance | **Implementado y verificado** | Manifiesto inmutable y canónico para orden, cierre y decisión, separado del JSON mutable de reglas: registra parte/filas, fotos con id/URL/hash, salida y modelo de visión, tendencia con ventana/fuente, fragmentos/citas y marca lo ausente como `no_disponible`. `construir_contexto` ya participa del análisis productivo. El ledger append-only encadena evento → evidencia → análisis → propuesta → reglas → aprobación/cierre/decisión → trayectoria, con actor/rol/estado y modelo/tools/tokens/costo/tiempo. La Central permite reconstruir una orden mediante un endpoint autenticado. Hashes, triggers, backfill y rollback verificados en PostgreSQL. |
+| P0-03 — Evidencia y provenance | **Implementado y verificado tras corrección** | Manifiesto canónico para orden, cierre y decisión, separado del JSON mutable de reglas; `construir_contexto` participa del análisis productivo; ledger transaccional con nueve tipos y reconstrucción autenticada. `decision_cierre`, manifiesto y ledger bloquean `UPDATE`, `DELETE` y `TRUNCATE`; la FK compuesta garantiza que decisión, cierre y orden sean el mismo caso. |
 | P0-04 — Autenticación y RBAC | **Implementado y verificado** | La Central exige un token Bearer opaco, uno por persona. Roles: `planificador`, `supervisor`, `inspector` y `lectura`. Sin credencial válida: 401; operación fuera del rol: 403. `usuario`/`rol` del cuerpo se ignoran; la identidad sale sólo del token. |
 | P0-05 — XSS y CSP | **Implementado y verificado** | `src/planta/central.py`: construcción DOM con `textContent`/`replaceChildren`, CSP con nonce por respuesta y cabeceras defensivas. Sigue integrado con P0-01/P0-04 y verificado por la suite completa. |
-| P0-06 — Corrida sobre el commit final | **Parcialmente ejecutada; corrida oficial pendiente** | El commit de implementación ya está congelado y publicado en `main`: `ec94637`. Sobre ese código se ejecutaron la suite completa con y sin PostgreSQL, Ruff, compilación y las verificaciones de migración. Falta ejecutar los siete escenarios, la evaluación RAG y las nuevas evaluaciones, y archivar hash, digest de imágenes, modelos, corpus, dataset, métricas, costo y latencia. La corrida oficial vigente todavía es de `d6b5588`. |
+| P0-06 — Corrida sobre el commit final | **Pendiente; corrección lista para publicar** | `ec94637` fue el primer commit de implementación, pero la auditoría posterior detectó bloqueadores en P0-01/P0-03. La corrección con migración `0010`, guardas de aplicación y **606 pruebas aprobadas con PostgreSQL** está verificada; se publicará en `main` y ese hash será el ancla de los siete escenarios, la evaluación RAG y el archivado de modelos, corpus/dataset, métricas, eliminatorias, mensajes inválidos, costo y latencia. |
 | P0-07 — Alcance y rúbrica oficiales | Pendiente de información externa | Se actualizará cuando el usuario comunique la información confirmada por la Academia. |
 
 ## Decisiones que conviene no perder de vista
@@ -495,10 +507,11 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Última verificación
 
-- `python -m pytest` con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose: **577 aprobadas, 0 fallas**.
-- `python -m pytest` sin `TEST_DATABASE_URL`: **535 aprobadas, 42 omitidas, 0 fallas**. Los omitidos son las pruebas que requieren PostgreSQL.
-- Pruebas focales de evidencia, contexto, Central autenticada, manifiesto, ledger, órdenes y cierres: **47 aprobadas, 0 fallas**.
-- Migración `0009`: backfill sintético validado con **3 manifiestos**, **9 tipos de ledger**, **3/3 hashes válidos** e idempotencias únicas; PostgreSQL rechazó `UPDATE` y `DELETE` en ambas tablas. El ciclo `0008 → 0009 → 0008 → 0009` terminó con la base limpia y en `0009 (head)`. Una base nueva aplicó la cadena completa `0001 → 0009` y quedó con las dos tablas y ambos triggers.
+- `python -m pytest` con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose: **606 aprobadas, 0 fallas**.
+- `python -m pytest` sin `TEST_DATABASE_URL`: **545 aprobadas, 61 omitidas, 0 fallas**. Los omitidos son las pruebas que requieren PostgreSQL.
+- Pruebas focales de cierre, evidencia auditada y aprobación humana: **20 aprobadas, 0 fallas**.
+- Migración `0009`: backfill sintético validado con **3 manifiestos**, **9 tipos de ledger**, **3/3 hashes válidos** e idempotencias únicas; PostgreSQL rechazó `UPDATE` y `DELETE` en ambas tablas. El ciclo `0008 → 0009 → 0008 → 0009` terminó con la base limpia y en `0009 (head)`.
+- Migración `0010`: PostgreSQL rechazó `UPDATE`, `DELETE` y `TRUNCATE` en `decision_cierre`, manifiesto y ledger; verificó la FK compuesta decisión/cierre/orden, la compatibilidad acción/rol/estado y un único habilita por orden. El ciclo `0009 → 0010 → 0009 → 0010` y una base nueva `0001 → 0010` quedaron verificados.
 - `ruff check src tests migrations scripts`: **sin errores**.
 - `compileall -q src tests migrations` y `git diff --check`: **sin errores**.
 - **Corrector oficial, corrida completa (7 escenarios)**: **92,6/100 — APRUEBA**
@@ -621,6 +634,7 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 | `scripts/analizar_notas.py` | extractor vs. verdad de campo, con el tipo de evento esperado |
 | `scripts/verificar_modelos.py` | lista cerrada de modelos: tabla, configuración y runtime |
 | `scripts/medir_vision.py` | medición del modelo de visión: tiempo, tokens y respuesta efectiva |
+| `scripts/correr_correccion_oficial.py` | corre los siete escenarios con el corrector oficial sin modificarlo y archiva, por escenario, trayectoria, tools, tokens, costo y latencia antes del borrado del volumen |
 | `scripts/probar_cola.py` | prueba en vivo de la cola de salida: encola un radio, un evento y una orden, y comprueba que salen en orden, por su tópico y que llegan a la planta |
 | `scripts/probar_cierre.py` | prueba en vivo del cierre: publica una orden de contratista, escucha `planta/cierres`, verifica que el cierre técnico deja `Ejecutada` y, si se entrega un token y una decisión explícita, registra la decisión humana autenticada y muestra el estado final, la auditoría y el habilita |
 
@@ -637,6 +651,38 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 9. Completar las Fases 11 y 12: benchmark y red team, outbox/PUBACK, observabilidad, CI/CD y cierre reproducible.
 
 ## Historial
+
+- **2026-11-15 (Plan 2, verificación final antes de P0-06):** la publicación de
+  órdenes usa siempre el snapshot comprometido en PostgreSQL; si la
+  persistencia falla, no sale nada por MQTT. La redacción tardía vuelve a leer
+  el estado vigente y la outbox actualiza su fila pendiente y relee la orden
+  antes de enviarla. La Central distingue `400` (payload inválido), `403`
+  (autorización) y `409` (conflicto de estado), y el cierre valida ejecutor y
+  autorización antes de persistir. La suite completa quedó en **606 aprobadas
+  con PostgreSQL** y **545 aprobadas + 61 omitidas sin base**, sin fallas; el
+  ciclo `0009 → 0010 → 0009 → 0010` terminó en `0010 (head)`.
+
+- **2026-11-14 (Plan 2, preparación de P0-06):** se añadió
+  `scripts/correr_correccion_oficial.py`, un envoltorio que ejecuta el corrector
+  oficial sin modificar su repositorio. Corrige en memoria el error
+  `TypeError: int + str` del scorer, captura trayectoria, tools, tokens, costo y
+  latencia antes del `down -v` de cada escenario y escribe
+  `integridad_correccion.json` con los hashes del corrector, scorer, rúbrica y
+  suite RAG, el commit publicado y el estado Git. La corrida oficial anclada al
+  commit final sigue pendiente.
+
+- **2026-11-14 (Plan 2, auditoría correctiva P0-01/P0-03 — migración `0010`):**
+  una revisión independiente detectó que un reproceso podía degradar una orden
+  ya decidida, que un segundo cierre podía reabrirla y emitir otro habilita y
+  que `decision_cierre` admitía `UPDATE`/`DELETE`; además, `TRUNCATE` evitaba
+  los triggers de `0009`. La corrección preserva estado, motivo, costo, tareas y
+  repuestos frente a reprocesos, exige transiciones explícitas, permite la
+  aclaración `Observada → Ejecutada → Certificada`, impone un habilita por
+  orden y bloquea `UPDATE`/`DELETE`/`TRUNCATE` en las tres tablas de auditoría.
+  La FK compuesta impide mezclar decisión, cierre y orden. La suite completa
+  quedó en **606 aprobadas con PostgreSQL** y **545 aprobadas + 61 omitidas
+  sin base**; el ciclo `0009 → 0010 → 0009 → 0010` y una instalación limpia
+  `0001 → 0010` quedaron verificados.
 
 - **2026-11-14 (Plan 2, P0-03 — manifiesto inmutable y ledger):** el camino
   productivo ahora arma el contexto RAG con `construir_contexto` y conserva

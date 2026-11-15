@@ -27,7 +27,7 @@ from analisis.provenance import hash_sha256_archivo, identificador_foto
 from analisis.servicio import ServicioAnalisis
 from analisis.vision import ClienteVision
 from config import Settings
-from db.repositorio import Repositorio, filas_desde_json
+from db.repositorio import Repositorio, filas_desde_json, orden_desde_fila
 from deteccion import seguridad
 from deteccion.partes import clasificar_partes, filas_anomalas, fuentes_tendencia_parte
 from planta.almacenamiento import Almacenamiento
@@ -48,10 +48,12 @@ from planta.transcriber import Transcriber
 
 logger = logging.getLogger("planta.servicio")
 
-# Los estados en los que una orden ya no se abre más: se ejecutó, se cerró,
-# se observó o se certificó. Una republicación posterior (por ejemplo, la
-# redacción técnica que llega tarde) no puede rebajar el estado.
-ESTADOS_CERRADOS = {"Ejecutada", "Cerrada", "Observada", "Certificada"}
+# Los estados en los que una orden ya no se abre más: fue rechazada, se
+# ejecutó, se cerró, se observó o se certificó. Una republicación posterior
+# (por ejemplo, la redacción técnica que llega tarde) no puede rebajar el
+# estado. ``Aprobada`` no está aquí: si el planificador aprobó mientras el
+# modelo redactaba, se publica el snapshot ``Aprobada`` de PostgreSQL.
+ESTADOS_CERRADOS = {"Rechazada", "Ejecutada", "Cerrada", "Observada", "Certificada"}
 
 
 class ServicioParteVoz:
@@ -235,19 +237,23 @@ class ServicioParteVoz:
             texto,
             modelo=self._analisis.nombre_modelo,
         )
-        # Una orden que ya se ejecutó o se cerró no se vuelve a abrir: la
-        # redacción llega después y no puede rebajar el estado.
-        actual = self._repo.obtener_orden(orden.id)
-        if actual is not None and str(actual.get("estado")) in ESTADOS_CERRADOS:
+        # La redacción se publica desde PostgreSQL, nunca desde el objeto que
+        # entró al hilo: si mientras tanto el planificador aprobó o rechazó,
+        # la planta recibe el estado comprometido y no uno anterior.
+        actual = self._repo.obtener_orden_completa(orden.id)
+        if actual is None:
+            logger.warning("La orden %s ya no existe; no se publica", orden.id)
+            return
+        if str(actual.get("estado")) in ESTADOS_CERRADOS:
             logger.info(
                 "Orden %s ya está en %s; no se vuelve a publicar",
                 orden.id,
                 actual.get("estado"),
             )
             return
-        # La orden se vuelve a publicar con el mismo id y el mismo estado: la
+        # La orden se vuelve a publicar con el mismo id y el estado actual: la
         # planta no ve una orden nueva y el id sigue siendo idempotente.
-        self._cliente.publicar_orden(orden)
+        self._cliente.publicar_orden(orden_desde_fila(orden, actual))
         logger.info("Orden %s con justificación técnica redactada", orden.id)
 
     # ------------------------------------------------------------------ notas
@@ -858,10 +864,17 @@ class ServicioParteVoz:
             return
         orden = self._analisis.orden_sistema(analisis)
         try:
-            self._repo.guardar_orden(orden, **self._analisis.datos_de_orden(analisis))
-        except Exception:  # noqa: BLE001 - la orden se publica igual
+            snapshot = self._repo.guardar_orden(
+                orden,
+                **self._analisis.datos_de_orden(analisis),
+            )
+        except Exception:  # noqa: BLE001 - sin evidencia no se publica una orden
             logger.exception("No se pudo guardar la orden %s", orden.id)
-        self._cliente.publicar_orden(orden)
+            return
+        # La publicación usa el snapshot ya comprometido. Si un reproceso
+        # encontró una decisión humana anterior, PostgreSQL conserva su estado
+        # y contenido y eso es exactamente lo que sale por el bus.
+        self._cliente.publicar_orden(orden_desde_fila(orden, snapshot))
         logger.info(
             "Orden %s para %s: %s · %s · %s",
             orden.id,

@@ -279,6 +279,10 @@ pendiente no queda invisible hasta el siguiente latido.
   de cierre con actor, rol, motivo, evidencia y fecha.
 - `0009_manifiesto_evidencia_ledger.py`: manifiesto inmutable con hash
   SHA-256, ledger append-only, triggers de PostgreSQL y backfill histórico.
+- `0010_integridad_decisiones_auditables.py`: `decision_cierre`, manifiesto y
+  ledger bloquean `UPDATE`, `DELETE` y `TRUNCATE`; una FK compuesta vincula
+  decisión, cierre y orden; los estados humanos tienen transiciones protegidas
+  y cada orden admite como máximo un habilita.
 
 Cambios principales de `0002`:
 
@@ -1203,7 +1207,18 @@ manifiestos**, **9 tipos de ledger**, **3/3 hashes válidos** e idempotencias
 únicas. `UPDATE` y `DELETE` fueron rechazados por PostgreSQL y el ciclo
 `0008 → 0009 → 0008 → 0009` terminó con la base limpia en `0009 (head)`. Una
 base nueva aplicó además la cadena completa `0001 → 0009` y quedó con las dos
-tablas y ambos triggers. Las reglas de aprobación siguen **en código**: el
+tablas y ambos triggers.
+
+La corrección `0010` cerró los bloqueadores detectados por una auditoría
+independiente. `decision_cierre`, `manifiesto_evidencia` y
+`ledger_decisiones` rechazan `UPDATE`, `DELETE` y `TRUNCATE`; la FK compuesta
+`(cierre_id, orden_id)` impide ligar una decisión al cierre de otra orden; los
+checks fijan la combinación válida de acción, rol y estado, exigen motivo al
+observar y permiten un solo habilita por orden. En aplicación, un reproceso
+conserva el estado y el contenido ya decididos, un cierre terminal no se
+reabre y la única aclaración admitida es `Observada → Ejecutada → Certificada`.
+El ciclo `0009 → 0010 → 0009 → 0010` y una instalación limpia `0001 → 0010`
+quedaron verificados. Las reglas de aprobación siguen **en código**: el
 modelo puede describir la foto y redactar la justificación, pero no cambia la
 falla, las tareas, los repuestos, el costo, el estado ni la aprobación.
 
@@ -1217,9 +1232,9 @@ falla, las tareas, los repuestos, el costo, el estado ni la aprobación.
 
 Resultado local:
 
-- **577 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
-  compose (las 577 pasan).
-- **535 passed, 42 skipped** sin base: los omitidos son los tests de
+- **606 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
+  compose (las 606 pasan).
+- **545 passed, 61 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints, los del índice RAG y los de la Central, la
   trayectoria, el cierre y la evidencia, que requieren PostgreSQL.
 - `ruff check src tests migrations scripts` sin observaciones.
@@ -1285,6 +1300,11 @@ Cobertura funcional de los tests:
   precios del contrato y **no** del cierre, la idempotencia por
   `cierre.externa_id` y `decision_cierre.cierre_id`, y la escritura atómica
   de la decisión, el estado, la certificación y el habilita;
+- **integridad de las decisiones auditables**: un reproceso no degrada estado,
+  motivo, costo, tareas ni repuestos; un cierre terminal no se reabre; una
+  orden observada admite sólo el ciclo de aclaración previsto; PostgreSQL
+  rechaza `UPDATE`, `DELETE` y `TRUNCATE` en las tres tablas de auditoría,
+  impide mezclar decisión/cierre/orden y admite un único habilita por orden;
 - **núcleo de agentes**: las tools del agente son las del MCP con el mismo
   esquema estricto, la propuesta se contrasta con el catálogo (una falla o una
   cita inventada la descartan entera), las causas que el manual no respalda se
@@ -1975,11 +1995,29 @@ Persiste los binarios de las notas entre reinicios:
 
 ### Corrector oficial
 
+La corrida de cierre de P0-06 se prepara con
+`scripts/correr_correccion_oficial.py`. El envoltorio ejecuta
+`correccion/corregir.py` oficial sin modificarlo en disco y documenta en
+`integridad_correccion.json` los hashes SHA-256 del corrector, scorer, rúbrica y
+suite RAG, el commit publicado y el estado Git. Sólo ajusta en memoria el
+`TypeError: int + str` del scorer (`bien += ok` → `bien += bool(ok)`). Antes de
+cada `down -v` guarda la trayectoria, las llamadas de tools, los tokens, el
+costo y la latencia de PostgreSQL en `<escenario>.metricas.json`; el manifiesto
+también declara el alcance de esas métricas y que la llamada de redacción no
+tiene registro propio de tokens. El repositorio oficial permanece limpio y las
+credenciales del `.env` no se archivan.
+
+La corrida que se describe a continuación es el antecedente histórico de
+Entrega 1, **no** la evidencia final de P0-06. Es `_fase11b`, sobre el commit
+`d6b5588`, y sirve como referencia histórica mientras se ejecuta la nueva
+corrida anclada al commit de la corrección `0010`:
+
 Corrida completa de `correccion/corregir.py` sobre los **7 escenarios** de la
 rúbrica (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`,
 `contratista`, `ataque` y `libre`), con `faster-whisper-base`, el LLM local
-activo y el modelo de nube con visión habilitado. Es la corrida `_fase11b`, la
-**última** y la que corre sobre el código que está subido (commit `d6b5588`):
+activo y el modelo de nube con visión habilitado. Es la corrida `_fase11b` y la
+que corre sobre el código que estaba publicado en ese momento (commit
+`d6b5588`):
 
 **92,6/100 — APRUEBA**, sin eliminatorias. Se midieron **los 93 puntos de los
 93** que la rúbrica tiene activos (los siete escenarios tienen datos, así que no
