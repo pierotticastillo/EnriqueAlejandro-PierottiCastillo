@@ -42,7 +42,8 @@ de órdenes.
       certificación emite el habilita `HAB-AAAA-NNNN` con el monto tomado de
       la orden y de la lista de precios del contrato. Un reproceso no degrada
       una decisión humana, un cierre terminal no se reabre y la migración
-      `0010` hace append-only la decisión y su evidencia.
+      `0011` exige evidencia para estados terminales, protege el habilita y
+      rechaza montos contractuales no positivos o no finitos.
 - [x] Núcleo de agentes (LangChain) — el agente consulta las mismas ocho
       tools del MCP (esquema Pydantic estricto) y **propone** con citas; la
       decisión sigue en código. Corre en el hilo de redacción, así que no
@@ -60,15 +61,21 @@ de órdenes.
 - [x] Presupuesto y condiciones de corte — pasos, tokens y **timeout global
       por nota**; el corte queda escrito en la bitácora
       ([`docs/spec-parte.md`](docs/spec-parte.md)).
+- [x] P0-06 — corrida oficial reproducible sobre el commit auditado
+      `4eb00f54b5861c6c3c922aad060de266064012ef`, con RAG, métricas, digest de
+      imágenes y manifiesto en
+      [`docs/evidencia_p0_06/`](docs/evidencia_p0_06/README.md).
 
-**Corrector oficial:** **92,6/100 — APRUEBA** sobre los 7 escenarios de la
-rúbrica (93 de 93 puntos medidos, sin eliminatorias, 0 mensajes inválidos).
-`A1` (cobertura), `D1`, `D2` y el bloque G (`orden_ejecutada`) quedaron en
-**100 %**: todas las notas tuvieron borrador y todos los cierres por voz pasaron
-su orden a `Ejecutada`. Una corrida anterior del mismo sistema dio **94,1**:
-la diferencia es la **varianza del audio** de la planta simulada, que se
-regenera en cada corrida (está medida nota por nota en el
-[`INFORME.md`](INFORME.md), §14).
+**Corrector oficial final:** **92,6/100 — APRUEBA** sobre los 7 escenarios de la
+rúbrica (93 de 93 puntos medidos), con **0 eliminatorias**, **467 mensajes
+válidos y 0 inválidos**. El ancla reproducible es el commit
+`4eb00f54b5861c6c3c922aad060de266064012ef`, el corrector oficial
+`ab65b95e911731351dba395817a74a8cc60da2b2` y Alembic `0011`. `D1`, `D2` y
+`G1` quedaron en **100 %** y `A1` en 98,9 %. Los resultados por criterio, las
+métricas, los hashes y los digests están en
+[`docs/evidencia_p0_06/`](docs/evidencia_p0_06/README.md); la corrida
+diagnóstica anterior (`a13d7cb`, 93,1/100) queda sólo como antecedente de la
+audía de integridad.
 
 El último defecto corregido salió al volver a medir **todo** el corpus de
 corridas (1289 notas): el ASR escribe «cero» como «ceo» y el diferencial se
@@ -868,11 +875,13 @@ Las principales están documentadas en `.env.example`:
 │       ├── 0007_registro_trayectoria.py
 │       ├── 0008_identidad_y_cierre_humano.py
 │       ├── 0009_manifiesto_evidencia_ledger.py
-│       └── 0010_integridad_decisiones_auditables.py
+│       ├── 0010_integridad_decisiones_auditables.py
+│       └── 0011_integridad_financiera_y_transiciones.py
 ├── scripts/
 │   ├── analizar_borradores.py
 │   ├── analizar_corrida.py
 │   ├── analizar_notas.py
+│   ├── archivar_p0_06.py
 │   ├── correr_correccion_oficial.py
 │   ├── medir_vision.py
 │   ├── probar_cierre.py
@@ -967,14 +976,16 @@ Las principales están documentadas en `.env.example`:
 python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"   # requiere git (instala planta-contrato)
 .venv/Scripts/python -m pytest
-.venv/Scripts/python -m ruff check src tests migrations
+.venv/Scripts/python -m ruff check src tests scripts migrations
 ```
 
-Resultado actual: **606 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose (las 606 pasan). Sin base quedan **545 passed, 61
+Resultado actual: **634 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose (las 634 pasan). Sin base quedan **556 passed, 78
 skipped** (los de idempotencia/constraints, los del índice RAG y los de la
 Central, la trayectoria, el cierre y la evidencia), porque necesitan la base
-levantada.
+levantada. El ancla auditada de P0-06 (`4eb00f5`) tenía **631 passed** con
+base y **553 passed + 78 skipped** sin base; las tres pruebas adicionales son
+del archivador de evidencia. G2/G3 tienen además **77 pruebas autenticadas**.
 
 ## Corrida oficial reproducible
 
@@ -996,14 +1007,31 @@ publicado, del estado Git y de ambos ajustes. No se archivan credenciales.
 .venv\Scripts\python scripts\correr_correccion_oficial.py `
   --correccion-dir C:\ruta\academia2026-tp\correccion `
   --repo C:\ruta\EnriqueAlejandro-PierottiCastillo `
-  --salida C:\ruta\evidencia\p0-06
+  --salida C:\ruta\evidencia\p0-06 `
+  --expected-commit 4eb00f54b5861c6c3c922aad060de266064012ef `
+  --expected-alembic 0011 `
+  --expected-correccion-commit ab65b95e911731351dba395817a74a8cc60da2b2
 ```
 
-El repositorio de la solución debe ser un checkout limpio del commit publicado
-y conservar el basename `EnriqueAlejandro-PierottiCastillo`, porque el nombre
-del proyecto Compose oficial se deriva de él. El `.env` local —con la clave de
-NVIDIA y la configuración de PostgreSQL— se copia al checkout, pero Git lo
-ignora y nunca forma parte de la evidencia.
+El wrapper exige que el checkout esté limpio, que coincidan los commits y que
+PostgreSQL esté en la revisión Alembic indicada antes de iniciar. Después se
+archiva el manifiesto reproducible:
+
+```powershell
+.venv\Scripts\python scripts\archivar_p0_06.py `
+  --corrida C:\ruta\evidencia\p0-06 `
+  --solucion C:\ruta\EnriqueAlejandro-PierottiCastillo `
+  --oficial C:\ruta\academia2026-tp `
+  --salida docs\evidencia_p0_06 `
+  --expected-solution-commit 4eb00f54b5861c6c3c922aad060de266064012ef `
+  --expected-correction-commit ab65b95e911731351dba395817a74a8cc60da2b2
+```
+
+El repositorio de la solución debe conservar el basename
+`EnriqueAlejandro-PierottiCastillo`, porque el nombre del proyecto Compose
+oficial se deriva de él. El `.env` local —con la clave de NVIDIA y la
+configuración de PostgreSQL— se copia al checkout, pero Git lo ignora y nunca
+forma parte de la evidencia.
 
 ## Integración con la planta
 

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "generado_en": "2026-11-15T18:31:16-03:00",
+  "origen": "URLs de fotos referidas por la verdad de campo de los escenarios oficiales",
+  "algoritmo": "SHA-256",
+  "total": 4,
+  "imagenes": [
+    {
+      "url": "/media/fotos/empaquetadura/03.jpg",
+      "origen": "http://localhost:8100/media/fotos/empaquetadura/03.jpg",
+      "http_status": 200,
+      "content_type": "image/jpeg",
+      "bytes": 24508,
+      "sha256": "f984b83d95e6729d6b54a5e242269d4a0d9b423d4fa1c793fbe96ce75e25a8ba"
+    },
+    {
+      "url": "/media/fotos/empaquetadura/04.jpg",
+      "origen": "http://localhost:8100/media/fotos/empaquetadura/04.jpg",
+      "http_status": 200,
+      "content_type": "image/jpeg",
+      "bytes": 24509,
+      "sha256": "4c3ca9c8aebf2f23790eb8f9627c07a9ec36b990e4d8a6389672879be13b0eec"
+    },
+    {
+      "url": "/media/fotos/manometro_diferencial/02.jpg",
+      "origen": "http://localhost:8100/media/fotos/manometro_diferencial/02.jpg",
+      "http_status": 200,
+      "content_type": "image/jpeg",
+      "bytes": 24725,
+      "sha256": "6528edde235508cf5583da5c9b671996d15c014af95255282be6156613bf82d9"
+    },
+    {
+      "url": "/media/fotos/rotura_descarga/04.jpg",
+      "origen": "http://localhost:8100/media/fotos/rotura_descarga/04.jpg",
+      "http_status": 200,
+      "content_type": "image/jpeg",
+      "bytes": 24550,
+      "sha256": "ef06d9afa37adcb55ff94bb9e4fa0065c309c4c4b3f507e779f3b628ae24479e"
+    }
+  ]
+}

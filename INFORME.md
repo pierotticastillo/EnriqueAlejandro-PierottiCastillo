@@ -7,11 +7,14 @@
 **Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5, 6 y 7 implementadas y verificadas.
 Entrega 1 (núcleo de agentes, trayectoria, Central de mantenimiento y
 presupuesto) implementada y verificada. Del Plan de implementación 2 están
-implementados y verificados P0-01 a P0-05; P0-06 (corrida anclada al commit
-final) y P0-07 (alcance y rúbrica oficiales) siguen pendientes.
-Corrector oficial: **92,6/100 — APRUEBA** (los 7 escenarios de la rúbrica,
-93 de 93 puntos medidos, sin eliminatorias; el bloque G mide `orden_ejecutada`,
-que quedó en el 100 %).
+implementados y verificados **P0-01 a P0-06**; P0-07 (alcance y rúbrica
+oficiales) sigue pendiente de la información de la Academia.
+Corrector oficial final: **92,6/100 — APRUEBA** (los 7 escenarios de la
+rúbrica, 93 de 93 puntos medidos, 0 eliminatorias, 467 mensajes válidos y 0
+inválidos), anclado al commit
+`4eb00f54b5861c6c3c922aad060de266064012ef`, al corrector
+`ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic `0011`. La evidencia
+auditable está en [`docs/evidencia_p0_06/`](docs/evidencia_p0_06/README.md).
 
 ---
 
@@ -92,7 +95,7 @@ agente no tiene forma de aprobar nada.
 | 9 | Gobierno humano y seguridad | Completa y verificada (P0-01, P0-04, P0-05) |
 | 10 | Evidencia y provenance | Completa y verificada (P0-02, P0-03) |
 | 11 | Evaluación, red team y calidad | Pendiente |
-| 12 | Operación y cierre | Pendiente; la corrida P0-06 espera el commit final |
+| 12 | Operación y cierre | P0-06 cerrado y verificado; el resto de la fase queda pendiente |
 
 ### Fase 2 — lo que hay
 
@@ -1232,11 +1235,15 @@ falla, las tareas, los repuestos, el costo, el estado ni la aprobación.
 
 Resultado local:
 
-- **606 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
-  compose (las 606 pasan).
-- **545 passed, 61 skipped** sin base: los omitidos son los tests de
+- **634 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
+  compose (las 634 pasan).
+- **556 passed, 78 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints, los del índice RAG y los de la Central, la
   trayectoria, el cierre y la evidencia, que requieren PostgreSQL.
+- El ancla auditada de P0-06 (`4eb00f5`) tenía **631 passed** con base y
+  **553 passed + 78 skipped** sin base; las tres pruebas adicionales son del
+  archivador de evidencia.
+- **77 passed** en las pruebas autenticadas de G2/G3.
 - `ruff check src tests migrations scripts` sin observaciones.
 
 Cobertura funcional de los tests:
@@ -1995,22 +2002,71 @@ Persiste los binarios de las notas entre reinicios:
 
 ### Corrector oficial
 
-La corrida de cierre de P0-06 se prepara con
+La corrida de cierre de **P0-06** se ejecutó con
 `scripts/correr_correccion_oficial.py`. El envoltorio ejecuta
 `correccion/corregir.py` oficial sin modificarlo en disco y documenta en
 `integridad_correccion.json` los hashes SHA-256 del corrector, scorer, rúbrica y
 suite RAG, el commit publicado y el estado Git. Sólo ajusta en memoria el
 `TypeError: int + str` del scorer (`bien += ok` → `bien += bool(ok)`). Antes de
 cada `down -v` guarda la trayectoria, las llamadas de tools, los tokens, el
-costo y la latencia de PostgreSQL en `<escenario>.metricas.json`; el manifiesto
-también declara el alcance de esas métricas y que la llamada de redacción no
-tiene registro propio de tokens. El repositorio oficial permanece limpio y las
-credenciales del `.env` no se archivan.
+costo y la latencia de PostgreSQL en `<escenario>.metricas.json`. El repositorio
+oficial permanece limpio y las credenciales del `.env` no se archivan.
+
+### Ancla reproducible y resultado final
+
+| Ancla | Valor |
+|---|---|
+| Commit de la solución | `4eb00f54b5861c6c3c922aad060de266064012ef` |
+| Commit del corrector oficial | `ab65b95e911731351dba395817a74a8cc60da2b2` |
+| Alembic | `0011 (head)` |
+| Checkout | limpio; commit, árbol y revisión verificados antes de iniciar |
+| Escenarios | 7 de 7, todos con datos |
+
+**92,6/100 — APRUEBA**, sin eliminatorias. Se midieron **los 93 puntos de los
+93** que la rúbrica tiene activos: 86,08 de 93 puntos, reescalados a 100.
+
+| Criterio | Peso | Valor | Puntos |
+|---|---:|---:|---:|
+| A1 Cobertura | 5 | 99 % | 4,95 |
+| A2 Borrador al primer intento | 10 | 64 % | 6,43 |
+| A3 Parte final correcto | 8 | 83 % | 6,61 |
+| A4a Pregunta cuando hace falta | 4 | 83 % | 3,33 |
+| A4b No pregunta de más | 3 | 99 % | 2,96 |
+| B1 Sin novedad / Escalado | 10 | 96 % | 9,60 |
+| B2 Alerta de seguridad | 10 | 100 % | 10,00 |
+| D1 Reglas de aprobación | 15 | 100 % | 15,00 |
+| D2 Orden adecuada a la falla | 10 | 100 % | 10,00 |
+| E1 Sigue andando sin enlace | 3 | 100 % | 3,00 |
+| E2 Pendientes visibles | 3 | 75 % | 2,25 |
+| E3 Sin duplicados | 4 | 99 % | 3,95 |
+| F1 Mensajes válidos | 2 | 100 % | 2,00 |
+| F2 Latido | 1 | 100 % | 1,00 |
+| F3 Sobrevive al corte de luz | 2 | 100 % | 2,00 |
+| **G1 Orden ejecutada** | 3 | **100 %** | 3,00 |
+| G2 Cierre propio | 2 | *inactivo* | — |
+| G3 Certificación de la contratista | 5 | *inactivo* | — |
+
+Los **467 mensajes del sistema fueron válidos**: 49, 95, 28, 56, 97, 46 y 96
+por escenario; ninguno inválido. `G2` y `G3` siguen inactivos en la nota
+oficial, pero son obligatorios para el proyecto: las **77 pruebas
+autenticadas** de cierre propio y certificación de contratista pasan. La
+trayectoria total de la corrida registra 38 llamadas de modelo, 17 de tools,
+83.145 tokens de entrada y 7.673 de salida, 1.204,445 s de latencia de modelo
+y USD 0 de costo configurado. RAG se repitió sobre las 71 preguntas oficiales:
+en memoria hit@5 0,845 / recall@5 0,695; pgvector hit@5 0,873 / recall@5
+0,711.
+
+`scripts/archivar_p0_06.py` deja el manifiesto auditable en
+[`docs/evidencia_p0_06/`](docs/evidencia_p0_06/README.md): hashes de los dos
+repositorios y de sus archivos, criterios, eliminatorias, mensajes inválidos,
+modelos, corpus, dataset, digest SHA-256 de cuatro imágenes, tokens, costo y
+latencia. El manifiesto no incluye `.env`, claves, tokens ni credenciales.
+
+### Antecedente histórico
 
 La corrida que se describe a continuación es el antecedente histórico de
 Entrega 1, **no** la evidencia final de P0-06. Es `_fase11b`, sobre el commit
-`d6b5588`, y sirve como referencia histórica mientras se ejecuta la nueva
-corrida anclada al commit de la corrección `0010`:
+`d6b5588`, y se conserva para mostrar la evolución:
 
 Corrida completa de `correccion/corregir.py` sobre los **7 escenarios** de la
 rúbrica (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`,
@@ -2587,11 +2643,7 @@ repuestos**.
    tests y con la corrida de los 7 escenarios (la trayectoria muestra las
    consultas con su modelo, sus tokens y su tiempo), pero falta medir cuánto
    aporta la justificación del agente sobre la del cruce léxico.
-8. Ejecutar **P0-06** sobre el commit de entrega ya congelado y publicado
-   (`ec94637`): siete escenarios, evaluación RAG, métricas, costo, latencia y
-   hash del commit auditado. Las pruebas, Ruff y las verificaciones de
-   migración ya se ejecutaron sobre ese código.
-9. Registrar en **P0-07** la fecha, el alcance, la rúbrica, los escenarios y
+8. Registrar en **P0-07** la fecha, el alcance, la rúbrica, los escenarios y
    los datos externos confirmados por la Academia.
 
 ---
@@ -2600,6 +2652,8 @@ repuestos**.
 
 - Estado de implementación (bitácora de avance, decisiones y verificación):
   [`docs/estado_de_implementacion.md`](docs/estado_de_implementacion.md).
+- Evidencia auditable de P0-06 (manifiesto, resultados, RAG y digests):
+  [`docs/evidencia_p0_06/`](docs/evidencia_p0_06/README.md).
 - Mini spec del flujo del parte (Spec-Driven Development):
   [`docs/spec-parte.md`](docs/spec-parte.md).
 - Plan de implementación: documento interno del curso, conservado fuera de este

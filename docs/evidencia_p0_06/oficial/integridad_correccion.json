@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "generado_en": "2026-11-15T16:18:16-03:00",
+  "correccion_repo": "C:\\Users\\pierotticastillo\\Documents\\GitHub\\academia2026-tp",
+  "correccion_commit": "ab65b95e911731351dba395817a74a8cc60da2b2",
+  "correccion_status": "",
+  "solucion_repo": "C:\\Users\\pierotticastillo\\AppData\\Local\\Temp\\opencode\\p0-06\\EnriqueAlejandro-PierottiCastillo",
+  "solucion_commit": "4eb00f54b5861c6c3c922aad060de266064012ef",
+  "solucion_status": "",
+  "verificacion_ancla": {
+    "commit": "4eb00f54b5861c6c3c922aad060de266064012ef",
+    "arbol_limpio": true,
+    "alembic_version": "0011"
+  },
+  "archivos": {
+    "corregir.py": "0a007ebc06303078cbbfaaaf7c2b9ac8ccb459079974551999fa3c7d76541ef5",
+    "puntuar.py": "aa1f48c05e776cfd3b46fbf298546da2315cc98aa332819ca9f87d647543fcb3",
+    "rubrica.yaml": "0647d0d1b849a3c1dcfe8f39869ea65d22e9ea2f999cf9f220c6ad702e4c5088",
+    "retrieval.json": "f464ea868cabe9971882975530a928e6590a36166c4be1bc2e6568cf4045a9d5"
+  },
+  "ajustes_en_memoria": [
+    {
+      "archivo": "puntuar.py",
+      "funcion": "reglas_aprobacion",
+      "cambio": "reglas_aprobacion: `bien += ok` -> `bien += bool(ok)`",
+      "motivo": "el valor ok puede ser el texto del motivo y provoca TypeError int + str"
+    },
+    {
+      "archivo": "corregir.py",
+      "funcion": "sh",
+      "cambio": "captura métricas de PostgreSQL antes del down -v de cada escenario",
+      "motivo": "el corrector oficial elimina el volumen al terminar cada escenario"
+    }
+  ],
+  "modificaciones_en_disco": "ninguna"
+}

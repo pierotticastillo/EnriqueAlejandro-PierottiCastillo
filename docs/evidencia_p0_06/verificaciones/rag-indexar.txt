@@ -1,0 +1,6 @@
+{
+  "documentos": 7,
+  "chunks": 704,
+  "embedder": "fastembed",
+  "dimension": 384
+}

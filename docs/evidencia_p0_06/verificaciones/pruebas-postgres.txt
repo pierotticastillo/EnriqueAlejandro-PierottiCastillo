@@ -1,0 +1,23 @@
+﻿commit=4eb00f54b5861c6c3c922aad060de266064012ef
+........................................................................ [ 11%]
+........................................................................ [ 22%]
+........................................................................ [ 34%]
+........................................................................ [ 45%]
+........................................................................ [ 57%]
+........................................................................ [ 68%]
+........................................................................ [ 79%]
+........................................................................ [ 91%]
+.......................................................                  [100%]
+============================== warnings summary ===============================
+tests/test_migraciones.py::test_instalacion_limpia_y_ciclo_de_migraciones
+tests/test_migraciones.py::test_instalacion_limpia_y_ciclo_de_migraciones
+tests/test_migraciones.py::test_instalacion_limpia_y_ciclo_de_migraciones
+tests/test_migraciones.py::test_instalacion_limpia_y_ciclo_de_migraciones
+tests/test_migraciones.py::test_el_backfill_ambiguo_hace_fallar_la_migracion
+tests/test_migraciones.py::test_el_backfill_ambiguo_hace_fallar_la_migracion
+tests/test_migraciones.py::test_el_backfill_ambiguo_hace_fallar_la_migracion
+  C:\Users\pierotticastillo\Documents\GitHub\EnriqueAlejandro-PierottiCastillo\.venv\Lib\site-packages\alembic\config.py:604: DeprecationWarning: No path_separator found in configuration; falling back to legacy splitting on spaces, commas, and colons for prepend_sys_path.  Consider adding path_separator=os to Alembic config.
+    util.warn_deprecated(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+631 passed, 7 warnings in 102.59s (0:01:42)

@@ -1,0 +1,2844 @@
+{
+  "version": 1,
+  "generado_en": "2026-11-15T18:31:16-03:00",
+  "p0_06": {
+    "hash_solucion": "4eb00f54b5861c6c3c922aad060de266064012ef",
+    "arbol_solucion": "141d06cea843dc6ce0ab92b2e8acaaf1ca41c7bf",
+    "estado_solucion": "",
+    "hash_corrector_oficial": "ab65b95e911731351dba395817a74a8cc60da2b2",
+    "arbol_corrector_oficial": "a7cd0c347684b71fbed40131104510699ee8c1d6",
+    "estado_corrector_oficial": ""
+  },
+  "integridad_correccion": {
+    "version": 1,
+    "generado_en": "2026-11-15T16:18:16-03:00",
+    "correccion_repo": "C:\\Users\\pierotticastillo\\Documents\\GitHub\\academia2026-tp",
+    "correccion_commit": "ab65b95e911731351dba395817a74a8cc60da2b2",
+    "correccion_status": "",
+    "solucion_repo": "C:\\Users\\pierotticastillo\\AppData\\Local\\Temp\\opencode\\p0-06\\EnriqueAlejandro-PierottiCastillo",
+    "solucion_commit": "4eb00f54b5861c6c3c922aad060de266064012ef",
+    "solucion_status": "",
+    "verificacion_ancla": {
+      "commit": "4eb00f54b5861c6c3c922aad060de266064012ef",
+      "arbol_limpio": true,
+      "alembic_version": "0011"
+    },
+    "archivos": {
+      "corregir.py": "0a007ebc06303078cbbfaaaf7c2b9ac8ccb459079974551999fa3c7d76541ef5",
+      "puntuar.py": "aa1f48c05e776cfd3b46fbf298546da2315cc98aa332819ca9f87d647543fcb3",
+      "rubrica.yaml": "0647d0d1b849a3c1dcfe8f39869ea65d22e9ea2f999cf9f220c6ad702e4c5088",
+      "retrieval.json": "f464ea868cabe9971882975530a928e6590a36166c4be1bc2e6568cf4045a9d5"
+    },
+    "ajustes_en_memoria": [
+      {
+        "archivo": "puntuar.py",
+        "funcion": "reglas_aprobacion",
+        "cambio": "reglas_aprobacion: `bien += ok` -> `bien += bool(ok)`",
+        "motivo": "el valor ok puede ser el texto del motivo y provoca TypeError int + str"
+      },
+      {
+        "archivo": "corregir.py",
+        "funcion": "sh",
+        "cambio": "captura métricas de PostgreSQL antes del down -v de cada escenario",
+        "motivo": "el corrector oficial elimina el volumen al terminar cada escenario"
+      }
+    ],
+    "modificaciones_en_disco": "ninguna"
+  },
+  "meta_corrida": {
+    "alumno": "Enrique Alejandro Pierotti Castillo",
+    "repo": "C:\\Users\\pierotticastillo\\AppData\\Local\\Temp\\opencode\\p0-06\\EnriqueAlejandro-PierottiCastillo",
+    "commit": "4eb00f54b5861c6c3c922aad060de266064012ef",
+    "fecha": "2026-11-15T16:19:28",
+    "corrida": {
+      "reloj": {
+        "modo": "eventos",
+        "rapida": 1800,
+        "lenta": 5,
+        "silencio_s": 5,
+        "minimo_s": 3,
+        "maximo_s": 120
+      },
+      "velocidad": 120,
+      "espera_arranque_s": 180,
+      "gracia_final_s": 60
+    },
+    "escenarios": [
+      "martes-tranquilo",
+      "tormenta-perfecta",
+      "fuga-sin-enlace",
+      "sin-luz",
+      "contratista",
+      "ataque",
+      "libre"
+    ]
+  },
+  "resultado_oficial": {
+    "alumno": "Enrique Alejandro Pierotti Castillo",
+    "nota": 92.6,
+    "aprueba": true,
+    "nota_minima": 60,
+    "puntos": 86.08,
+    "peso_medido": 93.0,
+    "peso_total": 93.0,
+    "escenarios_sin_datos": [],
+    "eliminatorias": {},
+    "entrega": {
+      "README.md": true,
+      "docker-compose.yml": true,
+      "tests": true
+    }
+  },
+  "criterios": [
+    {
+      "bloque": "A",
+      "id": "A1",
+      "nombre": "Cobertura",
+      "peso": 5,
+      "valor": 0.989,
+      "puntos": 4.95,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 1.0,
+          "detalle": {
+            "notas": 9,
+            "sin_borrador": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 0.923,
+          "detalle": {
+            "notas": 13,
+            "sin_borrador": [
+              "NOTA-00013"
+            ]
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "notas": 4,
+            "sin_borrador": []
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "notas": 9,
+            "sin_borrador": []
+          }
+        },
+        "contratista": {
+          "valor": 1.0,
+          "detalle": {
+            "notas": 19,
+            "sin_borrador": []
+          }
+        },
+        "ataque": {
+          "valor": 1.0,
+          "detalle": {
+            "notas": 5,
+            "sin_borrador": []
+          }
+        },
+        "libre": {
+          "valor": 1.0,
+          "detalle": {
+            "notas": 24,
+            "sin_borrador": []
+          }
+        }
+      }
+    },
+    {
+      "bloque": "A",
+      "id": "A2",
+      "nombre": "Borrador al primer intento",
+      "peso": 10,
+      "valor": 0.643,
+      "puntos": 6.43,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 0.667,
+          "detalle": {
+            "notas": 9,
+            "confirmados_al_primero": 6
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 0.462,
+          "detalle": {
+            "notas": 13,
+            "confirmados_al_primero": 6
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 0.5,
+          "detalle": {
+            "notas": 4,
+            "confirmados_al_primero": 2
+          }
+        },
+        "sin-luz": {
+          "valor": 0.889,
+          "detalle": {
+            "notas": 9,
+            "confirmados_al_primero": 8
+          }
+        },
+        "contratista": {
+          "valor": 0.789,
+          "detalle": {
+            "notas": 19,
+            "confirmados_al_primero": 15
+          }
+        },
+        "ataque": {
+          "valor": 0.4,
+          "detalle": {
+            "notas": 5,
+            "confirmados_al_primero": 2
+          }
+        },
+        "libre": {
+          "valor": 0.792,
+          "detalle": {
+            "notas": 24,
+            "confirmados_al_primero": 19
+          }
+        }
+      }
+    },
+    {
+      "bloque": "A",
+      "id": "A3",
+      "nombre": "Parte final correcto",
+      "peso": 8,
+      "valor": 0.826,
+      "puntos": 6.61,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 0.889,
+          "detalle": {
+            "notas": 9,
+            "sin_confirmar": [
+              "NOTA-00008"
+            ]
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 0.769,
+          "detalle": {
+            "notas": 13,
+            "sin_confirmar": [
+              "NOTA-00013",
+              "NOTA-00017",
+              "NOTA-00018"
+            ]
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 0.5,
+          "detalle": {
+            "notas": 4,
+            "sin_confirmar": [
+              "NOTA-00001",
+              "NOTA-00006"
+            ]
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "notas": 9,
+            "sin_confirmar": []
+          }
+        },
+        "contratista": {
+          "valor": 0.947,
+          "detalle": {
+            "notas": 19,
+            "sin_confirmar": [
+              "NOTA-00027"
+            ]
+          }
+        },
+        "ataque": {
+          "valor": 0.8,
+          "detalle": {
+            "notas": 5,
+            "sin_confirmar": [
+              "NOTA-00001"
+            ]
+          }
+        },
+        "libre": {
+          "valor": 0.875,
+          "detalle": {
+            "notas": 24,
+            "sin_confirmar": [
+              "NOTA-00019",
+              "NOTA-00028",
+              "NOTA-00034"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "bloque": "A",
+      "id": "A4a",
+      "nombre": "Pregunta cuando hace falta",
+      "peso": 4,
+      "valor": 0.833,
+      "puntos": 3.33,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 1.0,
+          "detalle": {
+            "ambiguas": [
+              "NOTA-00008",
+              "NOTA-00011"
+            ],
+            "pregunto": [
+              "NOTA-00008",
+              "NOTA-00011"
+            ]
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 1.0,
+          "detalle": {
+            "ambiguas": [
+              "NOTA-00003"
+            ],
+            "pregunto": [
+              "NOTA-00003"
+            ]
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "ambiguas": [
+              "NOTA-00006"
+            ],
+            "pregunto": [
+              "NOTA-00006"
+            ]
+          }
+        },
+        "sin-luz": {
+          "valor": null,
+          "detalle": {
+            "ambiguas": [],
+            "pregunto": []
+          }
+        },
+        "contratista": {
+          "valor": 0.0,
+          "detalle": {
+            "ambiguas": [
+              "NOTA-00014"
+            ],
+            "pregunto": []
+          }
+        },
+        "ataque": {
+          "valor": 1.0,
+          "detalle": {
+            "ambiguas": [
+              "NOTA-00005"
+            ],
+            "pregunto": [
+              "NOTA-00005"
+            ]
+          }
+        },
+        "libre": {
+          "valor": 1.0,
+          "detalle": {
+            "ambiguas": [
+              "NOTA-00005"
+            ],
+            "pregunto": [
+              "NOTA-00005"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "bloque": "A",
+      "id": "A4b",
+      "nombre": "No pregunta de más",
+      "peso": 3,
+      "valor": 0.988,
+      "puntos": 2.96,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 1.0,
+          "detalle": {
+            "claras": 7,
+            "preguntas_de_mas": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 0.917,
+          "detalle": {
+            "claras": 12,
+            "preguntas_de_mas": [
+              "NOTA-00013"
+            ]
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "claras": 2,
+            "preguntas_de_mas": []
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "claras": 9,
+            "preguntas_de_mas": []
+          }
+        },
+        "contratista": {
+          "valor": 1.0,
+          "detalle": {
+            "claras": 18,
+            "preguntas_de_mas": []
+          }
+        },
+        "ataque": {
+          "valor": 1.0,
+          "detalle": {
+            "claras": 4,
+            "preguntas_de_mas": []
+          }
+        },
+        "libre": {
+          "valor": 1.0,
+          "detalle": {
+            "claras": 23,
+            "preguntas_de_mas": []
+          }
+        }
+      }
+    },
+    {
+      "bloque": "B",
+      "id": "B1",
+      "nombre": "Sin novedad / Escalado",
+      "peso": 10,
+      "valor": 0.96,
+      "puntos": 9.6,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 1.0,
+          "detalle": {
+            "decisiones": 18,
+            "errores": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 0.8,
+          "detalle": {
+            "decisiones": 25,
+            "errores": [
+              {
+                "nota": "NOTA-00005",
+                "equipo": "B-101",
+                "esperado": "SinNovedad",
+                "publicado": [
+                  "Escalado"
+                ]
+              },
+              {
+                "nota": "NOTA-00005",
+                "equipo": "B-102",
+                "esperado": "Escalado",
+                "publicado": [
+                  "SinNovedad"
+                ]
+              },
+              {
+                "nota": "NOTA-00013",
+                "equipo": "F-201A",
+                "esperado": "SinNovedad",
+                "publicado": []
+              },
+              {
+                "nota": "NOTA-00013",
+                "equipo": "F-201B",
+                "esperado": "SinNovedad",
+                "publicado": []
+              },
+              {
+                "nota": "NOTA-00013",
+                "equipo": "B-103",
+                "esperado": "SinNovedad",
+                "publicado": []
+              }
+            ]
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "decisiones": 4,
+            "errores": []
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "decisiones": 17,
+            "errores": []
+          }
+        },
+        "contratista": {
+          "valor": 0.969,
+          "detalle": {
+            "decisiones": 32,
+            "errores": [
+              {
+                "nota": "NOTA-00014",
+                "equipo": "B-101",
+                "esperado": "Escalado",
+                "publicado": [
+                  "SinNovedad"
+                ]
+              }
+            ]
+          }
+        },
+        "ataque": {
+          "valor": 1.0,
+          "detalle": {
+            "decisiones": 9,
+            "errores": []
+          }
+        },
+        "libre": {
+          "valor": 0.951,
+          "detalle": {
+            "decisiones": 41,
+            "errores": [
+              {
+                "nota": "NOTA-00034",
+                "equipo": "F-201A",
+                "esperado": "SinNovedad",
+                "publicado": []
+              },
+              {
+                "nota": "NOTA-00034",
+                "equipo": "B-102",
+                "esperado": "SinNovedad",
+                "publicado": []
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "bloque": "B",
+      "id": "B2",
+      "nombre": "Alerta de seguridad",
+      "peso": 10,
+      "valor": 1.0,
+      "puntos": 10.0,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": null,
+          "detalle": {}
+        },
+        "tormenta-perfecta": {
+          "valor": null,
+          "detalle": {}
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "notas_inseguras": [
+              {
+                "nota": "NOTA-00001",
+                "alerta": true,
+                "aviso_en_tablet": true
+              }
+            ],
+            "falsas_alarmas": []
+          }
+        },
+        "sin-luz": {
+          "valor": null,
+          "detalle": {}
+        },
+        "contratista": {
+          "valor": null,
+          "detalle": {}
+        },
+        "ataque": {
+          "valor": null,
+          "detalle": {}
+        },
+        "libre": {
+          "valor": null,
+          "detalle": {}
+        }
+      }
+    },
+    {
+      "bloque": "D",
+      "id": "D1",
+      "nombre": "Reglas de aprobación",
+      "peso": 15,
+      "valor": 1.0,
+      "puntos": 15.0,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 1.0,
+          "detalle": {
+            "ordenes_decididas": 1,
+            "mal_decididas": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 1.0,
+          "detalle": {
+            "ordenes_decididas": 6,
+            "mal_decididas": []
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "ordenes_decididas": 2,
+            "mal_decididas": []
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "ordenes_decididas": 6,
+            "mal_decididas": []
+          }
+        },
+        "contratista": {
+          "valor": 1.0,
+          "detalle": {
+            "ordenes_decididas": 4,
+            "mal_decididas": []
+          }
+        },
+        "ataque": {
+          "valor": 1.0,
+          "detalle": {
+            "ordenes_decididas": 4,
+            "mal_decididas": []
+          }
+        },
+        "libre": {
+          "valor": 1.0,
+          "detalle": {
+            "ordenes_decididas": 1,
+            "mal_decididas": []
+          }
+        }
+      }
+    },
+    {
+      "bloque": "D",
+      "id": "D2",
+      "nombre": "Orden adecuada a la falla",
+      "peso": 10,
+      "valor": 1.0,
+      "puntos": 10.0,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": null,
+          "detalle": {
+            "fallas": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 1.0,
+          "detalle": {
+            "fallas": [
+              {
+                "falla": "F02-B-102-4",
+                "equipo": "B-102",
+                "con_orden": true
+              }
+            ]
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": null,
+          "detalle": {
+            "fallas": []
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "fallas": [
+              {
+                "falla": "F07-F-201B-4",
+                "equipo": "F-201B",
+                "con_orden": true
+              }
+            ]
+          }
+        },
+        "contratista": {
+          "valor": 1.0,
+          "detalle": {
+            "fallas": [
+              {
+                "falla": "F03-B-101-5",
+                "equipo": "B-101",
+                "con_orden": true
+              }
+            ]
+          }
+        },
+        "ataque": {
+          "valor": 1.0,
+          "detalle": {
+            "fallas": [
+              {
+                "falla": "F01-B-102-4",
+                "equipo": "B-102",
+                "con_orden": true
+              }
+            ]
+          }
+        },
+        "libre": {
+          "valor": null,
+          "detalle": {
+            "fallas": []
+          }
+        }
+      }
+    },
+    {
+      "bloque": "E",
+      "id": "E1",
+      "nombre": "Sigue andando sin enlace",
+      "peso": 3,
+      "valor": 1.0,
+      "puntos": 3.0,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": null,
+          "detalle": {
+            "notas_durante_el_corte": 0,
+            "con_respuesta_en_la_tablet": 0
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 1.0,
+          "detalle": {
+            "notas_durante_el_corte": 2,
+            "con_respuesta_en_la_tablet": 2
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "notas_durante_el_corte": 1,
+            "con_respuesta_en_la_tablet": 1
+          }
+        },
+        "sin-luz": {
+          "valor": null,
+          "detalle": {
+            "notas_durante_el_corte": 0,
+            "con_respuesta_en_la_tablet": 0
+          }
+        },
+        "contratista": {
+          "valor": null,
+          "detalle": {
+            "notas_durante_el_corte": 0,
+            "con_respuesta_en_la_tablet": 0
+          }
+        },
+        "ataque": {
+          "valor": null,
+          "detalle": {
+            "notas_durante_el_corte": 0,
+            "con_respuesta_en_la_tablet": 0
+          }
+        },
+        "libre": {
+          "valor": null,
+          "detalle": {
+            "notas_durante_el_corte": 0,
+            "con_respuesta_en_la_tablet": 0
+          }
+        }
+      }
+    },
+    {
+      "bloque": "E",
+      "id": "E2",
+      "nombre": "Pendientes visibles",
+      "peso": 3,
+      "valor": 0.75,
+      "puntos": 2.25,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": null,
+          "detalle": {}
+        },
+        "tormenta-perfecta": {
+          "valor": 0.5,
+          "detalle": {
+            "avisa_pendientes_en_el_corte": false,
+            "queda_en_cero_despues": true
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "avisa_pendientes_en_el_corte": true,
+            "queda_en_cero_despues": true
+          }
+        },
+        "sin-luz": {
+          "valor": null,
+          "detalle": {}
+        },
+        "contratista": {
+          "valor": null,
+          "detalle": {}
+        },
+        "ataque": {
+          "valor": null,
+          "detalle": {}
+        },
+        "libre": {
+          "valor": null,
+          "detalle": {}
+        }
+      }
+    },
+    {
+      "bloque": "E",
+      "id": "E3",
+      "nombre": "Sin duplicados",
+      "peso": 4,
+      "valor": 0.988,
+      "puntos": 3.95,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 1.0,
+          "detalle": {
+            "duplicados": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 1.0,
+          "detalle": {
+            "duplicados": []
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "duplicados": []
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "duplicados": []
+          }
+        },
+        "contratista": {
+          "valor": 1.0,
+          "detalle": {
+            "duplicados": []
+          }
+        },
+        "ataque": {
+          "valor": 0.917,
+          "detalle": {
+            "duplicados": [
+              {
+                "orden": [
+                  "F-201A",
+                  [
+                    "T-F-CAR"
+                  ]
+                ],
+                "ids": [
+                  "ORD-F-201A-FC-T01",
+                  "ORD-F-201A-FC-T02"
+                ]
+              }
+            ]
+          }
+        },
+        "libre": {
+          "valor": 1.0,
+          "detalle": {
+            "duplicados": []
+          }
+        }
+      }
+    },
+    {
+      "bloque": "F",
+      "id": "F1",
+      "nombre": "Mensajes válidos",
+      "peso": 2,
+      "valor": 1.0,
+      "puntos": 2.0,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 1.0,
+          "detalle": {
+            "total": 49,
+            "invalidos": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 1.0,
+          "detalle": {
+            "total": 95,
+            "invalidos": []
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "total": 28,
+            "invalidos": []
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "total": 56,
+            "invalidos": []
+          }
+        },
+        "contratista": {
+          "valor": 1.0,
+          "detalle": {
+            "total": 97,
+            "invalidos": []
+          }
+        },
+        "ataque": {
+          "valor": 1.0,
+          "detalle": {
+            "total": 46,
+            "invalidos": []
+          }
+        },
+        "libre": {
+          "valor": 1.0,
+          "detalle": {
+            "total": 96,
+            "invalidos": []
+          }
+        }
+      }
+    },
+    {
+      "bloque": "F",
+      "id": "F2",
+      "nombre": "Latido",
+      "peso": 1,
+      "valor": 1.0,
+      "puntos": 1.0,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": 1.0,
+          "detalle": {
+            "latidos": 10,
+            "huecos_largos": 0
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 1.0,
+          "detalle": {
+            "latidos": 14,
+            "huecos_largos": 0
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": 1.0,
+          "detalle": {
+            "latidos": 8,
+            "huecos_largos": 0
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "latidos": 11,
+            "huecos_largos": 0
+          }
+        },
+        "contratista": {
+          "valor": 1.0,
+          "detalle": {
+            "latidos": 16,
+            "huecos_largos": 0
+          }
+        },
+        "ataque": {
+          "valor": 1.0,
+          "detalle": {
+            "latidos": 8,
+            "huecos_largos": 0
+          }
+        },
+        "libre": {
+          "valor": 1.0,
+          "detalle": {
+            "latidos": 16,
+            "huecos_largos": 0
+          }
+        }
+      }
+    },
+    {
+      "bloque": "F",
+      "id": "F3",
+      "nombre": "Sobrevive al corte de luz",
+      "peso": 2,
+      "valor": 1.0,
+      "puntos": 2.0,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": null,
+          "detalle": {}
+        },
+        "tormenta-perfecta": {
+          "valor": null,
+          "detalle": {}
+        },
+        "fuga-sin-enlace": {
+          "valor": null,
+          "detalle": {}
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "pendientes_antes_del_corte": [
+              {
+                "orden": "ORD-B-103-INSPECCION",
+                "vuelve_a_borrador": false,
+                "duplicada_despues": false
+              }
+            ]
+          }
+        },
+        "contratista": {
+          "valor": null,
+          "detalle": {}
+        },
+        "ataque": {
+          "valor": null,
+          "detalle": {}
+        },
+        "libre": {
+          "valor": null,
+          "detalle": {}
+        }
+      }
+    },
+    {
+      "bloque": "G",
+      "id": "G1",
+      "nombre": "Orden ejecutada",
+      "peso": 3,
+      "valor": 1.0,
+      "puntos": 3.0,
+      "escenarios": {
+        "martes-tranquilo": {
+          "valor": null,
+          "detalle": {
+            "cierres": 0,
+            "ejecutadas": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 1.0,
+          "detalle": {
+            "cierres": 1,
+            "ejecutadas": [
+              "ORD-F-201A-FC-T01"
+            ]
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": null,
+          "detalle": {
+            "cierres": 0,
+            "ejecutadas": []
+          }
+        },
+        "sin-luz": {
+          "valor": 1.0,
+          "detalle": {
+            "cierres": 1,
+            "ejecutadas": [
+              "ORD-F-201A-FC-T02"
+            ]
+          }
+        },
+        "contratista": {
+          "valor": null,
+          "detalle": {
+            "cierres": 0,
+            "ejecutadas": []
+          }
+        },
+        "ataque": {
+          "valor": 1.0,
+          "detalle": {
+            "cierres": 2,
+            "ejecutadas": [
+              "ORD-F-201A-FC-T01",
+              "ORD-F-201A-FC-T02"
+            ]
+          }
+        },
+        "libre": {
+          "valor": null,
+          "detalle": {
+            "cierres": 0,
+            "ejecutadas": []
+          }
+        }
+      }
+    },
+    {
+      "bloque": "G",
+      "id": "G2",
+      "nombre": "Cierre propio",
+      "peso": 2,
+      "estado": "inactivo"
+    },
+    {
+      "bloque": "G",
+      "id": "G3",
+      "nombre": "Certificación de la contratista",
+      "peso": 5,
+      "estado": "inactivo"
+    }
+  ],
+  "g2_g3_proyecto": {
+    "obligatorios_para_el_proyecto": true,
+    "activos_en_la_nota_oficial": false,
+    "nota": "no se incluyen en la nota oficial",
+    "alcance": "observación de la corrida automática; las decisiones humanas se verifican en las pruebas autenticadas de la Central",
+    "G2": {
+      "por_escenario": {
+        "martes-tranquilo": {
+          "valor": null,
+          "detalle": {
+            "trabajos_propios": 0,
+            "cerrados": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": 0.0,
+          "detalle": {
+            "trabajos_propios": 1,
+            "cerrados": []
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": null,
+          "detalle": {
+            "trabajos_propios": 0,
+            "cerrados": []
+          }
+        },
+        "sin-luz": {
+          "valor": 0.0,
+          "detalle": {
+            "trabajos_propios": 1,
+            "cerrados": []
+          }
+        },
+        "contratista": {
+          "valor": null,
+          "detalle": {
+            "trabajos_propios": 0,
+            "cerrados": []
+          }
+        },
+        "ataque": {
+          "valor": 0.0,
+          "detalle": {
+            "trabajos_propios": 2,
+            "cerrados": []
+          }
+        },
+        "libre": {
+          "valor": null,
+          "detalle": {
+            "trabajos_propios": 0,
+            "cerrados": []
+          }
+        }
+      },
+      "valores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "promedio_observado": 0.0
+    },
+    "G3": {
+      "por_escenario": {
+        "martes-tranquilo": {
+          "valor": null,
+          "detalle": {
+            "trabajos_contratista": []
+          }
+        },
+        "tormenta-perfecta": {
+          "valor": null,
+          "detalle": {
+            "trabajos_contratista": []
+          }
+        },
+        "fuga-sin-enlace": {
+          "valor": null,
+          "detalle": {
+            "trabajos_contratista": []
+          }
+        },
+        "sin-luz": {
+          "valor": null,
+          "detalle": {
+            "trabajos_contratista": []
+          }
+        },
+        "contratista": {
+          "valor": null,
+          "detalle": {
+            "trabajos_contratista": []
+          }
+        },
+        "ataque": {
+          "valor": null,
+          "detalle": {
+            "trabajos_contratista": []
+          }
+        },
+        "libre": {
+          "valor": null,
+          "detalle": {
+            "trabajos_contratista": []
+          }
+        }
+      },
+      "valores": [],
+      "promedio_observado": null
+    },
+    "estado": "verificado por las pruebas autenticadas de G2/G3",
+    "evidencia": "g2_g3.txt",
+    "resultado_pruebas": "============================= 77 passed in 11.54s =============================",
+    "conteos_pruebas": {
+      "passed": 77
+    },
+    "nota_sobre_el_valor_observado": "El corrector automático no toma decisiones humanas en la Central; por eso el promedio observado no representa la aceptación de G2/G3 del proyecto. El cierre del proyecto se verifica en g2_g3.txt."
+  },
+  "verificaciones": {
+    "pytest_con_postgresql": {
+      "archivo": "pruebas-postgres.txt",
+      "presente": true,
+      "bytes": 1871,
+      "sha256": "ac5c2a87db0a49e78168ef43205b62013cc38ae869892c9fc28b8dd1d7bddbb5",
+      "resultado": "631 passed, 7 warnings in 102.59s (0:01:42)",
+      "conteos": {
+        "passed": 631
+      }
+    },
+    "pytest_sin_base": {
+      "archivo": "pruebas-sin-base.txt",
+      "presente": true,
+      "bytes": 825,
+      "sha256": "68b11e61ca79406d855274f80aa29bb45b55223a083f0df7e4e92572af207244",
+      "resultado": "553 passed, 78 skipped in 90.89s (0:01:30)",
+      "conteos": {
+        "passed": 553,
+        "skipped": 78
+      }
+    },
+    "g2_g3_autenticado": {
+      "archivo": "g2_g3.txt",
+      "presente": true,
+      "bytes": 8366,
+      "sha256": "2510f89747b1c6c9efd5799b8e380241f51b14397bda2925d0cb3a739728fe88",
+      "resultado": "============================= 77 passed in 11.54s =============================",
+      "conteos": {
+        "passed": 77
+      }
+    },
+    "ruff_y_compileall": {
+      "archivo": "ruff.txt",
+      "presente": true,
+      "bytes": 23,
+      "sha256": "e0af5e08a7ef46da5421b01a4ef0562a8b8873ea00d36522b4c928b565eef4dd",
+      "resultado": "All checks passed!"
+    },
+    "rag_indice_en_memoria": {
+      "archivo": "rag.memoria.json",
+      "presente": true,
+      "bytes": 1877,
+      "sha256": "6f8d396cd6f8c5dc5a62161b564e63230461b9d32a6a0b8bfe544a510b1f5a86",
+      "preguntas": 71,
+      "hibrido_vigente": {
+        "mrr": 0.687,
+        "hit@1": 0.563,
+        "recall@1": 0.38,
+        "distractor@1": 0.0,
+        "hit@3": 0.789,
+        "recall@3": 0.638,
+        "distractor@3": 0.0,
+        "hit@5": 0.845,
+        "recall@5": 0.695,
+        "distractor@5": 0.0,
+        "hit@10": 0.901,
+        "recall@10": 0.765,
+        "distractor@10": 0.0
+      },
+      "comparacion_baseline": {
+        "hit@5": 0.0,
+        "recall@5": 0.031,
+        "distractor@5": -0.099
+      }
+    },
+    "rag_indice_pgvector": {
+      "archivo": "rag-indexar.txt",
+      "presente": true,
+      "bytes": 86,
+      "sha256": "c5b32f516a3a5f64c4b27e1c74e58a61f6c9e5986c1b1dacd7e633f97b5baf4d",
+      "preguntas": 71,
+      "pgvector": {
+        "mrr": 0.659,
+        "hit@1": 0.507,
+        "recall@1": 0.347,
+        "distractor@1": 0.0,
+        "hit@3": 0.789,
+        "recall@3": 0.613,
+        "distractor@3": 0.0,
+        "hit@5": 0.873,
+        "recall@5": 0.711,
+        "distractor@5": 0.0,
+        "hit@10": 0.915,
+        "recall@10": 0.765,
+        "distractor@10": 0.0
+      },
+      "comparacion_baseline": {
+        "hit@5": 0.028,
+        "recall@5": 0.047,
+        "distractor@5": -0.099
+      }
+    }
+  },
+  "artefactos": [
+    {
+      "archivo": "ataque.json",
+      "bytes": 48013,
+      "sha256": "bdae46df5f6a7bef5d919b93acc6f427b7771d3d8094b61bdd8e8dec1f5a940d"
+    },
+    {
+      "archivo": "ataque.log",
+      "bytes": 45933,
+      "sha256": "11bbe72138e0aae2d73067310ce2f920bd58907d4ae80a15907e4191d59a83c9"
+    },
+    {
+      "archivo": "ataque.metricas.json",
+      "bytes": 2578,
+      "sha256": "736720b399528a88f125fef9d57aa8a0e49249515c9183bac8bb6bd7529dab0a"
+    },
+    {
+      "archivo": "build.log",
+      "bytes": 27687,
+      "sha256": "7e7e38e581f15319e2837744e103b94ff1fcc5633fb195e4c871f559178fc9bd"
+    },
+    {
+      "archivo": "contratista.json",
+      "bytes": 98482,
+      "sha256": "dcd383c1273bb87777b2f0942f4834a28a413f56ef16242d76090021f8360c48"
+    },
+    {
+      "archivo": "contratista.log",
+      "bytes": 72384,
+      "sha256": "6599b9e38e6d813c7047c102b52e2783ea6550cf7a417dcf660b8afef452e01e"
+    },
+    {
+      "archivo": "contratista.metricas.json",
+      "bytes": 2618,
+      "sha256": "3b021966f86dad16efd9c161f345e1d9db77867c5b49b6fa363385867ba8d848"
+    },
+    {
+      "archivo": "corrida-oficial.txt",
+      "bytes": 49810,
+      "sha256": "11625d3750591c8633ddf0752dc979f01b24c8c44a39b7ffed786c5280c01d0a"
+    },
+    {
+      "archivo": "fuga-sin-enlace.json",
+      "bytes": 26150,
+      "sha256": "dd81df320895f66cad76872364ac23f21e1bfe60e30311704274bdcb5e95cab7"
+    },
+    {
+      "archivo": "fuga-sin-enlace.log",
+      "bytes": 31016,
+      "sha256": "a1a7e0a020029ff6ceae67ee0dc3a3690b0cf58b9435efa91ac6d27cca53c391"
+    },
+    {
+      "archivo": "fuga-sin-enlace.metricas.json",
+      "bytes": 3036,
+      "sha256": "fd10f46b7d01be4af724ef0ff9761a778f7f6db2322dfad62a89dd88776e45cd"
+    },
+    {
+      "archivo": "g2_g3.txt",
+      "bytes": 8366,
+      "sha256": "2510f89747b1c6c9efd5799b8e380241f51b14397bda2925d0cb3a739728fe88"
+    },
+    {
+      "archivo": "informe.md",
+      "bytes": 3685,
+      "sha256": "8571a05857e5bf62dc921b6f171b0d8aee38fec7b8efdeadbfa2cc37eda77bd8"
+    },
+    {
+      "archivo": "integridad_correccion.json",
+      "bytes": 1568,
+      "sha256": "f735e6aa40e51422495fd141c886b8c4d65b75535d00b1360a34a5c93f2c6b76"
+    },
+    {
+      "archivo": "libre.json",
+      "bytes": 99436,
+      "sha256": "34cc768e6b430a710bfb5e0dcc00167442b675bb2cf97530ece3004f22bc911c"
+    },
+    {
+      "archivo": "libre.log",
+      "bytes": 68538,
+      "sha256": "8af1fbac108870eea98d8c3e7298e4a267761539ca13e696079098bd426220d3"
+    },
+    {
+      "archivo": "libre.metricas.json",
+      "bytes": 2404,
+      "sha256": "814d20958bec64c8c03e941333cfcf4125fa4fc5ca16f73b45eef789f1d45d9e"
+    },
+    {
+      "archivo": "martes-tranquilo.json",
+      "bytes": 49008,
+      "sha256": "31778d93796dcab1dc659d6b15578acb686e5499efc052a93954a1b0f376c6af"
+    },
+    {
+      "archivo": "martes-tranquilo.log",
+      "bytes": 41887,
+      "sha256": "c591b99ee24bcca09f7fbd9a44d54576b09f90b60aaf030fda1e8bcfd7b63a24"
+    },
+    {
+      "archivo": "martes-tranquilo.metricas.json",
+      "bytes": 2399,
+      "sha256": "3fd1bfe4276d1927006ba6ef84b14b9be2fff90972c7f48c35b32656327bf727"
+    },
+    {
+      "archivo": "meta.json",
+      "bytes": 690,
+      "sha256": "4d46e6b4fb1f5255cc9d764084a859db97a818af00760d4b9cc661152a848ae6"
+    },
+    {
+      "archivo": "migracion.txt",
+      "bytes": 803,
+      "sha256": "eb95c7b901ab89a1613c7b210a1f4c6552a0d4e4ccc4e405926f3f83376f70f1"
+    },
+    {
+      "archivo": "pruebas-postgres.txt",
+      "bytes": 1871,
+      "sha256": "ac5c2a87db0a49e78168ef43205b62013cc38ae869892c9fc28b8dd1d7bddbb5"
+    },
+    {
+      "archivo": "pruebas-sin-base.txt",
+      "bytes": 825,
+      "sha256": "68b11e61ca79406d855274f80aa29bb45b55223a083f0df7e4e92572af207244"
+    },
+    {
+      "archivo": "rag-indexar.txt",
+      "bytes": 86,
+      "sha256": "c5b32f516a3a5f64c4b27e1c74e58a61f6c9e5986c1b1dacd7e633f97b5baf4d"
+    },
+    {
+      "archivo": "rag.memoria.json",
+      "bytes": 1877,
+      "sha256": "6f8d396cd6f8c5dc5a62161b564e63230461b9d32a6a0b8bfe544a510b1f5a86"
+    },
+    {
+      "archivo": "rag.memoria.txt",
+      "bytes": 3988,
+      "sha256": "e25437fbfd1cd42b615342d7e2fec0d6c463e729e7f75b9f93dc36c3136ba08f"
+    },
+    {
+      "archivo": "rag.pgvector.json",
+      "bytes": 624,
+      "sha256": "a2c1310eef05502fef977975bf78cf9dba9730df60dac3ee6c1c927b216c4284"
+    },
+    {
+      "archivo": "rag.pgvector.txt",
+      "bytes": 1484,
+      "sha256": "ce3b2717c55ed555620e273f7996e4aab32e5544231b05e9abe42f8239abd055"
+    },
+    {
+      "archivo": "resultado.json",
+      "bytes": 28768,
+      "sha256": "ac3a33c04cf6e99776b2b4dd668f462a5fdf6de34955e34c3ccde6ae385cca5e"
+    },
+    {
+      "archivo": "ruff.txt",
+      "bytes": 23,
+      "sha256": "e0af5e08a7ef46da5421b01a4ef0562a8b8873ea00d36522b4c928b565eef4dd"
+    },
+    {
+      "archivo": "sin-luz.json",
+      "bytes": 51124,
+      "sha256": "eff3d7ae66c1948a18d1c1e558d49ae7308810a399d2a5891508c8b4f407fba3"
+    },
+    {
+      "archivo": "sin-luz.log",
+      "bytes": 58149,
+      "sha256": "3ce44c7bd609278bfecc37d0070b58929c0cd95fb98d083bdec3d7285fa65bf1"
+    },
+    {
+      "archivo": "sin-luz.metricas.json",
+      "bytes": 2576,
+      "sha256": "d997d75412eca4647342b73f364ae6f5c5e185e2f9b1c3ea0dcca83105cde4fd"
+    },
+    {
+      "archivo": "tormenta-perfecta.json",
+      "bytes": 97800,
+      "sha256": "11287af2fa4757fd2e2e790815419638ac41effab265c8ad926e769c088bd8fa"
+    },
+    {
+      "archivo": "tormenta-perfecta.log",
+      "bytes": 72648,
+      "sha256": "4dc71c5f0f1cddd38bb1b8a89cfb3466acd3af5c4eb4e917801e53a458f15217"
+    },
+    {
+      "archivo": "tormenta-perfecta.metricas.json",
+      "bytes": 3000,
+      "sha256": "cdfff9e5cf0a98b287ccebe8eccb274d3b84a0180d03c0acea700a6af8184d5e"
+    }
+  ],
+  "artefactos_archivados": [
+    {
+      "archivo": "oficial/integridad_correccion.json",
+      "origen": "integridad_correccion.json",
+      "bytes": 1568,
+      "sha256": "f735e6aa40e51422495fd141c886b8c4d65b75535d00b1360a34a5c93f2c6b76"
+    },
+    {
+      "archivo": "oficial/meta.json",
+      "origen": "meta.json",
+      "bytes": 690,
+      "sha256": "4d46e6b4fb1f5255cc9d764084a859db97a818af00760d4b9cc661152a848ae6"
+    },
+    {
+      "archivo": "oficial/resultado.json",
+      "origen": "resultado.json",
+      "bytes": 28768,
+      "sha256": "ac3a33c04cf6e99776b2b4dd668f462a5fdf6de34955e34c3ccde6ae385cca5e"
+    },
+    {
+      "archivo": "oficial/informe.md",
+      "origen": "informe.md",
+      "bytes": 3685,
+      "sha256": "8571a05857e5bf62dc921b6f171b0d8aee38fec7b8efdeadbfa2cc37eda77bd8"
+    },
+    {
+      "archivo": "verificaciones/pruebas-postgres.txt",
+      "origen": "pruebas-postgres.txt",
+      "bytes": 1871,
+      "sha256": "ac5c2a87db0a49e78168ef43205b62013cc38ae869892c9fc28b8dd1d7bddbb5"
+    },
+    {
+      "archivo": "verificaciones/pruebas-sin-base.txt",
+      "origen": "pruebas-sin-base.txt",
+      "bytes": 825,
+      "sha256": "68b11e61ca79406d855274f80aa29bb45b55223a083f0df7e4e92572af207244"
+    },
+    {
+      "archivo": "verificaciones/g2_g3.txt",
+      "origen": "g2_g3.txt",
+      "bytes": 8366,
+      "sha256": "2510f89747b1c6c9efd5799b8e380241f51b14397bda2925d0cb3a739728fe88"
+    },
+    {
+      "archivo": "verificaciones/ruff.txt",
+      "origen": "ruff.txt",
+      "bytes": 23,
+      "sha256": "e0af5e08a7ef46da5421b01a4ef0562a8b8873ea00d36522b4c928b565eef4dd"
+    },
+    {
+      "archivo": "verificaciones/migracion.txt",
+      "origen": "migracion.txt",
+      "bytes": 803,
+      "sha256": "eb95c7b901ab89a1613c7b210a1f4c6552a0d4e4ccc4e405926f3f83376f70f1"
+    },
+    {
+      "archivo": "verificaciones/rag.memoria.json",
+      "origen": "rag.memoria.json",
+      "bytes": 1877,
+      "sha256": "6f8d396cd6f8c5dc5a62161b564e63230461b9d32a6a0b8bfe544a510b1f5a86"
+    },
+    {
+      "archivo": "verificaciones/rag.pgvector.json",
+      "origen": "rag.pgvector.json",
+      "bytes": 624,
+      "sha256": "a2c1310eef05502fef977975bf78cf9dba9730df60dac3ee6c1c927b216c4284"
+    },
+    {
+      "archivo": "verificaciones/rag-indexar.txt",
+      "origen": "rag-indexar.txt",
+      "bytes": 86,
+      "sha256": "c5b32f516a3a5f64c4b27e1c74e58a61f6c9e5986c1b1dacd7e633f97b5baf4d"
+    },
+    {
+      "archivo": "oficial/martes-tranquilo.json",
+      "origen": "martes-tranquilo.json",
+      "bytes": 49008,
+      "sha256": "31778d93796dcab1dc659d6b15578acb686e5499efc052a93954a1b0f376c6af"
+    },
+    {
+      "archivo": "oficial/martes-tranquilo.metricas.json",
+      "origen": "martes-tranquilo.metricas.json",
+      "bytes": 2399,
+      "sha256": "3fd1bfe4276d1927006ba6ef84b14b9be2fff90972c7f48c35b32656327bf727"
+    },
+    {
+      "archivo": "oficial/tormenta-perfecta.json",
+      "origen": "tormenta-perfecta.json",
+      "bytes": 97800,
+      "sha256": "11287af2fa4757fd2e2e790815419638ac41effab265c8ad926e769c088bd8fa"
+    },
+    {
+      "archivo": "oficial/tormenta-perfecta.metricas.json",
+      "origen": "tormenta-perfecta.metricas.json",
+      "bytes": 3000,
+      "sha256": "cdfff9e5cf0a98b287ccebe8eccb274d3b84a0180d03c0acea700a6af8184d5e"
+    },
+    {
+      "archivo": "oficial/fuga-sin-enlace.json",
+      "origen": "fuga-sin-enlace.json",
+      "bytes": 26150,
+      "sha256": "dd81df320895f66cad76872364ac23f21e1bfe60e30311704274bdcb5e95cab7"
+    },
+    {
+      "archivo": "oficial/fuga-sin-enlace.metricas.json",
+      "origen": "fuga-sin-enlace.metricas.json",
+      "bytes": 3036,
+      "sha256": "fd10f46b7d01be4af724ef0ff9761a778f7f6db2322dfad62a89dd88776e45cd"
+    },
+    {
+      "archivo": "oficial/sin-luz.json",
+      "origen": "sin-luz.json",
+      "bytes": 51124,
+      "sha256": "eff3d7ae66c1948a18d1c1e558d49ae7308810a399d2a5891508c8b4f407fba3"
+    },
+    {
+      "archivo": "oficial/sin-luz.metricas.json",
+      "origen": "sin-luz.metricas.json",
+      "bytes": 2576,
+      "sha256": "d997d75412eca4647342b73f364ae6f5c5e185e2f9b1c3ea0dcca83105cde4fd"
+    },
+    {
+      "archivo": "oficial/contratista.json",
+      "origen": "contratista.json",
+      "bytes": 98482,
+      "sha256": "dcd383c1273bb87777b2f0942f4834a28a413f56ef16242d76090021f8360c48"
+    },
+    {
+      "archivo": "oficial/contratista.metricas.json",
+      "origen": "contratista.metricas.json",
+      "bytes": 2618,
+      "sha256": "3b021966f86dad16efd9c161f345e1d9db77867c5b49b6fa363385867ba8d848"
+    },
+    {
+      "archivo": "oficial/ataque.json",
+      "origen": "ataque.json",
+      "bytes": 48013,
+      "sha256": "bdae46df5f6a7bef5d919b93acc6f427b7771d3d8094b61bdd8e8dec1f5a940d"
+    },
+    {
+      "archivo": "oficial/ataque.metricas.json",
+      "origen": "ataque.metricas.json",
+      "bytes": 2578,
+      "sha256": "736720b399528a88f125fef9d57aa8a0e49249515c9183bac8bb6bd7529dab0a"
+    },
+    {
+      "archivo": "oficial/libre.json",
+      "origen": "libre.json",
+      "bytes": 99436,
+      "sha256": "34cc768e6b430a710bfb5e0dcc00167442b675bb2cf97530ece3004f22bc911c"
+    },
+    {
+      "archivo": "oficial/libre.metricas.json",
+      "origen": "libre.metricas.json",
+      "bytes": 2404,
+      "sha256": "814d20958bec64c8c03e941333cfcf4125fa4fc5ca16f73b45eef789f1d45d9e"
+    }
+  ],
+  "escenarios": {
+    "martes-tranquilo": {
+      "archivo": "martes-tranquilo.json",
+      "sha256": "31778d93796dcab1dc659d6b15578acb686e5499efc052a93954a1b0f376c6af",
+      "bytes": 49008,
+      "mensajes_total": 49,
+      "mensajes_invalidos": 0,
+      "invalidos_detalle": [],
+      "entradas_verdad": 25,
+      "trabajos": []
+    },
+    "tormenta-perfecta": {
+      "archivo": "tormenta-perfecta.json",
+      "sha256": "11287af2fa4757fd2e2e790815419638ac41effab265c8ad926e769c088bd8fa",
+      "bytes": 97800,
+      "mensajes_total": 95,
+      "mensajes_invalidos": 0,
+      "invalidos_detalle": [],
+      "entradas_verdad": 41,
+      "trabajos": [
+        {
+          "orden_id": "ORD-F-201A-FC-T01",
+          "equipo": "F-201A",
+          "tareas": [
+            "T-F-CAR"
+          ],
+          "ejecutor": "propio",
+          "estado": "terminado",
+          "inicio": "2026-11-04T09:14:10-03:00",
+          "fin": "2026-11-04T12:16:00-03:00",
+          "desvios": []
+        }
+      ]
+    },
+    "fuga-sin-enlace": {
+      "archivo": "fuga-sin-enlace.json",
+      "sha256": "dd81df320895f66cad76872364ac23f21e1bfe60e30311704274bdcb5e95cab7",
+      "bytes": 26150,
+      "mensajes_total": 28,
+      "mensajes_invalidos": 0,
+      "invalidos_detalle": [],
+      "entradas_verdad": 11,
+      "trabajos": []
+    },
+    "sin-luz": {
+      "archivo": "sin-luz.json",
+      "sha256": "eff3d7ae66c1948a18d1c1e558d49ae7308810a399d2a5891508c8b4f407fba3",
+      "bytes": 51124,
+      "mensajes_total": 56,
+      "mensajes_invalidos": 0,
+      "invalidos_detalle": [],
+      "entradas_verdad": 20,
+      "trabajos": [
+        {
+          "orden_id": "ORD-F-201A-FC-T02",
+          "equipo": "F-201A",
+          "tareas": [
+            "T-F-CAR"
+          ],
+          "ejecutor": "propio",
+          "estado": "terminado",
+          "inicio": "2026-11-06T16:53:30-03:00",
+          "fin": "2026-11-06T20:21:40-03:00",
+          "desvios": []
+        }
+      ]
+    },
+    "contratista": {
+      "archivo": "contratista.json",
+      "sha256": "dcd383c1273bb87777b2f0942f4834a28a413f56ef16242d76090021f8360c48",
+      "bytes": 98482,
+      "mensajes_total": 97,
+      "mensajes_invalidos": 0,
+      "invalidos_detalle": [],
+      "entradas_verdad": 44,
+      "trabajos": []
+    },
+    "ataque": {
+      "archivo": "ataque.json",
+      "sha256": "bdae46df5f6a7bef5d919b93acc6f427b7771d3d8094b61bdd8e8dec1f5a940d",
+      "bytes": 48013,
+      "mensajes_total": 46,
+      "mensajes_invalidos": 0,
+      "invalidos_detalle": [],
+      "entradas_verdad": 18,
+      "trabajos": [
+        {
+          "orden_id": "ORD-F-201A-FC-T01",
+          "equipo": "F-201A",
+          "tareas": [
+            "T-F-CAR"
+          ],
+          "ejecutor": "propio",
+          "estado": "terminado",
+          "inicio": "2026-11-10T10:03:10-03:00",
+          "fin": "2026-11-10T13:12:20-03:00",
+          "desvios": []
+        },
+        {
+          "orden_id": "ORD-F-201A-FC-T02",
+          "equipo": "F-201A",
+          "tareas": [
+            "T-F-CAR"
+          ],
+          "ejecutor": "propio",
+          "estado": "terminado",
+          "inicio": "2026-11-10T11:01:40-03:00",
+          "fin": "2026-11-10T14:24:00-03:00",
+          "desvios": []
+        }
+      ]
+    },
+    "libre": {
+      "archivo": "libre.json",
+      "sha256": "34cc768e6b430a710bfb5e0dcc00167442b675bb2cf97530ece3004f22bc911c",
+      "bytes": 99436,
+      "mensajes_total": 96,
+      "mensajes_invalidos": 0,
+      "invalidos_detalle": [],
+      "entradas_verdad": 56,
+      "trabajos": []
+    }
+  },
+  "mensajes_invalidos_total": 0,
+  "mensajes_invalidos": [],
+  "metricas_totales": {
+    "tokens_prompt": 83145,
+    "tokens_completion": 7673,
+    "costo_usd": 0.0,
+    "segundos_modelo": 1204.4450000000002,
+    "llamadas_modelo": 38,
+    "llamadas_herramienta": 17,
+    "errores_trayectoria": 4,
+    "llamadas_vision": 1,
+    "tokens_prompt_vision": 0,
+    "tokens_completion_vision": 0,
+    "costo_usd_vision": 0.0,
+    "segundos_vision": 0.018013
+  },
+  "metricas_por_escenario": {
+    "martes-tranquilo.metricas.json": {
+      "version": 1,
+      "escenario": "martes-tranquilo",
+      "capturado_en": "2026-11-15T16:24:30-03:00",
+      "alembic_version": "0011",
+      "conteos": {
+        "nota": 9,
+        "evento_sistema": 19,
+        "orden": 1,
+        "cierre": 0,
+        "decision_cierre": 0,
+        "habilitacion": 0,
+        "manifiesto_evidencia": 1,
+        "ledger_decisiones": 5
+      },
+      "trayectoria": {
+        "filas": 5,
+        "llamadas_modelo": 3,
+        "llamadas_herramienta": 1,
+        "errores": 0,
+        "tokens_prompt": 6808,
+        "tokens_completion": 632,
+        "costo_usd": 0.0,
+        "segundos_modelo": 94.48,
+        "latencia_p50_s": 28.468,
+        "latencia_p95_s": 38.65,
+        "latencia_max_s": 38.65,
+        "segundos_herramientas": 71.298,
+        "por_modelo": {
+          "qwen2.5:3b-instruct": {
+            "llamadas": 3,
+            "tokens_prompt": 6808,
+            "tokens_completion": 632,
+            "costo_usd": 0.0,
+            "segundos": 94.48,
+            "errores": 0
+          }
+        }
+      },
+      "vision": {
+        "llamadas": 0,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0,
+        "segundos": 0,
+        "llamadas_por_modelo": []
+      },
+      "ledger_por_tipo": [
+        {
+          "tipo": "analisis",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evento",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evidencia",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "propuesta",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "reglas",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        }
+      ],
+      "alcance": {
+        "modelo": "filas de registro_trayectoria con tipo=modelo",
+        "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+        "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+        "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+      }
+    },
+    "tormenta-perfecta.metricas.json": {
+      "version": 1,
+      "escenario": "tormenta-perfecta",
+      "capturado_en": "2026-11-15T16:31:29-03:00",
+      "alembic_version": "0011",
+      "conteos": {
+        "nota": 13,
+        "evento_sistema": 31,
+        "orden": 6,
+        "cierre": 1,
+        "decision_cierre": 0,
+        "habilitacion": 0,
+        "manifiesto_evidencia": 7,
+        "ledger_decisiones": 67
+      },
+      "trayectoria": {
+        "filas": 15,
+        "llamadas_modelo": 8,
+        "llamadas_herramienta": 4,
+        "errores": 2,
+        "tokens_prompt": 16252,
+        "tokens_completion": 1174,
+        "costo_usd": 0.0,
+        "segundos_modelo": 308.098,
+        "latencia_p50_s": 28.124,
+        "latencia_p95_s": 94.019,
+        "latencia_max_s": 94.019,
+        "segundos_herramientas": 74.983,
+        "por_modelo": {
+          "qwen2.5:3b-instruct": {
+            "llamadas": 7,
+            "tokens_prompt": 16252,
+            "tokens_completion": 1174,
+            "costo_usd": 0.0,
+            "segundos": 293.09099999999995,
+            "errores": 0
+          },
+          "no_disponible": {
+            "llamadas": 1,
+            "tokens_prompt": 0,
+            "tokens_completion": 0,
+            "costo_usd": 0.0,
+            "segundos": 15.007,
+            "errores": 1
+          }
+        }
+      },
+      "vision": {
+        "llamadas": 0,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0,
+        "segundos": 0,
+        "llamadas_por_modelo": []
+      },
+      "ledger_por_tipo": [
+        {
+          "tipo": "analisis",
+          "entradas": 13,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "cierre",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evento",
+          "entradas": 13,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evidencia",
+          "entradas": 13,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "propuesta",
+          "entradas": 13,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "reglas",
+          "entradas": 13,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "trayectoria",
+          "entradas": 1,
+          "tokens_prompt": 13660,
+          "tokens_completion": 980,
+          "costo_usd": "0.000000",
+          "segundos": "325.272"
+        }
+      ],
+      "alcance": {
+        "modelo": "filas de registro_trayectoria con tipo=modelo",
+        "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+        "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+        "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+      }
+    },
+    "fuga-sin-enlace.metricas.json": {
+      "version": 1,
+      "escenario": "fuga-sin-enlace",
+      "capturado_en": "2026-11-15T16:34:27-03:00",
+      "alembic_version": "0011",
+      "conteos": {
+        "nota": 4,
+        "evento_sistema": 6,
+        "orden": 2,
+        "cierre": 0,
+        "decision_cierre": 0,
+        "habilitacion": 0,
+        "manifiesto_evidencia": 2,
+        "ledger_decisiones": 10
+      },
+      "trayectoria": {
+        "filas": 7,
+        "llamadas_modelo": 4,
+        "llamadas_herramienta": 1,
+        "errores": 2,
+        "tokens_prompt": 6900,
+        "tokens_completion": 650,
+        "costo_usd": 0.0,
+        "segundos_modelo": 122.153,
+        "latencia_p50_s": 30.836,
+        "latencia_p95_s": 39.727,
+        "latencia_max_s": 39.727,
+        "segundos_herramientas": 0.57,
+        "por_modelo": {
+          "no_disponible": {
+            "llamadas": 1,
+            "tokens_prompt": 0,
+            "tokens_completion": 0,
+            "costo_usd": 0.0,
+            "segundos": 15.044,
+            "errores": 1
+          },
+          "qwen2.5:3b-instruct": {
+            "llamadas": 3,
+            "tokens_prompt": 6900,
+            "tokens_completion": 650,
+            "costo_usd": 0.0,
+            "segundos": 107.109,
+            "errores": 0
+          }
+        }
+      },
+      "vision": {
+        "llamadas": 1,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0.0,
+        "segundos": 0.018013,
+        "llamadas_por_modelo": [
+          {
+            "manifiesto_id": "7ce3df5d-86c1-4569-8585-7f81037f6525",
+            "orden_id": "ORD-B-101-TX-T09",
+            "foto_id": "f9be55ce-ebf5-5b23-9545-3127f81d427c",
+            "modelo": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            "estado": "indeterminado",
+            "tokens_prompt": 0,
+            "tokens_completion": 0,
+            "costo_usd": 0.0,
+            "segundos": 0.01801285200053826
+          }
+        ]
+      },
+      "ledger_por_tipo": [
+        {
+          "tipo": "analisis",
+          "entradas": 2,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evento",
+          "entradas": 2,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evidencia",
+          "entradas": 2,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.018"
+        },
+        {
+          "tipo": "propuesta",
+          "entradas": 2,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "reglas",
+          "entradas": 2,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        }
+      ],
+      "alcance": {
+        "modelo": "filas de registro_trayectoria con tipo=modelo",
+        "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+        "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+        "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+      }
+    },
+    "sin-luz.metricas.json": {
+      "version": 1,
+      "escenario": "sin-luz",
+      "capturado_en": "2026-11-15T16:39:36-03:00",
+      "alembic_version": "0011",
+      "conteos": {
+        "nota": 9,
+        "evento_sistema": 25,
+        "orden": 6,
+        "cierre": 1,
+        "decision_cierre": 0,
+        "habilitacion": 0,
+        "manifiesto_evidencia": 7,
+        "ledger_decisiones": 41
+      },
+      "trayectoria": {
+        "filas": 7,
+        "llamadas_modelo": 4,
+        "llamadas_herramienta": 2,
+        "errores": 0,
+        "tokens_prompt": 8698,
+        "tokens_completion": 640,
+        "costo_usd": 0.0,
+        "segundos_modelo": 110.011,
+        "latencia_p50_s": 24.414,
+        "latencia_p95_s": 38.901,
+        "latencia_max_s": 38.901,
+        "segundos_herramientas": 72.714,
+        "por_modelo": {
+          "qwen2.5:3b-instruct": {
+            "llamadas": 4,
+            "tokens_prompt": 8698,
+            "tokens_completion": 640,
+            "costo_usd": 0.0,
+            "segundos": 110.011,
+            "errores": 0
+          }
+        }
+      },
+      "vision": {
+        "llamadas": 0,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0,
+        "segundos": 0,
+        "llamadas_por_modelo": []
+      },
+      "ledger_por_tipo": [
+        {
+          "tipo": "analisis",
+          "entradas": 8,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "cierre",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evento",
+          "entradas": 8,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evidencia",
+          "entradas": 8,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "propuesta",
+          "entradas": 8,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "reglas",
+          "entradas": 8,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        }
+      ],
+      "alcance": {
+        "modelo": "filas de registro_trayectoria con tipo=modelo",
+        "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+        "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+        "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+      }
+    },
+    "contratista.metricas.json": {
+      "version": 1,
+      "escenario": "contratista",
+      "capturado_en": "2026-11-15T16:48:18-03:00",
+      "alembic_version": "0011",
+      "conteos": {
+        "nota": 19,
+        "evento_sistema": 37,
+        "orden": 4,
+        "cierre": 0,
+        "decision_cierre": 0,
+        "habilitacion": 0,
+        "manifiesto_evidencia": 4,
+        "ledger_decisiones": 53
+      },
+      "trayectoria": {
+        "filas": 22,
+        "llamadas_modelo": 12,
+        "llamadas_herramienta": 6,
+        "errores": 0,
+        "tokens_prompt": 28603,
+        "tokens_completion": 3280,
+        "costo_usd": 0.0,
+        "segundos_modelo": 374.288,
+        "latencia_p50_s": 29.072,
+        "latencia_p95_s": 43.64,
+        "latencia_max_s": 43.64,
+        "segundos_herramientas": 68.799,
+        "por_modelo": {
+          "qwen2.5:3b-instruct": {
+            "llamadas": 12,
+            "tokens_prompt": 28603,
+            "tokens_completion": 3280,
+            "costo_usd": 0.0,
+            "segundos": 374.28800000000007,
+            "errores": 0
+          }
+        }
+      },
+      "vision": {
+        "llamadas": 0,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0,
+        "segundos": 0,
+        "llamadas_por_modelo": []
+      },
+      "ledger_por_tipo": [
+        {
+          "tipo": "analisis",
+          "entradas": 10,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evento",
+          "entradas": 10,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evidencia",
+          "entradas": 10,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "propuesta",
+          "entradas": 10,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "reglas",
+          "entradas": 10,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "trayectoria",
+          "entradas": 3,
+          "tokens_prompt": 88158,
+          "tokens_completion": 11458,
+          "costo_usd": "0.000000",
+          "segundos": "1163.700"
+        }
+      ],
+      "alcance": {
+        "modelo": "filas de registro_trayectoria con tipo=modelo",
+        "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+        "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+        "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+      }
+    },
+    "ataque.metricas.json": {
+      "version": 1,
+      "escenario": "ataque",
+      "capturado_en": "2026-11-15T16:52:47-03:00",
+      "alembic_version": "0011",
+      "conteos": {
+        "nota": 5,
+        "evento_sistema": 12,
+        "orden": 4,
+        "cierre": 2,
+        "decision_cierre": 0,
+        "habilitacion": 0,
+        "manifiesto_evidencia": 6,
+        "ledger_decisiones": 37
+      },
+      "trayectoria": {
+        "filas": 7,
+        "llamadas_modelo": 4,
+        "llamadas_herramienta": 2,
+        "errores": 0,
+        "tokens_prompt": 9076,
+        "tokens_completion": 665,
+        "costo_usd": 0.0,
+        "segundos_modelo": 107.15,
+        "latencia_p50_s": 23.45,
+        "latencia_p95_s": 35.926,
+        "latencia_max_s": 35.926,
+        "segundos_herramientas": 71.521,
+        "por_modelo": {
+          "qwen2.5:3b-instruct": {
+            "llamadas": 4,
+            "tokens_prompt": 9076,
+            "tokens_completion": 665,
+            "costo_usd": 0.0,
+            "segundos": 107.15,
+            "errores": 0
+          }
+        }
+      },
+      "vision": {
+        "llamadas": 0,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0,
+        "segundos": 0,
+        "llamadas_por_modelo": []
+      },
+      "ledger_por_tipo": [
+        {
+          "tipo": "analisis",
+          "entradas": 7,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "cierre",
+          "entradas": 2,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evento",
+          "entradas": 7,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evidencia",
+          "entradas": 7,
+          "tokens_prompt": 4305,
+          "tokens_completion": 811,
+          "costo_usd": "0.000000",
+          "segundos": "13.371"
+        },
+        {
+          "tipo": "propuesta",
+          "entradas": 7,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "reglas",
+          "entradas": 7,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        }
+      ],
+      "alcance": {
+        "modelo": "filas de registro_trayectoria con tipo=modelo",
+        "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+        "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+        "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+      }
+    },
+    "libre.metricas.json": {
+      "version": 1,
+      "escenario": "libre",
+      "capturado_en": "2026-11-15T17:01:30-03:00",
+      "alembic_version": "0011",
+      "conteos": {
+        "nota": 24,
+        "evento_sistema": 40,
+        "orden": 1,
+        "cierre": 0,
+        "decision_cierre": 0,
+        "habilitacion": 0,
+        "manifiesto_evidencia": 1,
+        "ledger_decisiones": 5
+      },
+      "trayectoria": {
+        "filas": 5,
+        "llamadas_modelo": 3,
+        "llamadas_herramienta": 1,
+        "errores": 0,
+        "tokens_prompt": 6808,
+        "tokens_completion": 632,
+        "costo_usd": 0.0,
+        "segundos_modelo": 88.265,
+        "latencia_p50_s": 27.796,
+        "latencia_p95_s": 39.538,
+        "latencia_max_s": 39.538,
+        "segundos_herramientas": 70.004,
+        "por_modelo": {
+          "qwen2.5:3b-instruct": {
+            "llamadas": 3,
+            "tokens_prompt": 6808,
+            "tokens_completion": 632,
+            "costo_usd": 0.0,
+            "segundos": 88.26499999999999,
+            "errores": 0
+          }
+        }
+      },
+      "vision": {
+        "llamadas": 0,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0,
+        "segundos": 0,
+        "llamadas_por_modelo": []
+      },
+      "ledger_por_tipo": [
+        {
+          "tipo": "analisis",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evento",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "evidencia",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "propuesta",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        },
+        {
+          "tipo": "reglas",
+          "entradas": 1,
+          "tokens_prompt": 0,
+          "tokens_completion": 0,
+          "costo_usd": "0.000000",
+          "segundos": "0.000"
+        }
+      ],
+      "alcance": {
+        "modelo": "filas de registro_trayectoria con tipo=modelo",
+        "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+        "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+        "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+      }
+    }
+  },
+  "modelos": [
+    {
+      "clave": "asr",
+      "modelo": "faster-whisper-base",
+      "version": "base",
+      "motor": "faster-whisper (CTranslate2)",
+      "ubicacion": "planta",
+      "cuantizacion": "-",
+      "dimension": "-",
+      "configuracion": "CPU int8, 2 hilos, sólo local (sin descarga en runtime)",
+      "estado": "habilitado",
+      "nota": "Se descarga en la build de la imagen y queda en /modelos."
+    },
+    {
+      "clave": "embeddings",
+      "modelo": "paraphrase-multilingual-MiniLM-L12-v2",
+      "version": "L12-v2",
+      "motor": "fastembed (ONNX)",
+      "ubicacion": "planta",
+      "cuantizacion": "-",
+      "dimension": "384",
+      "configuracion": "CPU, vectores de 384 dimensiones, índice pgvector",
+      "estado": "habilitado",
+      "nota": "Las 384 dimensiones son las del índice pgvector: no se puede cambiar."
+    },
+    {
+      "clave": "llm",
+      "modelo": "Qwen2.5-3B-Instruct",
+      "version": "3b-instruct",
+      "motor": "Ollama (llama.cpp)",
+      "ubicacion": "planta",
+      "cuantizacion": "Q4_K_M",
+      "dimension": "-",
+      "configuracion": "Q4_K_M, num_ctx 2048, num_thread 2, temperature 0, keep_alive 0 (a demanda), timeout 90 s",
+      "estado": "habilitado",
+      "nota": "Es un auxiliar de redacción: no aprueba órdenes ni decide fallas. Si Ollama no responde, el sistema sigue con el texto determinista."
+    },
+    {
+      "clave": "vision",
+      "modelo": "Nemotron 3 Nano Omni 30B A3B",
+      "version": "3-nano-omni-30b-a3b",
+      "motor": "API de NVIDIA (por el proxy del enlace)",
+      "ubicacion": "nube",
+      "cuantizacion": "-",
+      "dimension": "-",
+      "configuracion": "temperature 0, max_tokens 800, timeout 8 s, una foto por llamada, salida validada contra esquema",
+      "estado": "habilitado",
+      "nota": "El Nemotron con visión que la lista publicada dejó sin identificar ya no existe: `nvidia/nemotron-nano-12b-v2-vl` fue retirado por NVIDIA (HTTP 410 Gone, fin de vida 2026-08-26) y además era sólo en inglés. Se usa el Nemotron con visión vigente del catálogo, que responde en español y es el más rápido de los medidos. Es un auxiliar: describe la foto, no decide ni aprueba nada."
+    }
+  ],
+  "corpus": {
+    "raiz": "datos/documentos",
+    "archivos": [
+      {
+        "ruta": "datos/documentos/contrato/CERT-EJ.md",
+        "bytes": 9180,
+        "sha256": "e29d23ad31a1263727417344a8c7c776c3c2e6221195d2dd473495fc22a3e16c"
+      },
+      {
+        "ruta": "datos/documentos/contrato/CERT-EJ.pdf",
+        "bytes": 19165,
+        "sha256": "af787d98d757b903d90170ee696b0b78154908a55d45804def071c41e4e9103e"
+      },
+      {
+        "ruta": "datos/documentos/contrato/cierres_ejemplo.json",
+        "bytes": 10058,
+        "sha256": "1409ea15aa2cec3d2dc4a28de12488372a3a0c256d69dedcbeb941c7abefdf90"
+      },
+      {
+        "ruta": "datos/documentos/contrato/CT-SVP-2025.md",
+        "bytes": 6182,
+        "sha256": "b243c9ebe6528001b582a2ca5a1d61f803138fcea4203a965b582807f072cd20"
+      },
+      {
+        "ruta": "datos/documentos/contrato/CT-SVP-2025.pdf",
+        "bytes": 16257,
+        "sha256": "9920b0540905663e6812c74cbfda58eaf6bdc71e4db9c88cb4902392def4cfe5"
+      },
+      {
+        "ruta": "datos/documentos/evaluacion/historial_verdad.json",
+        "bytes": 6230,
+        "sha256": "b43e9f4f44b5521519767222df0b22e730cd5ad3dbebff7a20dd458e1c64dc5d"
+      },
+      {
+        "ruta": "datos/documentos/evaluacion/retrieval.json",
+        "bytes": 16866,
+        "sha256": "f464ea868cabe9971882975530a928e6590a36166c4be1bc2e6568cf4045a9d5"
+      },
+      {
+        "ruta": "datos/documentos/fragmentos.jsonl",
+        "bytes": 378736,
+        "sha256": "a07975aaafd560c7017384c3590237b0cacb5a62ce002847e7bfafd576fd8a81"
+      },
+      {
+        "ruta": "datos/documentos/historial/ordenes.csv",
+        "bytes": 70641,
+        "sha256": "b4152c65fbb180452a4346cb0f9c9fd95a4cd1d621e8720cd6e3e24cc27be576"
+      },
+      {
+        "ruta": "datos/documentos/historial/ordenes.json",
+        "bytes": 164034,
+        "sha256": "e4af37bbe1e47d54803bb1ad4a7d7338febdc3139cf36f3483df512dfcc52ffb"
+      },
+      {
+        "ruta": "datos/documentos/indice.json",
+        "bytes": 100412,
+        "sha256": "adb92e6a66c82550cfa890b38593b5860eec0ec1ff30251f1892325060727b27"
+      },
+      {
+        "ruta": "datos/documentos/manuales/FC48-3.md",
+        "bytes": 40416,
+        "sha256": "0b0f15bdbbfa61901daeb79bafec0bf6c074b9d5daa1bf90086b6f01132f35c7"
+      },
+      {
+        "ruta": "datos/documentos/manuales/FC48-3.pdf",
+        "bytes": 94564,
+        "sha256": "71b5b6ffc5a56f97b9aa74f04987879371434040d54eaed39c6638b54e364ea9"
+      },
+      {
+        "ruta": "datos/documentos/manuales/MBP-4.md",
+        "bytes": 45540,
+        "sha256": "fec236b15da6e27c7debe79e8e2f8594b9f4ab2b66dda4c585a7dcf42c8376cc"
+      },
+      {
+        "ruta": "datos/documentos/manuales/MBP-4.pdf",
+        "bytes": 103487,
+        "sha256": "a26b3f6445eb552c1ba49f61ff2a0402d3190fad993fb97a4878df60ffce47e2"
+      },
+      {
+        "ruta": "datos/documentos/manuales/TX350-C.md",
+        "bytes": 65069,
+        "sha256": "93e75008f93c93da650e446b49f3bfe281328ccf0e93155dd76a23367daa767d"
+      },
+      {
+        "ruta": "datos/documentos/manuales/TX350-C.pdf",
+        "bytes": 119018,
+        "sha256": "ede94664b3c8dc123f6780f6b1a1f0f29a1fff2ca8747e72b908e5822c097d39"
+      },
+      {
+        "ruta": "datos/documentos/manuales/TX350-D.md",
+        "bytes": 66616,
+        "sha256": "73ba2a727c3364f9f0b44c08ad7e1891161b014c9142eae4658faf9e701d6b2d"
+      },
+      {
+        "ruta": "datos/documentos/manuales/TX350-D.pdf",
+        "bytes": 120565,
+        "sha256": "9da16cc94c607609be457fea28551e5a673900f1718a927fc43f33ff7c76d9bd"
+      },
+      {
+        "ruta": "datos/documentos/README.md",
+        "bytes": 6331,
+        "sha256": "397d7b5b4353476edada5454800c076dbda6a864a6084cee5f527b146efeeda8"
+      }
+    ],
+    "total_archivos": 20
+  },
+  "dataset": {
+    "suite_retrieval": "datos/documentos/evaluacion/retrieval.json",
+    "sha256": "f464ea868cabe9971882975530a928e6590a36166c4be1bc2e6568cf4045a9d5",
+    "bytes": 16866,
+    "preguntas": 71,
+    "escenarios": [
+      {
+        "ruta": "escenarios/ataque.yaml",
+        "bytes": 847,
+        "sha256": "4e521eb706c6acd7959d7902f365f4b58055ac0806349c47bce5c09a39191bc0"
+      },
+      {
+        "ruta": "escenarios/contratista.yaml",
+        "bytes": 455,
+        "sha256": "9b3ef58bfd2035a05ce100d982a78444fe08d96a14dbceeaf887a64a276f62e9"
+      },
+      {
+        "ruta": "escenarios/fuga-sin-enlace.yaml",
+        "bytes": 507,
+        "sha256": "b79e26dfd28357acb0c1e00795f5ff49238a563593d5ccae65d908db0aecb9e1"
+      },
+      {
+        "ruta": "escenarios/libre.yaml",
+        "bytes": 235,
+        "sha256": "e1eb38184140c060f90cb67dde147c38922dabed602e31016ed3957317e985ac"
+      },
+      {
+        "ruta": "escenarios/martes-tranquilo.yaml",
+        "bytes": 253,
+        "sha256": "175917745d50381e7aaa48a4fd71e507a6df0abd2f010cec84b5186d678ca78c"
+      },
+      {
+        "ruta": "escenarios/sin-luz.yaml",
+        "bytes": 540,
+        "sha256": "57c73fa4a8d1ee0f1420520b1cb49e5c44928a020781c85ed3bafc740564d56d"
+      },
+      {
+        "ruta": "escenarios/tormenta-perfecta.yaml",
+        "bytes": 632,
+        "sha256": "f300c105641b6d321440de8213a9079091e7898a3d51cdeccc9dd0af30863958"
+      }
+    ]
+  },
+  "imagenes": {
+    "archivo": "imagenes.json",
+    "bytes": 1492,
+    "sha256": "048c7bd745706517ce74884d65a4ee74193b1123c1c58b6cb343496a871d63b7",
+    "total": 4,
+    "algoritmo": "SHA-256"
+  },
+  "imagenes_docker": [
+    {
+      "reference": "pia3-sistema:latest",
+      "presente": true,
+      "id": "sha256:174f7c3c0bc3f1735ed2b8bd6b7862160c6e577f0b47f54136e4b1740eb7ffd5",
+      "repo_digests": [
+        "pia3-sistema@sha256:174f7c3c0bc3f1735ed2b8bd6b7862160c6e577f0b47f54136e4b1740eb7ffd5"
+      ],
+      "created": "2026-11-15T19:18:58.982021309Z",
+      "size_bytes": 2680413508,
+      "architecture": "amd64",
+      "os": "linux"
+    },
+    {
+      "reference": "planta-sim",
+      "presente": true,
+      "id": "sha256:6140b5462b2ddda16fe3561139e222098ee37468bf45bacdc4158dcdfd1b7607",
+      "repo_digests": [
+        "planta-sim@sha256:6140b5462b2ddda16fe3561139e222098ee37468bf45bacdc4158dcdfd1b7607"
+      ],
+      "created": "2026-11-08T20:17:28.768867047Z",
+      "size_bytes": 1561364966,
+      "architecture": "amd64",
+      "os": "linux"
+    },
+    {
+      "reference": "planta-broker",
+      "presente": false
+    },
+    {
+      "reference": "planta-enlace",
+      "presente": true,
+      "id": "sha256:d0004f843efe5ad44e174a62f3795ab1d4219cb2d05d7ccc38d3b00514b1696a",
+      "repo_digests": [
+        "planta-enlace@sha256:d0004f843efe5ad44e174a62f3795ab1d4219cb2d05d7ccc38d3b00514b1696a"
+      ],
+      "created": "2026-11-08T14:36:11.875989604Z",
+      "size_bytes": 187121604,
+      "architecture": "amd64",
+      "os": "linux"
+    },
+    {
+      "reference": "planta-visor",
+      "presente": true,
+      "id": "sha256:d8d7a97473bb2c40a47bb6486f8ae314fcdb27010bffab3014b7eac60ec58ec1",
+      "repo_digests": [
+        "planta-visor@sha256:d8d7a97473bb2c40a47bb6486f8ae314fcdb27010bffab3014b7eac60ec58ec1"
+      ],
+      "created": "2026-11-04T19:47:47.443859771Z",
+      "size_bytes": 198959485,
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  ]
+}

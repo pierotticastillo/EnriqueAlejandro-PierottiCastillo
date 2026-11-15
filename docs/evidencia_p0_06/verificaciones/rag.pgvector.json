@@ -1,0 +1,30 @@
+{
+  "pgvector": {
+    "total": {
+      "mrr": 0.659,
+      "hit@1": 0.507,
+      "recall@1": 0.347,
+      "distractor@1": 0.0,
+      "hit@3": 0.789,
+      "recall@3": 0.613,
+      "distractor@3": 0.0,
+      "hit@5": 0.873,
+      "recall@5": 0.711,
+      "distractor@5": 0.0,
+      "hit@10": 0.915,
+      "recall@10": 0.765,
+      "distractor@10": 0.0
+    },
+    "revision_vencida_antes": 0
+  },
+  "baseline_bm25": {
+    "hit@5": 0.845,
+    "recall@5": 0.664,
+    "distractor@5": 0.099
+  },
+  "pgvector_vs_baseline": {
+    "hit@5": 0.028,
+    "recall@5": 0.047,
+    "distractor@5": -0.099
+  }
+}
