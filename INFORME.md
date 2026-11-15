@@ -1235,13 +1235,13 @@ falla, las tareas, los repuestos, el costo, el estado ni la aprobación.
 
 Resultado local:
 
-- **634 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
-  compose (las 634 pasan).
-- **556 passed, 78 skipped** sin base: los omitidos son los tests de
+- **637 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
+  compose (las 637 pasan).
+- **559 passed, 78 skipped** sin base: los omitidos son los tests de
   idempotencia/constraints, los del índice RAG y los de la Central, la
   trayectoria, el cierre y la evidencia, que requieren PostgreSQL.
 - El ancla auditada de P0-06 (`4eb00f5`) tenía **631 passed** con base y
-  **553 passed + 78 skipped** sin base; las tres pruebas adicionales son del
+  **553 passed + 78 skipped** sin base; las seis pruebas adicionales son del
   archivador de evidencia.
 - **77 passed** en las pruebas autenticadas de G2/G3.
 - `ruff check src tests migrations scripts` sin observaciones.
@@ -2061,6 +2061,13 @@ en memoria hit@5 0,845 / recall@5 0,695; pgvector hit@5 0,873 / recall@5
 repositorios y de sus archivos, criterios, eliminatorias, mensajes inválidos,
 modelos, corpus, dataset, digest SHA-256 de cuatro imágenes, tokens, costo y
 latencia. El manifiesto no incluye `.env`, claves, tokens ni credenciales.
+
+La primera publicación de la evidencia calculaba los hashes sobre los archivos
+locales con CRLF y, por la normalización a LF de Git, no se reproducían desde
+los blobs publicados. Tras la auditoría se corrigió: los hashes se calculan
+sobre una representación canónica UTF-8 sin BOM y con LF, fijada por
+`.gitattributes`. Cada digest se reproduce descargando el blob correspondiente
+del propio repositorio.
 
 ### Antecedente histórico
 

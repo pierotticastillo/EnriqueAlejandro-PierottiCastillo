@@ -15,7 +15,6 @@ import importlib.util
 import json
 import re
 import runpy
-import shutil
 import subprocess
 import sys
 import urllib.error
@@ -34,6 +33,38 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def bytes_canonicos(path: Path) -> bytes:
+    """Devuelve el texto UTF-8 sin BOM y con saltos de línea LF.
+
+    La corrida mezcla UTF-8, UTF-8 con BOM y UTF-16 generado por PowerShell.
+    Git normaliza los archivos de texto al hacer ``git add``; por eso el
+    archivador convierte cada fuente a la misma representación que se publica
+    y calcula el digest sobre esos bytes, no sobre la copia local original.
+    """
+
+    crudo = path.read_bytes()
+    if crudo.startswith((b"\xff\xfe", b"\xfe\xff")):
+        texto = crudo.decode("utf-16")
+    else:
+        texto = crudo.decode("utf-8-sig")
+    return texto.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
+def sha256_canonico(path: Path) -> str:
+    return hashlib.sha256(bytes_canonicos(path)).hexdigest()
+
+
+def escribir_utf8_lf(path: Path, texto: str) -> None:
+    """Escribe UTF-8 sin BOM y LF sin depender de la plataforma."""
+
+    path.write_bytes(texto.encode("utf-8"))
+
+
+def copiar_canonico(origen: Path, destino: Path) -> None:
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_bytes(bytes_canonicos(origen))
 
 
 def git(repo: Path, *args: str) -> str:
@@ -224,8 +255,8 @@ def main() -> int:
         mensajes_invalidos.extend(invalidos_escenario)
         escenarios[archivo.stem] = {
             "archivo": archivo.name,
-            "sha256": sha256(archivo),
-            "bytes": archivo.stat().st_size,
+            "sha256": sha256_canonico(archivo),
+            "bytes": len(bytes_canonicos(archivo)),
             "mensajes_total": len(registro),
             "mensajes_invalidos": len(invalidos),
             "invalidos_detalle": invalidos_escenario,
@@ -371,19 +402,21 @@ def main() -> int:
         "total": len(fotos),
         "imagenes": fotos,
     }
-    (salida / "imagenes.json").write_text(
-        json.dumps(imagenes, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    escribir_utf8_lf(
+        salida / "imagenes.json",
+        json.dumps(imagenes, ensure_ascii=False, indent=2) + "\n",
     )
 
     def artefacto(nombre: str) -> dict[str, Any]:
         ruta = corrida / nombre
         if not ruta.exists():
             return {"archivo": nombre, "presente": False}
+        canonico = bytes_canonicos(ruta)
         return {
             "archivo": nombre,
             "presente": True,
-            "bytes": ruta.stat().st_size,
-            "sha256": sha256(ruta),
+            "bytes": len(canonico),
+            "sha256": hashlib.sha256(canonico).hexdigest(),
         }
 
     pruebas_postgres = (corrida / "pruebas-postgres.txt").read_text(
@@ -446,8 +479,10 @@ def main() -> int:
     artefactos = [
         {
             "archivo": path.name,
-            "bytes": path.stat().st_size,
-            "sha256": sha256(path),
+            "bytes": len(bytes_canonicos(path)),
+            "sha256": sha256_canonico(path),
+            "bytes_fuente": path.stat().st_size,
+            "sha256_fuente": sha256(path),
         }
         for path in sorted(corrida.iterdir())
         if path.is_file()
@@ -480,8 +515,7 @@ def main() -> int:
             ("pruebas-", "g2_g3", "ruff", "migracion", "rag.")
         ) else "verificaciones"
         destino = salida / carpeta / nombre
-        destino.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(origen, destino)
+        copiar_canonico(origen, destino)
         artefactos_archivados.append(
             {
                 "archivo": str(destino.relative_to(salida)).replace("\\", "/"),
@@ -492,8 +526,17 @@ def main() -> int:
         )
 
     manifest = {
-        "version": 1,
+        "version": 2,
         "generado_en": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "hashes": {
+            "algoritmo": "SHA-256",
+            "espacio_de_bytes": "texto UTF-8 sin BOM con saltos de linea LF",
+            "regla": (
+                "Los digest de artefactos y artefactos_archivados se calculan "
+                "sobre los bytes canonicos publicados en docs/evidencia_p0_06/."
+            ),
+            "gitattributes": "docs/evidencia_p0_06/** text eol=lf",
+        },
         "p0_06": {
             "hash_solucion": hash_solucion,
             "arbol_solucion": git(solucion, "rev-parse", "HEAD^{tree}"),
@@ -556,9 +599,9 @@ def main() -> int:
             ]
         ),
     }
-    (salida / "manifest.json").write_text(
+    escribir_utf8_lf(
+        salida / "manifest.json",
         json.dumps(manifest, ensure_ascii=False, indent=2, default=str) + "\n",
-        encoding="utf-8",
     )
     resultado_oficial = "APRUEBA" if resultado.get("aprueba") else "NO APRUEBA"
     rag_memoria_hit5 = rag_memoria["hibrido_vigente"]["total"]["hit@5"]
@@ -600,8 +643,12 @@ memoria y están documentados en `oficial/integridad_correccion.json`.
 - `verificaciones/`: pruebas, RAG, migración, lint y salida del indexado.
 
 Los artefactos no incluyen `.env`, claves, tokens ni credenciales.
+
+Los SHA-256 se calculan sobre los bytes publicados: UTF-8 sin BOM y saltos de
+línea LF. La regla queda fijada en `.gitattributes`, de modo que cada digest
+del manifiesto puede reproducirse descargando el blob correspondiente de Git.
 """
-    (salida / "README.md").write_text(evidencia_readme, encoding="utf-8")
+    escribir_utf8_lf(salida / "README.md", evidencia_readme)
     print(json.dumps({
         "hash_solucion": manifest["p0_06"]["hash_solucion"],
         "nota": manifest["resultado_oficial"]["nota"],

@@ -148,7 +148,13 @@ Ruff y `compileall` también pasan. RAG se repitió en memoria y pgvector sobre
 las 71 preguntas oficiales. `scripts/archivar_p0_06.py` generó el manifiesto
 con hashes, criterios, eliminatorias, mensajes inválidos, modelos, corpus,
 dataset, digest de imágenes, tokens, costo y latencia en
-[`docs/evidencia_p0_06/`](evidencia_p0_06/README.md). **P0-06 queda cerrado.**
+[`docs/evidencia_p0_06/`](evidencia_p0_06/README.md). Una auditoría de
+publicación detectó que Git normalizaba los CRLF locales a LF y por eso los
+hashes del primer archivo no coincidían con los blobs públicos. El archivador
+ahora calcula los SHA-256 sobre bytes canónicos UTF-8/LF y `.gitattributes`
+fija esa representación; los 26 artefactos y el índice de cuatro imágenes se
+verifican contra los blobs staged. La corrida oficial no se repitió porque su
+resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 
 > **Rollback.** `0011 → 0010` no borra datos, pero restaura controles más
 > permisivos. El rollback heredado `0010 → 0009` **sí es destructivo**: elimina
@@ -187,7 +193,7 @@ dataset, digest de imágenes, tokens, costo y latencia en
 | P0-03 — Evidencia y provenance | **Implementado y verificado tras corrección** | Manifiesto canónico para orden, cierre y decisión, separado del JSON mutable de reglas; `construir_contexto` participa del análisis productivo; ledger transaccional con nueve tipos y reconstrucción autenticada. `decision_cierre`, manifiesto y ledger bloquean `UPDATE`, `DELETE` y `TRUNCATE`; la FK compuesta garantiza que decisión, cierre y orden sean el mismo caso. |
 | P0-04 — Autenticación y RBAC | **Implementado y verificado** | La Central exige un token Bearer opaco, uno por persona. Roles: `planificador`, `supervisor`, `inspector` y `lectura`. Sin credencial válida: 401; operación fuera del rol: 403. `usuario`/`rol` del cuerpo se ignoran; la identidad sale sólo del token. |
 | P0-05 — XSS y CSP | **Implementado y verificado** | `src/planta/central.py`: construcción DOM con `textContent`/`replaceChildren`, CSP con nonce por respuesta y cabeceras defensivas. Sigue integrado con P0-01/P0-04 y verificado por la suite completa. |
-| P0-06 — Corrida sobre el commit final | **Cerrado y verificado** | La corrida oficial final está anclada al commit `4eb00f54b5861c6c3c922aad060de266064012ef`, al corrector `ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic `0011`: **92,6/100 — APRUEBA**, 0 eliminatorias, 467 mensajes válidos y 0 inválidos en los siete escenarios. G2/G3 se verifican además con 77 pruebas autenticadas. El manifiesto incluye hashes, criterios, eliminatorias, mensajes inválidos, modelos, corpus/dataset, digest de cuatro imágenes, tokens, costo y latencia; está archivado en [`docs/evidencia_p0_06/`](evidencia_p0_06/README.md). |
+| P0-06 — Corrida sobre el commit final | **Cerrado y verificado** | La corrida oficial final está anclada al commit `4eb00f54b5861c6c3c922aad060de266064012ef`, al corrector `ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic `0011`: **92,6/100 — APRUEBA**, 0 eliminatorias, 467 mensajes válidos y 0 inválidos en los siete escenarios. G2/G3 se verifican además con 77 pruebas autenticadas. El manifiesto incluye hashes, criterios, eliminatorias, mensajes inválidos, modelos, corpus/dataset, digest de cuatro imágenes, tokens, costo y latencia; está archivado en [`docs/evidencia_p0_06/`](evidencia_p0_06/README.md). Los digest usan bytes canónicos UTF-8/LF fijados por `.gitattributes` y se verifican contra los blobs publicados. |
 | P0-07 — Alcance y rúbrica oficiales | Pendiente de información externa | Se actualizará cuando el usuario comunique la información confirmada por la Academia. |
 
 ## Decisiones que conviene no perder de vista
@@ -527,9 +533,8 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 - Suite del ancla auditada `4eb00f5`: **631 aprobadas con PostgreSQL**; sin
   base, **553 aprobadas + 78 omitidas**, sin fallas.
-- Suite del commit de evidencia (incluye tres pruebas del archivador):
-  **634 aprobadas con PostgreSQL**; sin base, **556 aprobadas + 78 omitidas**,
-  sin fallas.
+- Suite actual (incluye seis pruebas del archivador): **637 aprobadas con
+  PostgreSQL**; sin base, **559 aprobadas + 78 omitidas**, sin fallas.
 - Pruebas autenticadas de G2/G3: **77 aprobadas, 0 fallas**.
 - Migración `0011`: PostgreSQL exige decisión/certificación/habilita para
   estados terminales, bloquea `UPDATE`/`DELETE`/`TRUNCATE` sobre el habilita,
@@ -679,6 +684,16 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 8. Completar las Fases 11 y 12: benchmark y red team, outbox/PUBACK, observabilidad, CI/CD y cierre reproducible.
 
 ## Historial
+
+- **2026-11-15 (Plan 2, integridad de los hashes publicados):** una auditoría
+  independiente de la primera publicación de P0-06 detectó que Git
+  normalizaba los archivos CRLF del entorno local a LF; por ello, los SHA-256
+  calculados sobre la copia local no coincidían con los blobs públicos. El
+  archivador se corrigió para convertir UTF-8/UTF-16 a UTF-8 sin BOM y LF,
+  calcular todos los digest sobre esos bytes canónicos y fijarlos con
+  `.gitattributes`. Los 26 artefactos y el índice de cuatro imágenes se
+  verifican contra los blobs staged. La corrida oficial, la nota, los
+  criterios, RAG y las métricas no cambiaron y no se repitieron.
 
 - **2026-11-15 (Plan 2, P0-06 cerrado):** la corrida oficial final se ejecutó
   sobre el checkout limpio `4eb00f54b5861c6c3c922aad060de266064012ef`, el

@@ -75,7 +75,9 @@ válidos y 0 inválidos**. El ancla reproducible es el commit
 métricas, los hashes y los digests están en
 [`docs/evidencia_p0_06/`](docs/evidencia_p0_06/README.md); la corrida
 diagnóstica anterior (`a13d7cb`, 93,1/100) queda sólo como antecedente de la
-audía de integridad.
+auditoría de integridad. Los SHA-256 se calculan sobre la representación
+canónica que Git publica —UTF-8 sin BOM y LF—, fijada por `.gitattributes`;
+así se reproducen descargando los blobs del propio repositorio.
 
 El último defecto corregido salió al volver a medir **todo** el corpus de
 corridas (1289 notas): el ASR escribe «cero» como «ceo» y el diferencial se
@@ -979,12 +981,12 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests scripts migrations
 ```
 
-Resultado actual: **634 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose (las 634 pasan). Sin base quedan **556 passed, 78
+Resultado actual: **637 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose (las 637 pasan). Sin base quedan **559 passed, 78
 skipped** (los de idempotencia/constraints, los del índice RAG y los de la
 Central, la trayectoria, el cierre y la evidencia), porque necesitan la base
 levantada. El ancla auditada de P0-06 (`4eb00f5`) tenía **631 passed** con
-base y **553 passed + 78 skipped** sin base; las tres pruebas adicionales son
+base y **553 passed + 78 skipped** sin base; las seis pruebas adicionales son
 del archivador de evidencia. G2/G3 tienen además **77 pruebas autenticadas**.
 
 ## Corrida oficial reproducible

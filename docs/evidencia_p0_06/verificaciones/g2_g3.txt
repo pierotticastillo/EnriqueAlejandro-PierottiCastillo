@@ -1,4 +1,4 @@
-﻿commit=4eb00f54b5861c6c3c922aad060de266064012ef
+commit=4eb00f54b5861c6c3c922aad060de266064012ef
 ============================= test session starts =============================
 platform win32 -- Python 3.14.4, pytest-8.4.2, pluggy-1.7.0 -- C:\Users\pierotticastillo\Documents\GitHub\EnriqueAlejandro-PierottiCastillo\.venv\Scripts\python.exe
 cachedir: .pytest_cache

@@ -33,3 +33,7 @@ memoria y están documentados en `oficial/integridad_correccion.json`.
 - `verificaciones/`: pruebas, RAG, migración, lint y salida del indexado.
 
 Los artefactos no incluyen `.env`, claves, tokens ni credenciales.
+
+Los SHA-256 se calculan sobre los bytes publicados: UTF-8 sin BOM y saltos de
+línea LF. La regla queda fijada en `.gitattributes`, de modo que cada digest
+del manifiesto puede reproducirse descargando el blob correspondiente de Git.
