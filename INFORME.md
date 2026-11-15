@@ -2549,8 +2549,10 @@ repuestos**.
    tests y con la corrida de los 7 escenarios (la trayectoria muestra las
    consultas con su modelo, sus tokens y su tiempo), pero falta medir cuánto
    aporta la justificación del agente sobre la del cruce léxico.
-8. Congelar el commit final y ejecutar **P0-06**: siete escenarios, pruebas,
-   evaluación RAG, métricas, costo, latencia y hash del commit auditado.
+8. Ejecutar **P0-06** sobre el commit de entrega ya congelado y publicado
+   (`ec94637`): siete escenarios, evaluación RAG, métricas, costo, latencia y
+   hash del commit auditado. Las pruebas, Ruff y las verificaciones de
+   migración ya se ejecutaron sobre ese código.
 9. Registrar en **P0-07** la fecha, el alcance, la rúbrica, los escenarios y
    los datos externos confirmados por la Academia.
 
