@@ -85,7 +85,6 @@ def _registrar(repositorio: Repositorio, orden: OrdenSistema, **datos):
     base = {
         "cierre_id": f"CIERRE-{uuid.uuid4().hex[:8]}",
         "orden_id": orden.id,
-        "estado": "Cerrada",
         "anio": 2026,
         "tecnico": "Ramón Cayupán",
         "empresa": "propio",
@@ -95,8 +94,6 @@ def _registrar(repositorio: Repositorio, orden: OrdenSistema, **datos):
         "horas": 3.2,
         "prueba_final": "quedo en servicio",
         "diferencias": [],
-        "inspector": "PIA-3 (control de cierre)",
-        "decision": None,
         "motivo": None,
     }
     return repositorio.registrar_cierre(**(base | datos))
@@ -105,7 +102,9 @@ def _registrar(repositorio: Repositorio, orden: OrdenSistema, **datos):
 # ------------------------------------------------------------------- los tests
 
 
-def test_el_cierre_se_guarda_con_sus_diferencias(repositorio, engine) -> None:
+def test_el_cierre_automatico_se_guarda_y_espera_decision_humana(
+    repositorio, engine
+) -> None:
     with engine.begin() as conexion:
         evento_id = _evento(conexion)
     orden = _orden(evento_id)
@@ -114,8 +113,6 @@ def test_el_cierre_se_guarda_con_sus_diferencias(repositorio, engine) -> None:
         _registrar(
             repositorio,
             orden,
-            estado="Observada",
-            decision="observa",
             motivo="El cierre declara un repuesto que no estaba en la orden",
             diferencias=[
                 {
@@ -135,11 +132,10 @@ def test_el_cierre_se_guarda_con_sus_diferencias(repositorio, engine) -> None:
             ).fetchall()
             certificaciones = conexion.execute(
                 text(
-                    "SELECT inspector, decision, motivo FROM certificacion "
-                    "WHERE orden_id = :id"
+                    "SELECT count(*) FROM certificacion WHERE orden_id = :id"
                 ),
                 {"id": orden.id},
-            ).fetchall()
+            ).scalar()
             orden_fila = conexion.execute(
                 text("SELECT estado, motivo FROM orden WHERE id = :id"),
                 {"id": orden.id},
@@ -149,20 +145,33 @@ def test_el_cierre_se_guarda_con_sus_diferencias(repositorio, engine) -> None:
         assert cierres[0][2] == "propio"
         assert float(cierres[0][3]) == 3.2
         assert cierres[0][4][0]["tipo"] == "repuesto_extra"
-        assert certificaciones[0][1] == "observa"
-        assert "no estaba en la orden" in certificaciones[0][2]
-        assert orden_fila[0] == "Observada"
+        assert certificaciones == 0
+        assert orden_fila[0] == "Ejecutada"
+        assert "no estaba en la orden" in orden_fila[1]
     finally:
         _limpiar(engine, [orden.id], evento_id)
 
 
-def test_el_cierre_propio_no_se_certifica(repositorio, engine) -> None:
+def test_el_supervisor_cierra_el_trabajo_propio_sin_certificarlo(
+    repositorio, engine
+) -> None:
     with engine.begin() as conexion:
         evento_id = _evento(conexion)
     orden = _orden(evento_id)
     try:
         repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=672)
         _registrar(repositorio, orden)
+
+        resultado = repositorio.decidir_cierre_humano(
+            orden_id=orden.id,
+            decision="cerrar",
+            actor="luis",
+            rol="supervisor",
+            motivo="el trabajo quedó conforme",
+        )
+
+        assert resultado["decision"]["estado_orden"] == "Cerrada"
+        assert repositorio.obtener_orden(orden.id)["estado"] == "Cerrada"
         with engine.connect() as conexion:
             certificaciones = conexion.execute(
                 text("SELECT count(*) FROM certificacion WHERE orden_id = :id"),
@@ -172,26 +181,45 @@ def test_el_cierre_propio_no_se_certifica(repositorio, engine) -> None:
                 text("SELECT count(*) FROM habilitacion WHERE orden_id = :id"),
                 {"id": orden.id},
             ).scalar()
+            decision = conexion.execute(
+                text(
+                    "SELECT decision, actor, rol, motivo "
+                    "FROM decision_cierre WHERE orden_id = :id"
+                ),
+                {"id": orden.id},
+            ).mappings().one()
         assert certificaciones == 0
         assert habilitaciones == 0
+        assert decision["decision"] == "cerrar"
+        assert decision["actor"] == "luis"
+        assert decision["rol"] == "supervisor"
+        assert decision["motivo"] == "el trabajo quedó conforme"
     finally:
         _limpiar(engine, [orden.id], evento_id)
 
 
-def test_el_habilita_se_emite_con_numero_y_monto(repositorio, engine) -> None:
+def test_el_habilita_se_emite_solo_tras_certificar_con_numero_y_monto(
+    repositorio, engine
+) -> None:
     with engine.begin() as conexion:
         evento_id = _evento(conexion)
     orden = _orden(evento_id, ejecutor="Servipat")
     try:
         repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
-        resultado = _registrar(
-            repositorio,
-            orden,
-            estado="Certificada",
-            decision="certifica",
+        cierre = _registrar(repositorio, orden)
+
+        assert cierre["habilita"] is None
+        assert repositorio.obtener_habilitacion(orden.id) is None
+
+        resultado = repositorio.decidir_cierre_humano(
+            orden_id=orden.id,
+            decision="certificar",
+            actor="marta",
+            rol="inspector",
             monto_usd=1150.0,
             fuente_monto="CT-SVP-2025 §2.1",
         )
+
         assert resultado["habilita"].startswith("HAB-2026-")
         assert resultado["monto_habilita_usd"] == 1150.0
         habilitacion = repositorio.obtener_habilitacion(orden.id)
@@ -199,6 +227,7 @@ def test_el_habilita_se_emite_con_numero_y_monto(repositorio, engine) -> None:
         assert habilitacion["moneda"] == "USD"
         assert float(habilitacion["monto"]) == 1150.0
         assert habilitacion["fuente_monto"] == "CT-SVP-2025 §2.1"
+        assert repositorio.obtener_orden(orden.id)["estado"] == "Certificada"
     finally:
         _limpiar(engine, [orden.id], evento_id)
 
@@ -211,17 +240,34 @@ def test_el_cierre_que_vuelve_no_se_duplica(repositorio, engine) -> None:
     try:
         repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
         for _ in range(3):
-            _registrar(
-                repositorio,
-                orden,
-                cierre_id=cierre_id,
-                estado="Certificada",
-                decision="certifica",
-                monto_usd=1150.0,
-            )
+            _registrar(repositorio, orden, cierre_id=cierre_id)
+
+        assert repositorio.obtener_orden(orden.id)["estado"] == "Ejecutada"
+        assert repositorio.obtener_habilitacion(orden.id) is None
+
+        resultado = repositorio.decidir_cierre_humano(
+            orden_id=orden.id,
+            decision="certificar",
+            actor="marta",
+            rol="inspector",
+            monto_usd=1150.0,
+        )
+        repetido = repositorio.decidir_cierre_humano(
+            orden_id=orden.id,
+            decision="certificar",
+            actor="marta",
+            rol="inspector",
+            monto_usd=1150.0,
+        )
+
+        assert resultado["habilita"] == repetido["habilita"]
         with engine.connect() as conexion:
             cierres = conexion.execute(
                 text("SELECT count(*) FROM cierre WHERE orden_id = :id"),
+                {"id": orden.id},
+            ).scalar()
+            decisiones = conexion.execute(
+                text("SELECT count(*) FROM decision_cierre WHERE orden_id = :id"),
                 {"id": orden.id},
             ).scalar()
             certificaciones = conexion.execute(
@@ -233,6 +279,7 @@ def test_el_cierre_que_vuelve_no_se_duplica(repositorio, engine) -> None:
                 {"id": orden.id},
             ).scalar()
         assert cierres == 1
+        assert decisiones == 1
         assert certificaciones == 1
         assert habilitaciones == 1
     finally:
@@ -246,11 +293,12 @@ def test_los_numeros_de_habilita_no_se_repiten(repositorio, engine) -> None:
     try:
         for orden in ordenes:
             repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
-            _registrar(
-                repositorio,
-                orden,
-                estado="Certificada",
-                decision="certifica",
+            _registrar(repositorio, orden)
+            repositorio.decidir_cierre_humano(
+                orden_id=orden.id,
+                decision="certificar",
+                actor="marta",
+                rol="inspector",
                 monto_usd=1150.0,
             )
         numeros = [
@@ -260,3 +308,63 @@ def test_los_numeros_de_habilita_no_se_repiten(repositorio, engine) -> None:
         assert all(numero.startswith("HAB-2026-") for numero in numeros)
     finally:
         _limpiar(engine, [orden.id for orden in ordenes], evento_id)
+
+
+def test_observar_una_contratista_exige_motivo_y_no_emite_habilita(
+    repositorio, engine
+) -> None:
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id, ejecutor="Servipat")
+    try:
+        repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
+        _registrar(repositorio, orden)
+
+        with pytest.raises(ValueError, match="motivo"):
+            repositorio.decidir_cierre_humano(
+                orden_id=orden.id,
+                decision="observar",
+                actor="marta",
+                rol="inspector",
+            )
+
+        assert repositorio.obtener_orden(orden.id)["estado"] == "Ejecutada"
+        assert repositorio.obtener_habilitacion(orden.id) is None
+    finally:
+        _limpiar(engine, [orden.id], evento_id)
+
+
+def test_una_decision_de_cierre_no_se_cambia(repositorio, engine) -> None:
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id, ejecutor="Servipat")
+    try:
+        repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
+        _registrar(repositorio, orden)
+        repositorio.decidir_cierre_humano(
+            orden_id=orden.id,
+            decision="observar",
+            actor="marta",
+            rol="inspector",
+            motivo="falta justificar un repuesto",
+        )
+
+        with pytest.raises(ValueError, match="ya tiene"):
+            repositorio.decidir_cierre_humano(
+                orden_id=orden.id,
+                decision="certificar",
+                actor="marta",
+                rol="inspector",
+                monto_usd=1150.0,
+            )
+
+        assert repositorio.obtener_orden(orden.id)["estado"] == "Observada"
+        assert repositorio.obtener_habilitacion(orden.id) is None
+        with engine.connect() as conexion:
+            decisiones = conexion.execute(
+                text("SELECT count(*) FROM decision_cierre WHERE orden_id = :id"),
+                {"id": orden.id},
+            ).scalar()
+        assert decisiones == 1
+    finally:
+        _limpiar(engine, [orden.id], evento_id)

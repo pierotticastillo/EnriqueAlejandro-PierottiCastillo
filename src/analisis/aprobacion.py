@@ -30,6 +30,7 @@ class Contexto:
     almacen: str = ALMACEN
     costo_max_usd: float = COSTO_MAX_USD
     revision_humana: bool = False
+    motivo_revision_humana: str | None = None
 
 
 def evaluar(borrador: BorradorOrden, contexto: Contexto) -> Evaluacion:
@@ -212,5 +213,8 @@ def _regla_revision_humana(borrador: BorradorOrden, contexto: Contexto) -> Regla
         codigo="revision_humana",
         nombre="Revisión humana",
         cumple=False,
-        detalle="la evidencia muestra daño estructural: la decide una persona",
+        detalle=(
+            contexto.motivo_revision_humana
+            or "la evidencia muestra daño estructural: la decide una persona"
+        ),
     )

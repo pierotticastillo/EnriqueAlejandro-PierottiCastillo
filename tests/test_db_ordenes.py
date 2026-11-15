@@ -130,6 +130,48 @@ def test_la_orden_se_guarda_con_sus_tareas_y_repuestos(repositorio, engine) -> N
         _limpiar(engine, [orden.id], evento_id)
 
 
+def test_la_evidencia_fotografica_queda_persistida_con_la_orden(
+    repositorio, engine
+) -> None:
+    """P0-02: la foto, su veredicto y el modelo se recuperan de PostgreSQL."""
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id)
+    evidencia = {
+        "evidencia_vision": [
+            {
+                "foto_url": "https://planta.example/fotos/B-102.jpg",
+                "estado": "ok",
+                "danio_estructural": True,
+                "descripcion": "grieta visible en la carcasa",
+                "modelo": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            }
+        ],
+        "revision_humana": {
+            "requerida": True,
+            "motivo": "La evidencia fotográfica indica daño estructural",
+        },
+    }
+    try:
+        repositorio.guardar_orden(orden, reglas=evidencia)
+
+        with engine.connect() as conexion:
+            fila = conexion.execute(
+                text(
+                    "SELECT reglas_evaluadas FROM aprobacion "
+                    "WHERE orden_id = :id ORDER BY creada_en DESC LIMIT 1"
+                ),
+                {"id": orden.id},
+            ).scalar_one()
+
+        assert fila["evidencia_vision"][0]["foto_url"].endswith("B-102.jpg")
+        assert fila["evidencia_vision"][0]["danio_estructural"] is True
+        assert fila["evidencia_vision"][0]["modelo"].startswith("nvidia/")
+        assert fila["revision_humana"]["requerida"] is True
+    finally:
+        _limpiar(engine, [orden.id], evento_id)
+
+
 def test_guardar_la_misma_orden_no_la_duplica(repositorio, engine) -> None:
     with engine.begin() as conexion:
         evento_id = _evento(conexion)

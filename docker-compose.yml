@@ -231,11 +231,18 @@ services:
       # Timeout global por nota: el plazo desde que la nota entra hasta que
       # el parte sale publicado.
       NOTA_TIMEOUT_S: ${NOTA_TIMEOUT_S:-180}
-      # Central de mantenimiento: donde el planificador aprueba o rechaza las
-      # órdenes que las reglas dejaron pendientes.
+      # Central de mantenimiento: canal autenticado para el planificador,
+      # el supervisor, el inspector y las consultas de sólo lectura.
       CENTRAL_ACTIVO: ${CENTRAL_ACTIVO:-true}
-      CENTRAL_HOST: ${CENTRAL_HOST:-0.0.0.0}
+      # Dentro del contenedor tiene que escuchar en todas las interfaces; el
+      # puerto se publica después sólo en el loopback del host. El valor es
+      # fijo para que un `.env` de ejecución nativa en 127.0.0.1 no deje el
+      # servicio inaccesible dentro del contenedor.
+      CENTRAL_HOST: 0.0.0.0
       CENTRAL_PUERTO: ${CENTRAL_PUERTO:-8200}
+      # Lista JSON de tokens, usuario y rol. Sin credenciales las APIs
+      # responden 401: no hay un token de desarrollo por defecto.
+      CENTRAL_CREDENCIALES: '${CENTRAL_CREDENCIALES:-[]}'
       # Directorio de datos para audios y fotos (volumen Docker).
       DATOS_DIR: ${DATOS_DIR:-/datos}
     depends_on:
@@ -257,8 +264,10 @@ services:
     volumes:
       - datos:/datos
     ports:
-      # La Central de mantenimiento, para el planificador.
-      - "${CENTRAL_PUERTO:-8200}:8200"
+      # La Central se publica únicamente en el loopback del host. El mismo
+      # puerto se usa dentro y fuera del contenedor para que una cambio de
+      # `CENTRAL_PUERTO` no deje el servicio publicado en otro puerto.
+      - "127.0.0.1:${CENTRAL_PUERTO:-8200}:${CENTRAL_PUERTO:-8200}"
 
   # ----------------------------------------------------------
   # Servidor MCP: tools de solo lectura sobre la planta

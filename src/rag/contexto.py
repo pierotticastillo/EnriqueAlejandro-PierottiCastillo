@@ -33,12 +33,17 @@ class ModeloContexto(BaseModel):
 class TendenciaSensor(ModeloContexto):
     tag: str
     variable: str
+    unidad: str | None = None
     minimo: float | None = None
     maximo: float | None = None
     promedio: float | None = None
     tendencia: str | None = None
     desde: str | None = None
     hasta: str | None = None
+    ventana: str | None = None
+    fuente: str | None = None
+    muestras: int | None = None
+    resumen: str | None = None
 
 
 class ContextoAnalisis(ModeloContexto):
@@ -48,6 +53,7 @@ class ContextoAnalisis(ModeloContexto):
     equipo: str | None = None
     estado: str
     resumen: str
+    parte_id: str | None = None
     filas: list[dict[str, Any]] = Field(default_factory=list)
     fotos: list[str] = Field(default_factory=list)
     tendencia: list[TendenciaSensor] = Field(default_factory=list)
@@ -90,6 +96,7 @@ def construir_contexto(
     recuperador: RecuperadorMemoria | RecuperadorPgvector,
     consulta: str,
     equipo: str | None = None,
+    parte_id: str | None = None,
     filas: list[dict[str, Any]] | None = None,
     fotos: list[str] | None = None,
     tendencia: list[dict[str, Any]] | None = None,
@@ -128,6 +135,7 @@ def construir_contexto(
         equipo=equipo,
         estado=estado,
         resumen=resumen,
+        parte_id=parte_id,
         filas=filas or [],
         fotos=fotos or [],
         tendencia=[TendenciaSensor.model_validate(sensor) for sensor in tendencia or []],

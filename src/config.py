@@ -2,8 +2,39 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from planta_contrato import Topicos
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class CredencialCentral(BaseModel):
+    """Un token opaco y la persona/rol que representa en la Central."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    token: SecretStr = Field(min_length=32, max_length=512)
+    usuario: str = Field(min_length=1, max_length=100)
+    rol: Literal["planificador", "supervisor", "inspector", "lectura"]
+
+    @field_validator("token")
+    @classmethod
+    def token_sin_espacios(cls, value: SecretStr) -> SecretStr:
+        """Un token opaco no empieza ni termina con espacios."""
+        token = value.get_secret_value()
+        if not token or any(caracter.isspace() for caracter in token):
+            raise ValueError("El token de la Central no puede tener espacios")
+        return value
+
+    @field_validator("usuario")
+    @classmethod
+    def usuario_sin_espacios(cls, value: str) -> str:
+        """El actor se identifica con un nombre no vacío y sin bordes."""
+        normalizado = value.strip()
+        if not normalizado:
+            raise ValueError("El usuario de la Central no puede estar vacío")
+        return normalizado
 
 
 class Settings(BaseSettings):
@@ -156,8 +187,14 @@ class Settings(BaseSettings):
     # Central de mantenimiento: donde el planificador aprueba o rechaza las
     # órdenes que las reglas dejaron pendientes.
     central_activo: bool = True
-    central_host: str = "0.0.0.0"
+    # En ejecución nativa la Central sólo escucha en loopback. Dentro de Docker
+    # se sobreescribe a 0.0.0.0, pero el puerto se publica sólo en
+    # 127.0.0.1 del host.
+    central_host: str = "127.0.0.1"
     central_puerto: int = 8200
+    # Lista JSON de credenciales. Sin credenciales, las APIs fallan cerradas
+    # con 401; no hay un token de desarrollo por defecto.
+    central_credenciales: list[CredencialCentral] = Field(default_factory=list)
 
     # Modelo de nube con visión (NVIDIA). Es un auxiliar: **describe** la foto
     # para que quien la revise sepa qué está mirando. No decide, no aprueba y

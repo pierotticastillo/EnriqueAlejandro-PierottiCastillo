@@ -24,8 +24,13 @@ from typing import Any
 
 import pytest
 
-from planta.central import Central
+from config import CredencialCentral
+from planta.central import MAX_MOTIVO_CARACTERES, Central
+from planta.identidad import Actor, AutenticadorToken
 from tools.registro import REGISTRO
+
+TOKEN_PLANIFICADOR = "p" * 40
+ACTOR_PLANIFICADOR = Actor(usuario="juan", rol="planificador")
 
 # --------------------------------------------------------------------- dobles
 
@@ -35,7 +40,7 @@ class RepositorioFalso:
 
     def __init__(self) -> None:
         self.ordenes: dict[str, dict[str, Any]] = {}
-        self.llamadas: list[tuple[str, str, str | None, str | None]] = []
+        self.llamadas: list[tuple[str, str, str | None, str | None, str | None]] = []
 
     def _agregar(self, orden_id: str, estado: str) -> dict[str, Any]:
         fila = {
@@ -61,8 +66,9 @@ class RepositorioFalso:
         *,
         motivo: str | None = None,
         usuario: str | None = None,
+        rol: str | None = None,
     ) -> dict[str, Any] | None:
-        self.llamadas.append((orden_id, decision, motivo, usuario))
+        self.llamadas.append((orden_id, decision, motivo, usuario, rol))
         fila = self.ordenes.get(orden_id)
         if fila is None or fila["estado"] != "Pendiente de aprobacion":
             return None
@@ -78,6 +84,9 @@ class RepositorioFalso:
     def ordenes_para_central(self, limite: int = 50) -> list[dict[str, Any]]:
         return list(self.ordenes.values())[:limite]
 
+    def cierres_para_central(self, limite: int = 50) -> list[dict[str, Any]]:
+        return []
+
 
 def _central(**kwargs: Any) -> tuple[Central, RepositorioFalso, list[Any], list[Any]]:
     repositorio = RepositorioFalso()
@@ -87,6 +96,15 @@ def _central(**kwargs: Any) -> tuple[Central, RepositorioFalso, list[Any], list[
         repositorio,
         publicar_orden=lambda fila, estado: publicadas.append((fila, estado)),
         registrar_paso=lambda **campos: registradas.append(campos),
+        autenticador=AutenticadorToken(
+            [
+                CredencialCentral(
+                    token=TOKEN_PLANIFICADOR,
+                    usuario="juan",
+                    rol="planificador",
+                )
+            ]
+        ),
         **kwargs,
     )
     return central, repositorio, publicadas, registradas
@@ -100,7 +118,7 @@ def test_aprobar_una_orden_pendiente_la_publica() -> None:
     central, repositorio, publicadas, registradas = _central()
     repositorio._agregar("ORD-1", "Pendiente de aprobacion")
 
-    resultado = central.decidir("ORD-1", "aprobar", usuario="planificador")
+    resultado = central.decidir("ORD-1", "aprobar", actor=Actor("planificador", "planificador"))
 
     assert resultado["ok"] is True
     assert resultado["orden"]["estado"] == "Aprobada"
@@ -115,7 +133,7 @@ def test_rechazar_una_orden_pendiente_necesita_motivo() -> None:
     central, repositorio, publicadas, _ = _central()
     repositorio._agregar("ORD-1", "Pendiente de aprobacion")
 
-    resultado = central.decidir("ORD-1", "rechazar")
+    resultado = central.decidir("ORD-1", "rechazar", actor=ACTOR_PLANIFICADOR)
 
     assert resultado["ok"] is False
     assert "motivo" in resultado["error"].lower()
@@ -127,7 +145,12 @@ def test_rechazar_con_motivo_deja_el_motivo_escrito() -> None:
     central, repositorio, _, _ = _central()
     repositorio._agregar("ORD-1", "Pendiente de aprobacion")
 
-    resultado = central.decidir("ORD-1", "rechazar", motivo="falta el repuesto")
+    resultado = central.decidir(
+        "ORD-1",
+        "rechazar",
+        motivo="falta el repuesto",
+        actor=ACTOR_PLANIFICADOR,
+    )
 
     assert resultado["ok"] is True
     assert resultado["orden"]["motivo"] == "falta el repuesto"
@@ -138,7 +161,12 @@ def test_una_orden_que_no_esta_pendiente_no_se_decide() -> None:
     central, repositorio, publicadas, _ = _central()
     repositorio._agregar("ORD-1", "Aprobada")
 
-    resultado = central.decidir("ORD-1", "rechazar", motivo="cambié de opinión")
+    resultado = central.decidir(
+        "ORD-1",
+        "rechazar",
+        motivo="cambié de opinión",
+        actor=ACTOR_PLANIFICADOR,
+    )
 
     assert resultado["ok"] is False
     assert "pendiente" in resultado["error"].lower()
@@ -147,7 +175,7 @@ def test_una_orden_que_no_esta_pendiente_no_se_decide() -> None:
 
 def test_una_orden_inexistente_no_se_decide() -> None:
     central, _, _, _ = _central()
-    resultado = central.decidir("ORD-9", "aprobar")
+    resultado = central.decidir("ORD-9", "aprobar", actor=ACTOR_PLANIFICADOR)
     assert resultado["ok"] is False
 
 
@@ -156,7 +184,7 @@ def test_una_decision_invalida_no_se_acepta() -> None:
     central, repositorio, _, _ = _central()
     repositorio._agregar("ORD-1", "Pendiente de aprobacion")
 
-    resultado = central.decidir("ORD-1", "ejecutar")
+    resultado = central.decidir("ORD-1", "ejecutar", actor=ACTOR_PLANIFICADOR)
 
     assert resultado["ok"] is False
     assert repositorio.llamadas == []
@@ -167,13 +195,35 @@ def test_la_decision_se_registra_con_usuario_y_motivo() -> None:
     central, repositorio, _, registradas = _central()
     repositorio._agregar("ORD-1", "Pendiente de aprobacion")
 
-    central.decidir("ORD-1", "rechazar", motivo="falta el repuesto", usuario="juan")
+    central.decidir(
+        "ORD-1",
+        "rechazar",
+        motivo="falta el repuesto",
+        actor=ACTOR_PLANIFICADOR,
+    )
 
     campos = registradas[0]
     assert campos["tipo"] == "decision"
     assert campos["argumentos"]["decision"] == "Rechazada"
     assert campos["argumentos"]["motivo"] == "falta el repuesto"
     assert campos["argumentos"]["usuario"] == "juan"
+
+
+def test_un_motivo_demasiado_largo_no_se_persiste() -> None:
+    """La Central acota el texto controlado por una persona."""
+    central, repositorio, _, _ = _central()
+    repositorio._agregar("ORD-1", "Pendiente de aprobacion")
+
+    resultado = central.decidir(
+        "ORD-1",
+        "rechazar",
+        motivo="x" * (MAX_MOTIVO_CARACTERES + 1),
+        actor=ACTOR_PLANIFICADOR,
+    )
+
+    assert resultado["ok"] is False
+    assert "1000 caracteres" in resultado["error"]
+    assert repositorio.llamadas == []
 
 
 def test_la_central_no_es_una_tool() -> None:
@@ -208,6 +258,10 @@ def _url(central: Central, camino: str) -> str:
     return f"http://127.0.0.1:{central._puerto}{camino}"  # noqa: SLF001 - es del test
 
 
+def _headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {TOKEN_PLANIFICADOR}"}
+
+
 def test_la_pagina_de_la_central_responde(central_viva: Any) -> None:
     central = central_viva[0]
     with urllib.request.urlopen(_url(central, "/"), timeout=5) as respuesta:
@@ -216,9 +270,42 @@ def test_la_pagina_de_la_central_responde(central_viva: Any) -> None:
     assert "Central de mantenimiento" in cuerpo
 
 
+def test_la_pagina_no_interpola_datos_de_ordenes_con_inner_html(central_viva: Any) -> None:
+    """Los datos persistidos nunca se convierten en HTML dentro del navegador."""
+    central = central_viva[0]
+    with urllib.request.urlopen(_url(central, "/"), timeout=5) as respuesta:
+        cuerpo = respuesta.read().decode("utf-8")
+
+    assert "innerHTML" not in cuerpo
+    assert "textContent" in cuerpo
+    assert "replaceChildren" in cuerpo
+    assert "__PIA3_CSP_NONCE__" not in cuerpo
+
+
+def test_la_pagina_tiene_csp_y_cabeceras_defensivas(central_viva: Any) -> None:
+    """La página sólo ejecuta su script y su estilo, con un nonce único."""
+    central = central_viva[0]
+    with urllib.request.urlopen(_url(central, "/"), timeout=5) as respuesta:
+        respuesta.read()
+
+    politica = respuesta.headers["Content-Security-Policy"]
+    assert "default-src 'none'" in politica
+    assert "script-src 'nonce-" in politica
+    assert "style-src 'nonce-" in politica
+    assert "object-src 'none'" in politica
+    assert "frame-ancestors 'none'" in politica
+    assert respuesta.headers["X-Content-Type-Options"] == "nosniff"
+    assert respuesta.headers["X-Frame-Options"] == "DENY"
+    assert respuesta.headers["Cache-Control"] == "no-store"
+
+
 def test_la_api_devuelve_las_ordenes(central_viva: Any) -> None:
     central = central_viva[0]
-    with urllib.request.urlopen(_url(central, "/api/ordenes"), timeout=5) as respuesta:
+    peticion = urllib.request.Request(
+        _url(central, "/api/ordenes"),
+        headers=_headers(),
+    )
+    with urllib.request.urlopen(peticion, timeout=5) as respuesta:
         datos = json.loads(respuesta.read().decode("utf-8"))
     assert datos["ordenes"][0]["id"] == "ORD-1"
 
@@ -229,7 +316,7 @@ def test_la_api_decide_una_orden(central_viva: Any) -> None:
     peticion = urllib.request.Request(
         _url(central, "/api/ordenes/ORD-1/decision"),
         data=cuerpo,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", **_headers()},
         method="POST",
     )
     with urllib.request.urlopen(peticion, timeout=5) as respuesta:
@@ -245,7 +332,7 @@ def test_la_api_rechaza_un_rechazo_sin_motivo(central_viva: Any) -> None:
     peticion = urllib.request.Request(
         _url(central, "/api/ordenes/ORD-1/decision"),
         data=cuerpo,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", **_headers()},
         method="POST",
     )
     with pytest.raises(urllib.error.HTTPError) as error:
@@ -255,8 +342,12 @@ def test_la_api_rechaza_un_rechazo_sin_motivo(central_viva: Any) -> None:
 
 def test_una_ruta_desconocida_da_404(central_viva: Any) -> None:
     central = central_viva[0]
+    peticion = urllib.request.Request(
+        _url(central, "/api/no-existe"),
+        headers=_headers(),
+    )
     with pytest.raises(urllib.error.HTTPError) as error:
-        urllib.request.urlopen(_url(central, "/api/no-existe"), timeout=5)
+        urllib.request.urlopen(peticion, timeout=5)
     assert error.value.code == 404
 
 

@@ -108,10 +108,27 @@ class ClienteFalso:
 
 
 class AnalisisFalso:
-    def analizar_evento(self, evento, *, filas=None):
+    def analizar_evento(
+        self,
+        evento,
+        *,
+        filas=None,
+        fotos=None,
+        evidencia_vision=(),
+        filas_confirmadas=None,
+        tendencias=None,
+    ):
         return "analisis"
 
-    def analizar_alerta_seguridad(self, evento, *, texto=None):
+    def analizar_alerta_seguridad(
+        self,
+        evento,
+        *,
+        texto=None,
+        fotos=None,
+        evidencia_vision=(),
+        tendencias=None,
+    ):
         return "analisis"
 
     def orden_sistema(self, analisis):

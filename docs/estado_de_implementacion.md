@@ -1,8 +1,9 @@
 # Estado de implementación
 
-**Actualizado:** 2026-11-10  
+**Actualizado:** 2026-11-14
 **Plan de referencia:** documento interno del curso (no se publica en este
-repositorio). El detalle de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
+repositorio). La segunda entrega sigue el **Plan de implementación 2**; el detalle
+de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
 
 Este archivo registra el avance del repositorio y distingue entre código implementado y comportamiento validado contra la planta simulada.
 
@@ -42,19 +43,18 @@ marcha: el índice único pasó a ser **parcial** (`WHERE estado =
 había salido y lo hacía perderse en una segunda caída del bus. Verificado en
 vivo contra el contenedor y contra PostgreSQL.
 
-La **Fase 7 (cierre y certificación)** quedó cerrada: el cierre por voz se
-transcribe con el ASR local **con el vocabulario de la planta** (sin él, el
-decodificador escribe «Chofitrante» y el cierre no se puede comparar), se
-compara contra la orden y de ahí sale el estado: `Cerrada` para el trabajo
-propio, `Observada` para la contratista con diferencias **sustantivas**
-(tareas o repuestos: vuelve con el motivo y sin habilita) y `Certificada`
-con el habilita `HAB-AAAA-NNNN` y el monto tomado de la orden y de la lista
-de precios del contrato (`CT-SVP-2025 §2.1`), nunca de lo que declara el
-cierre. Las **horas son informativas**: la planta no publica el registro de
-ingreso y egreso (§3.1/§3.2) y el precio cerrado se paga completo (§2.2), así
-que el desvío de horas queda a la vista pero no detiene el cierre. Verificado
-en vivo contra la planta simulada, con el flujo completo de una orden de
-contratista con diferencias.
+La **Fase 7 (cierre y certificación)** conserva el cierre por voz con ASR
+local **con el vocabulario de la planta**, la transcripción, el parseo y la
+comparación contra la orden. En el Plan de implementación 2 esa comparación
+se separó de la decisión final: el cierre técnico deja la orden en
+`Ejecutada`; el `supervisor` cierra trabajo propio; el `inspector` certifica
+u observa trabajo de contratista; observar exige motivo y el habilita
+`HAB-AAAA-NNNN` se emite únicamente tras una certificación humana, con el
+monto tomado de la orden y de la lista de precios del contrato
+(`CT-SVP-2025 §2.1`), nunca de lo que declara el cierre. Las **horas son
+informativas**: la planta no publica el registro de ingreso y egreso
+(§3.1/§3.2) y el precio cerrado se paga completo (§2.2), así que el desvío
+de horas queda a la vista pero no detiene el cierre.
 
 El **núcleo de agentes (LangChain)** quedó implementado y verificado: el
 agente consulta las mismas ocho tools del MCP (con los mismos esquemas
@@ -92,10 +92,15 @@ migración `0007`): una fila por paso con el modelo, las tools y sus
 argumentos, los tokens, el costo y el tiempo, más el motivo de cada corte y
 la decisión del planificador.
 
-La **Central de mantenimiento** quedó implementada: es el canal de decisión
-del planificador para las órdenes pendientes (pantalla web y API JSON), sólo
-toca órdenes `Pendiente de aprobacion`, el rechazo exige motivo y la
-decisión queda auditada con su usuario.
+La **Central de mantenimiento** quedó implementada como canal de decisión
+humana: el shell web puede cargarse sin credenciales, pero todas sus APIs
+exigen un token Bearer opaco, uno por persona. La identidad y el rol salen
+**exclusivamente del token** (`planificador`, `supervisor`, `inspector` o
+`lectura`); sin credencial válida responde 401 y una operación fuera del rol
+responde 403. La Central decide órdenes pendientes y también registra el
+cierre de trabajo propio por `supervisor` y la certificación u observación de
+trabajo de contratista por `inspector`. Rechazar u observar exige motivo y
+las decisiones quedan auditadas con actor, rol, motivo, evidencia y fecha.
 
 El **presupuesto y las condiciones de corte** quedaron implementados
 (`agente/presupuesto.py`): pasos, tokens y timeout del agente, y el **timeout
@@ -104,20 +109,56 @@ corte es una condición prevista: queda escrito y el sistema sigue por el
 camino determinista. La **mini spec** del flujo del parte está en
 [`docs/spec-parte.md`](spec-parte.md).
 
+El **Plan de implementación 2** se inició el 2026-11-14. No reabre las Fases
+0–7: agrega las Fases 8–12 para la segunda entrega. El primer avance cerró
+la superficie de XSS de la Central con CSP y nonce e implementó el gate de
+daño estructural en escalados ordinarios con evidencia fotográfica persistida.
+El segundo avance completó P0-01 y P0-04: el cierre técnico deja `Ejecutada`
+y la decisión final queda a un `supervisor` o `inspector` autenticado; la
+Central usa tokens Bearer opacos y RBAC (`planificador`, `supervisor`,
+`inspector`, `lectura`). El tercer avance completó P0-03: el análisis
+productivo incorpora `construir_contexto`, y cada orden, cierre y decisión
+humana conserva un manifiesto inmutable y un ledger append-only que permiten
+reconstruir la cadena evento → evidencia → análisis → propuesta → reglas →
+actor/rol → estado, con modelo, tools, tokens, costo y tiempo. La migración
+`0009` agrega esas tablas, sus triggers y el backfill histórico; se aplicó,
+se probó con datos históricos sintéticos y se verificó el ciclo
+`0008 → 0009 → 0008 → 0009` sin dejar filas de prueba. La suite completa quedó
+en **577 aprobadas con PostgreSQL** y **535 aprobadas + 42 omitidas sin
+base**, sin fallas. P0-06 (corrida anclada al commit final) sigue pendiente.
+
 ## Avance por fase
 
 | Fase | Estado | Avance y pendientes |
 |---|---|---|
 | 0 — Preparación del entorno | Completa | Compose (`postgres`, `migraciones`, `sistema`, `mcp`), red externa `planta-lan`, labels `academia.planta: pc`, proxy `enlace:3128` con `NO_PROXY`, presupuesto agregado 4 CPU / 8 GB y latido `sistema/estado`. |
-| 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido) e idempotencia por `evento_sistema.id`. Los tests de idempotencia/constraints, los del índice RAG y los de la Central y la trayectoria requieren base y se omiten sin `TEST_DATABASE_URL` (37 omitidos en total; con base, los 531 tests pasan). |
+| 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido, trayectoria, roles, decisiones de cierre, manifiestos y ledger) e idempotencia por `evento_sistema.id`. La revisión vigente es `0009`. Los tests de persistencia, constraints, RAG, Central, trayectoria, cierre y evidencia requieren base: sin `TEST_DATABASE_URL` quedan **42 omitidos**; con PostgreSQL, los **577 tests** pasan. |
 | 1 — Parte por voz | Completa y verificada | Listener MQTT, descarga de medios a disco, ASR local (`faster-whisper`), extracción determinista, resolución de nombres y unidades, preguntas de ambigüedad y conversación con tablet. La corrección del operador se aplica **a la lectura que está corrigiendo** y la conversación tiene tope: si no converge, la nota queda para revisión humana. |
 | 2 — Detección sin LLM | Completa y verificada | S1–S4 con los procedimientos del MBP-4, aviso en tablet y por radio al supervisor (canal 1), **un evento por equipo** (`parte:<nota>:<tag>`), contexto y tendencia en los escalados, sensores MQTT con límites de `/api/planta`. |
 | 3 — Tools y MCP | Completa y verificada | Siete tools de solo lectura con `extra="forbid"`, cliente HTTP con timeout/reintentos/errores tipados, búsqueda léxica de manuales y servidor MCP (streamable-http y stdio) probado en vivo. |
 | 4 — RAG, contexto y memoria | **Completa y verificada** | Índice híbrido (BM25 + embeddings) en PostgreSQL + pgvector con metadatos (`equipo`, `fabricante`, `documento`, `seccion`, `cita`, `vigente`), evaluación contra el baseline oficial, citas obligatorias en el context builder, política de memoria escrita y tool `busqueda_rag` expuesta por MCP. |
 | 5 — Análisis y borrador de orden | **Completa y verificada** | Catálogo de fallas parseado de los manuales de la planta (18 fallas vigentes, con cita), cruce con la evidencia del parte, causas probables ordenadas con lo que falta confirmar, borrador de orden con tareas/repuestos/costo y **las seis reglas de aprobación evaluadas en código**, publicación en `sistema/ordenes` y persistencia auditada. |
 | 6 — Operación sin enlace | **Completa y verificada** | La cola en PostgreSQL es **la salida de la planta**: eventos, órdenes y avisos. Si el bus no está, el mensaje queda en la base (no se pierde en la memoria del proceso) y sale cuando vuelve. Orden **por destino**: el radio espera al enlace y conserva su orden entre sí; los eventos y las órdenes no quedan bloqueados detrás del radio. Índice único **parcial** (`WHERE estado = 'pendiente'`): no hay dos copias esperando, pero un mensaje ya enviado se puede volver a encolar. `idempotency_key` deja escrito qué salió. Hilo dedicado `cola-salida` (`COLA_SONDEO_S=5`) y drenaje al reconectar. `pendientes_sincronizar` visible en el latido. Verificado en vivo (encolado, drenaje en orden, llegada al bus, enlace caído y restaurado, re-encolado). |
-| 7 — Cierre y certificación | **Completa y verificada** | Suscripción a `planta/cierres`, transcripción local con el vocabulario de la planta, parseo del cierre (tareas, repuestos con cantidad, horas, prueba final), **comparación contra la orden** y decisión en código: `Cerrada` (propio), `Observada` (contratista con diferencias sustantivas, con motivo y sin habilita) y `Certificada` (contratista sin diferencias, con habilita `HAB-AAAA-NNNN` y el monto de `CT-SVP-2025 §2.1`). Idempotente por `cierre.externa_id` (restricción única) y escritura atómica del estado, la certificación y el habilita. Verificado en vivo con el flujo completo de una contratista con diferencias. |
-| — — Núcleo de agentes, trayectoria, Central y presupuesto | **Completa y verificada** | Agente de LangChain (`create_agent`) que consulta las ocho tools del MCP y propone con citas (lo que propone se contrasta con el catálogo), con **cierre estructurado** para los modelos que no llaman a la herramienta de salida; registro `registro_trayectoria` con modelo, tools y argumentos, tokens, costo y tiempo (el costo sale de los tokens medidos por la tarifa del modelo); Central de mantenimiento (pantalla + API) como canal de decisión del planificador; presupuesto de pasos, tokens y timeout global por nota, con el corte escrito en la bitácora y la comprobación **antes** de cada vuelta. Mini spec en `docs/spec-parte.md`. |
+| 7 — Cierre y certificación | **Completa; G2/G3 reforzada en el Plan 2** | Suscripción a `planta/cierres`, transcripción local con el vocabulario de la planta, parseo del cierre (tareas, repuestos con cantidad, horas, prueba final) y comparación contra la orden. La comparación prepara evidencia; la decisión final es humana: `supervisor` cierra trabajo propio e `inspector` certifica u observa trabajo de contratista. `Observada` exige motivo y el habilita se emite únicamente al certificar, en la misma transacción de la decisión. Idempotente por `cierre.externa_id` y por `decision_cierre.cierre_id`. |
+| — — Núcleo de agentes, trayectoria, Central y presupuesto | **Completa y verificada** | Agente de LangChain (`create_agent`) que consulta las ocho tools del MCP y propone con citas (lo que propone se contrasta con el catálogo), con **cierre estructurado** para los modelos que no llaman a la herramienta de salida; registro `registro_trayectoria` con modelo, tools y argumentos, tokens, costo y tiempo (el costo sale de los tokens medidos por la tarifa del modelo); Central de mantenimiento autenticada por token Bearer y RBAC, como canal de decisión humana del planificador, supervisor e inspector; presupuesto de pasos, tokens y timeout global por nota, con el corte escrito en la bitácora y la comprobación **antes** de cada vuelta. Mini spec en `docs/spec-parte.md`. |
+
+| 8 — Alineación de Entrega 2 | En espera de información externa | Se registra la fecha, el alcance, los escenarios y la rúbrica cuando el usuario los comunique después de confirmarlos con la Academia. La implementación de los P0 independientes continúa sin esperar esta respuesta. |
+| 9 — Gobierno humano y seguridad | **Implementada y verificada** | P0-01: el cierre técnico deja `Ejecutada` y la decisión final la toma un `supervisor` o `inspector` autenticado, con motivo/evidencia auditados y habilita sólo tras certificación. P0-04: tokens Bearer opacos, un token por persona, cuatro roles y 401/403; la identidad sale sólo del token. P0-05: DOM sin `innerHTML`, CSP con nonce, cabeceras defensivas y motivo acotado. Verificado en PostgreSQL y con la suite completa. |
+| 10 — Evidencia y provenance | **Implementada y verificada** | P0-02: una foto con daño estructural o un resultado indeterminado fuerza revisión humana en escalados ordinarios; una salida válida sin daño no agrega revisión y sin fotos no se activa el gate. P0-03: `construir_contexto` participa del análisis productivo; manifiesto canónico por orden/cierre/decisión con parte, filas, fotos hasheadas, salida y modelo de visión, tendencia con ventana/fuente, fragmentos y citas; ledger transaccional append-only con nueve tipos y reconstrucción autenticada desde la Central. La migración `0009`, su backfill y su rollback quedaron verificados. |
+| 11 — Evaluación, red team y calidad | Pendiente | Benchmark del agente contra baseline, grounding, visión con fotos reales, trayectoria y red team con costo/latencia. |
+| 12 — Operación y cierre | Pendiente | Outbox transaccional, PUBACK, constraints, observabilidad, CI/CD, corrida oficial y documentación canónica. |
+
+## Plan de implementación 2 — estado de brechas P0
+
+| ID | Estado actual | Evidencia o próximo paso |
+|---|---|---|
+| P0-01 — G2/G3 con decisión humana | **Implementado y verificado** | El cierre técnico sólo deja `Ejecutada`. El `supervisor` cierra trabajo propio; el `inspector` certifica u observa trabajo de contratista; observar exige motivo y el habilita sólo se emite al certificar. Actor, rol, motivo, evidencia y fecha quedan en `decision_cierre`; la decisión no se cambia. |
+| P0-02 — Daño estructural en escalados ordinarios | **Implementado y verificado** | El gate fotográfico está en código: daño estructural validado o resultado indeterminado fuerza revisión humana; salida válida sin daño no la agrega y sin fotos no se activa. El resultado, la foto y el modelo quedan en la evidencia persistida de la orden; una prueba de integración confirma su recuperación desde PostgreSQL. |
+| P0-03 — Evidencia y provenance | **Implementado y verificado** | Manifiesto inmutable y canónico para orden, cierre y decisión, separado del JSON mutable de reglas: registra parte/filas, fotos con id/URL/hash, salida y modelo de visión, tendencia con ventana/fuente, fragmentos/citas y marca lo ausente como `no_disponible`. `construir_contexto` ya participa del análisis productivo. El ledger append-only encadena evento → evidencia → análisis → propuesta → reglas → aprobación/cierre/decisión → trayectoria, con actor/rol/estado y modelo/tools/tokens/costo/tiempo. La Central permite reconstruir una orden mediante un endpoint autenticado. Hashes, triggers, backfill y rollback verificados en PostgreSQL. |
+| P0-04 — Autenticación y RBAC | **Implementado y verificado** | La Central exige un token Bearer opaco, uno por persona. Roles: `planificador`, `supervisor`, `inspector` y `lectura`. Sin credencial válida: 401; operación fuera del rol: 403. `usuario`/`rol` del cuerpo se ignoran; la identidad sale sólo del token. |
+| P0-05 — XSS y CSP | **Implementado y verificado** | `src/planta/central.py`: construcción DOM con `textContent`/`replaceChildren`, CSP con nonce por respuesta y cabeceras defensivas. Sigue integrado con P0-01/P0-04 y verificado por la suite completa. |
+| P0-06 — Corrida sobre el commit final | Pendiente | La corrida vigente es de `d6b5588`; el `HEAD` auditado es `62a0f86`. |
+| P0-07 — Alcance y rúbrica oficiales | Pendiente de información externa | Se actualizará cuando el usuario comunique la información confirmada por la Academia. |
 
 ## Decisiones que conviene no perder de vista
 
@@ -144,7 +185,7 @@ camino determinista. La **mini spec** del flujo del parte está en
 21. **La idempotencia de la cola es "no encolar dos veces mientras está pendiente".** El índice único es **parcial** (`WHERE estado = 'pendiente'`): el anterior, único sobre todas las filas, impedía re-encolar un mensaje ya enviado y lo perdía en una segunda caída del bus. Lo que se audita es `idempotency_key` (`outbox:<tipo>:<id>` → fila).
 22. **El bus de la planta y el radioenlace son dos enlaces distintos.** Por eso la cola se vacía desde un hilo dedicado (`cola-salida`), no sólo desde el latido: un evento no tiene por qué esperar a que vuelva el radio.
 23. **El agente consulta y propone; no decide.** Es un agente de LangChain que usa las mismas ocho tools del MCP y los mismos esquemas estrictos: no hay una segunda definición de las tools. Lo que propone se contrasta con el catálogo (una falla o una cita inventada descarta la propuesta entera) y sólo se usa como **justificación** de una orden que ya salió con su estado decidido.
-24. **La Central de mantenimiento no es una tool.** No está en `tools.registro.REGISTRO` ni en el MCP: el agente no tiene forma de aprobar nada. La decisión la toma una persona y queda auditada con su usuario y su motivo.
+24. **La Central de mantenimiento no es una tool.** No está en `tools.registro.REGISTRO` ni en el MCP: el agente no tiene forma de aprobar nada. La decisión la toma una persona autenticada; el token determina su usuario y rol, y la decisión queda auditada con actor, rol, motivo, evidencia y fecha.
 25. **Cortar es parte del diseño.** Los presupuestos (pasos, tokens y timeout global por nota) no son sólo límites: cuando se agotan, el motivo queda escrito en la trayectoria y el sistema sigue por el camino determinista. Un corte escrito es mejor que un proceso que se queda consultando.
 26. **El presupuesto se comprueba antes de cada vuelta.** El plazo global manda: una etapa que ya se pasó el plazo no arranca otra vuelta, y la comprobación va enganchada al agente siempre (haya bitácora o no). Por eso el timeout de cada llamada al modelo es el presupuesto entero y no el del redactor: con el modelo local una vuelta tarda entre 60 y 110 s, y con 90 s algunas morían por la red en vez de cortarse por el presupuesto.
 27. **La propuesta del agente tiene dos caminos de salida.** La herramienta de salida (`PropuestaAgente`) y el **cierre estructurado** (la conversación se le vuelve a pasar al modelo con el esquema, con la salida estructurada nativa de Ollama). El cierre hizo falta porque con el modelo local de 3B el agente consultaba bien pero escribía la propuesta en prosa y no llamaba a la herramienta de salida. Es el mismo modelo, la misma conversación y los mismos materiales, y queda registrado como un paso más del agente.
@@ -454,8 +495,12 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 
 ## Última verificación
 
-- `python -m pytest`: **533 tests, 0 fallas** (con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose pasan las 533; sin base: 496 pasan y 37 se omiten).
-- `ruff check src tests migrations`: **sin errores**.
+- `python -m pytest` con `TEST_DATABASE_URL` apuntando al PostgreSQL del compose: **577 aprobadas, 0 fallas**.
+- `python -m pytest` sin `TEST_DATABASE_URL`: **535 aprobadas, 42 omitidas, 0 fallas**. Los omitidos son las pruebas que requieren PostgreSQL.
+- Pruebas focales de evidencia, contexto, Central autenticada, manifiesto, ledger, órdenes y cierres: **47 aprobadas, 0 fallas**.
+- Migración `0009`: backfill sintético validado con **3 manifiestos**, **9 tipos de ledger**, **3/3 hashes válidos** e idempotencias únicas; PostgreSQL rechazó `UPDATE` y `DELETE` en ambas tablas. El ciclo `0008 → 0009 → 0008 → 0009` terminó con la base limpia y en `0009 (head)`. Una base nueva aplicó la cadena completa `0001 → 0009` y quedó con las dos tablas y ambos triggers.
+- `ruff check src tests migrations scripts`: **sin errores**.
+- `compileall -q src tests migrations` y `git diff --check`: **sin errores**.
 - **Corrector oficial, corrida completa (7 escenarios)**: **92,6/100 — APRUEBA**
   (`_fase11b`, la corrida vigente, con el reintento del enlace), sin
   eliminatorias, 93 de 93 puntos medidos (86,13 de 93, reescalados a 100) y
@@ -577,7 +622,7 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 | `scripts/verificar_modelos.py` | lista cerrada de modelos: tabla, configuración y runtime |
 | `scripts/medir_vision.py` | medición del modelo de visión: tiempo, tokens y respuesta efectiva |
 | `scripts/probar_cola.py` | prueba en vivo de la cola de salida: encola un radio, un evento y una orden, y comprueba que salen en orden, por su tópico y que llegan a la planta |
-| `scripts/probar_cierre.py` | prueba en vivo del cierre: publica una orden de contratista, escucha `planta/cierres` y muestra el estado final, el cierre, la certificación y el habilita |
+| `scripts/probar_cierre.py` | prueba en vivo del cierre: publica una orden de contratista, escucha `planta/cierres`, verifica que el cierre técnico deja `Ejecutada` y, si se entrega un token y una decisión explícita, registra la decisión humana autenticada y muestra el estado final, la auditoría y el habilita |
 
 ## Próximos pasos
 
@@ -587,8 +632,62 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 4. **Conectar el habilita con la facturación**: el sistema emite el número y el monto (CT-SVP-2025 §3.4), pero la factura la emite la planta; falta el puente.
 5. **Pedir al curso el registro de ingreso y egreso** (§3.1/§3.2): mientras la planta no lo publique, la diferencia de horas no puede ser bloqueante.
 6. **Cerrar el hueco de `B1`/`D2`**: el corrector espera «Escalado» en cualquier nota que mencione un equipo con una falla activa, y el sistema sólo escala con lo que el operador lee. El camino corto es reconocer más síntomas cualitativos del catálogo (ruido, golpepeo, no arranca) como anomalía —y que el decodificador escriba esas frases: los síntomas ya están en el prompt del ASR—; el camino largo es pedirle al curso la lista de fallas activas por equipo, que la planta no publica.
+7. **Confirmar con la Academia** fecha, alcance, rúbrica, escenarios y datos externos de la Entrega 2; registrarlos en P0-07.
+8. **Congelar el commit final y ejecutar P0-06** sobre los siete escenarios, archivando hash, modelos, corpus, métricas, costo y latencia.
+9. Completar las Fases 11 y 12: benchmark y red team, outbox/PUBACK, observabilidad, CI/CD y cierre reproducible.
 
 ## Historial
+
+- **2026-11-14 (Plan 2, P0-03 — manifiesto inmutable y ledger):** el camino
+  productivo ahora arma el contexto RAG con `construir_contexto` y conserva
+  parte/filas, fotos con id/URL/hash y salida de visión, tendencia con
+  ventana/fuente, fragmentos y citas. Se separaron del JSON mutable de reglas
+  dos registros nuevos: `manifiesto_evidencia`, con hash SHA-256 validado por
+  PostgreSQL, y `ledger_decisiones`, append-only y transaccional, que encadena
+  evento → evidencia → análisis → propuesta → reglas → actor/rol → estado →
+  modelo/tools/tokens/costo/tiempo. La migración `0009` bloquea `UPDATE` y
+  `DELETE`, conserva el backfill histórico y agrega la reconstrucción
+  autenticada `GET /api/ordenes/<id>/evidencia` (alias `/reconstruccion`).
+  La validación final con un histórico sintético produjo 3 manifiestos, nueve
+  tipos de ledger y 3/3 hashes válidos; el rollback y la reaplicación
+  dejaron la base limpia en `0009 (head)`. La suite completa quedó en **577
+  aprobadas con base** y **535 aprobadas + 42 omitidas sin base**, sin fallas.
+
+- **2026-11-14 (Plan 2, P0-01/P0-04 — decisión humana autenticada):** el cierre
+  técnico ahora deja la orden en `Ejecutada` y prepara la evidencia; la
+  decisión final la toma una persona autenticada. El `supervisor` cierra
+  trabajo propio y el `inspector` certifica u observa trabajo de contratista.
+  Observar exige motivo y el habilita sólo se emite al certificar, dentro de
+  la misma transacción. La Central exige tokens Bearer opacos, uno por
+  persona, y aplica RBAC con `planificador`, `supervisor`, `inspector` y
+  `lectura`: sin credencial devuelve 401, con rol insuficiente 403, y los
+  campos `usuario`/`rol` del cuerpo se ignoran. La migración `0008` agrega los
+  roles y `decision_cierre`, y quedó aplicada y verificada en PostgreSQL
+  (`alembic_version = 0008`). La suite completa quedó en **568 aprobadas con
+  base** y **529 aprobadas + 39 omitidas sin base**, sin fallas.
+
+- **2026-11-14 (Plan 2, P0-02 — gate de daño estructural):** el camino
+  productivo evalúa las fotos de un escalado ordinario y conserva el resultado
+  como evidencia estructurada. El daño estructural validado y el resultado
+  indeterminado fuerzan `PendienteAprobacion` mediante la regla
+  `revision_humana`, que está en código; una salida válida sin daño no agrega
+  revisión y la ausencia de fotos no activa el gate. El modelo no modifica la
+  falla, la tarea, los repuestos, el costo ni el estado. La evidencia incluye
+  URL/ruta de la foto, estado, veredicto de daño, descripción, modelo, tokens y
+  latencia, y queda persistida con la orden en `reglas_evaluadas`. Se agregaron
+  pruebas del análisis y del servicio productivo: **47 pruebas focales
+  aprobadas, 0 fallas**. La suite completa sin PostgreSQL quedó en **505
+  aprobadas y 37 omitidas, 0 fallas**; la integración con base queda pendiente.
+
+- **2026-11-14 (Plan 2, P0-05 — XSS y CSP):** se corrigió la superficie de
+  XSS almacenado de la Central de mantenimiento. La tabla ya no concatena
+  valores persistidos en `innerHTML`: construye cada celda con `textContent` y
+  reemplaza el cuerpo con `replaceChildren`. Cada respuesta HTML incluye una
+  CSP con nonce único para su script y su estilo, más `nosniff`, bloqueo de
+  framing, `Referrer-Policy`, `Permissions-Policy` y `no-store`; el motivo de
+  decisión queda limitado a 1000 caracteres. Se agregaron pruebas que verifican
+  la ausencia de `innerHTML`, la CSP y las cabeceras defensivas: **17 pruebas
+  de la Central pasan**. La suite completa sin PostgreSQL también pasa.
 
 - **2026-11-10 (defecto 17 y las corridas que lo midieron):** al repetir la
   medición del corpus entero con la Entrega 1 ya dentro salió un defecto más

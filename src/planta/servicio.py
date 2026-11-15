@@ -21,6 +21,9 @@ from planta_contrato import (
 )
 
 from agente.presupuesto import Presupuesto
+from analisis.evidencia import TendenciaEvidencia
+from analisis.modelos import EvidenciaVision
+from analisis.provenance import hash_sha256_archivo, identificador_foto
 from analisis.servicio import ServicioAnalisis
 from analisis.vision import ClienteVision
 from config import Settings
@@ -82,8 +85,10 @@ class ServicioParteVoz:
         # El registro de la trayectoria: los cortes del presupuesto global por
         # nota quedan escritos ahí, no se pierden en el log.
         self._registrador = registrador
-        # Modelo de nube con visión: sólo describe las fotos. Es opcional:
-        # sin clave o sin modelo, el aviso de seguridad sale igual que siempre.
+        # Modelo de nube con visión: describe las fotos y su resultado puede
+        # activar el gate de revisión humana por daño estructural. No aprueba
+        # órdenes ni cambia tareas. Es opcional: sin clave o sin modelo, una
+        # foto que no se pudo evaluar queda igualmente para revisión humana.
         self._vision = vision
         self._resolver = resolver or desde_api(planta)
         self._extractor = extractor or ExtractorParte(planta, self._resolver)
@@ -143,14 +148,18 @@ class ServicioParteVoz:
     def encolar_respuesta(self, respuesta: RespuestaOperador) -> None:
         self._cola.put(("respuesta", respuesta))
 
-    def encolar_orden_por_evento(self, evento) -> None:
+    def encolar_orden_por_evento(
+        self,
+        evento,
+        tendencia: TendenciaEvidencia | None = None,
+    ) -> None:
         """Encola la orden que abre un evento de sensor.
 
         Va por la cola y no por el callback de MQTT: el loop de MQTT es un
         solo hilo para todos los mensajes y no puede quedar esperando un
         análisis mientras la planta manda notas de voz.
         """
-        self._cola.put(("orden", evento))
+        self._cola.put(("orden", (evento, tendencia)))
 
     def _trabajar(self) -> None:
         while not self._parar.is_set():
@@ -167,7 +176,11 @@ class ServicioParteVoz:
                     nota, texto, fotos_locales = carga  # type: ignore[misc]
                     self._completar_nota(nota, texto, fotos_locales)  # type: ignore[arg-type]
                 elif tipo == "orden":
-                    self.generar_orden(carga)  # type: ignore[arg-type]
+                    evento, tendencia = carga  # type: ignore[misc]
+                    self.generar_orden(
+                        evento,
+                        tendencias=[tendencia] if tendencia is not None else None,
+                    )
             except Exception:  # noqa: BLE001 - una nota mala no frena la cola
                 logger.exception("Error procesando %s", tipo)
 
@@ -437,18 +450,24 @@ class ServicioParteVoz:
         self._cliente.publicar_evento(
             evento_seguridad
         )
+        # La evidencia fotográfica se evalúa una sola vez. Su resultado no
+        # aprueba la orden: sólo puede activar el gate de revisión humana y
+        # deja una descripción para quien recibe el aviso.
+        evidencia_vision = self._evaluar_fotos_dano(fotos_locales or [], nota.fotos)
         # La alerta de seguridad abre también una orden: no se aprueba sola
         # (MBP-4 §10.2), la decide una persona.
         self.generar_orden(
             evento_seguridad,
             texto=evidencia_texto,
             seguridad=True,
+            fotos_urls=list(nota.fotos or []),
+            evidencia_vision=evidencia_vision,
         )
 
         # Aviso en la tablet del operador: qué hacer, sin esperar respuesta.
         # La foto adjunta, si el modelo de visión pudo describirla, va en el
         # texto: es información para quien revise, no una decisión.
-        descripcion_foto = self._describir_foto(fotos_locales or [])
+        descripcion_foto = self._descripcion_de_fotos(evidencia_vision)
         fila = FilaParte(
             tag=equipo or "PLANTA",
             variable="condicion_insegura",
@@ -496,21 +515,76 @@ class ServicioParteVoz:
             seguridad.RADIO_SUPERVISOR,
         )
 
-    def _describir_foto(self, fotos_locales: list[Path | None]) -> str | None:
-        """Lo que el modelo de visión ve en la foto, si lo puede describir.
+    def _evaluar_fotos_dano(
+        self,
+        fotos_locales: list[Path | None],
+        fotos_urls: list[str] | None = None,
+    ) -> tuple[EvidenciaVision, ...]:
+        """Evalúa las fotos y deja el resultado como evidencia de la orden.
 
-        Es un **auxiliar**: la descripción va al aviso para que quien revise
-        la foto sepa qué está mirando. **No decide nada**: si el modelo no
-        está, no responde o su salida no valida, el aviso sale sin
-        descripción y la foto sigue yendo a revisión humana. Nunca se
-        interpreta un fallo como "no hay daño".
+        El modelo no decide la falla, la tarea ni el estado. Su resultado sólo
+        puede activar la revisión humana cuando detecta daño estructural. Si la
+        evaluación no se puede hacer, el resultado queda **indeterminado** y la
+        orden se revisa igual: un fallo nunca se interpreta como "no hay daño".
         """
-        if self._vision is None or not self._vision.habilitado:
-            return None
-        for foto in fotos_locales:
+        urls = list(fotos_urls or [])
+        total = max(len(fotos_locales), len(urls))
+        if total == 0:
+            return ()
+        evidencia: list[EvidenciaVision] = []
+        for indice in range(total):
+            foto = fotos_locales[indice] if indice < len(fotos_locales) else None
+            url = urls[indice] if indice < len(urls) else None
+            hash_foto = hash_sha256_archivo(foto) if foto is not None else None
+            foto_id = identificador_foto(url, str(foto) if foto else None, hash_foto)
             if foto is None:
+                evidencia.append(
+                    EvidenciaVision(
+                        foto_url=url,
+                        ruta_local=None,
+                        estado="indeterminado",
+                        danio_estructural=None,
+                        descripcion="",
+                        detalle="no se pudo descargar la foto",
+                        modelo="no_disponible",
+                        foto_id=foto_id,
+                        hash_sha256=hash_foto,
+                    )
+                )
                 continue
-            resultado = self._vision.describir(foto)
+            if self._vision is None:
+                evidencia.append(
+                    EvidenciaVision(
+                        foto_url=url,
+                        ruta_local=str(foto),
+                        estado="indeterminado",
+                        danio_estructural=None,
+                        descripcion="",
+                        detalle="el modelo de visión no está habilitado",
+                        modelo="no_disponible",
+                        foto_id=foto_id,
+                        hash_sha256=hash_foto,
+                    )
+                )
+                continue
+            try:
+                resultado = self._vision.describir(foto)
+            except Exception:  # noqa: BLE001 - la foto no puede tumbar la orden
+                logger.exception("Falló la evaluación de la foto %s", foto)
+                evidencia.append(
+                    EvidenciaVision(
+                        foto_url=url,
+                        ruta_local=str(foto),
+                        estado="indeterminado",
+                        danio_estructural=None,
+                        descripcion="",
+                        detalle="falló la evaluación de la foto",
+                        modelo=getattr(self._vision, "nombre", "") or "no_disponible",
+                        foto_id=foto_id,
+                        hash_sha256=hash_foto,
+                    )
+                )
+                continue
             logger.info(
                 "Foto %s: %s (%s, %.1f s, %d tokens de entrada / %d de salida)",
                 foto.name,
@@ -520,8 +594,30 @@ class ServicioParteVoz:
                 resultado.tokens_prompt,
                 resultado.tokens_completion,
             )
-            if resultado.utilizable:
-                return resultado.descripcion
+            evidencia.append(
+                EvidenciaVision(
+                    foto_url=url,
+                    ruta_local=str(foto),
+                    estado=resultado.estado,
+                    danio_estructural=resultado.danio_estructural,
+                    descripcion=resultado.descripcion,
+                    detalle=resultado.detalle,
+                    modelo=resultado.modelo or "no_disponible",
+                    foto_id=foto_id,
+                    hash_sha256=hash_foto,
+                    tokens_prompt=resultado.tokens_prompt,
+                    tokens_completion=resultado.tokens_completion,
+                    segundos=resultado.segundos,
+                )
+            )
+        return tuple(evidencia)
+
+    @staticmethod
+    def _descripcion_de_fotos(evidencia: tuple[EvidenciaVision, ...]) -> str | None:
+        """La primera descripción utilizable, para el aviso de la tablet."""
+        for item in evidencia:
+            if item.estado == "ok" and item.descripcion.strip():
+                return item.descripcion.strip()
         return None
 
     def _iniciar_conversacion(
@@ -637,6 +733,8 @@ class ServicioParteVoz:
                 parte_id=parte_id,
                 ts=nota.ts,
                 fotos=len(datos.get("fotos_locales") or []),
+                fotos_locales=_rutas_de_fotos(datos),
+                fotos_urls=nota.fotos,
             )
 
     def _reenviar(self, conversacion: dict[str, Any]) -> None:
@@ -657,6 +755,8 @@ class ServicioParteVoz:
         parte_id,
         ts,
         fotos: int,
+        fotos_locales: list[Path | None] | None = None,
+        fotos_urls: list[str] | None = None,
     ) -> list[EventoSistema]:
         """Publica **un evento por equipo** del parte y lo deja registrado.
 
@@ -674,10 +774,18 @@ class ServicioParteVoz:
         fuentes = fuentes_tendencia_parte(filas, self._planta)
         for evento in eventos:
             fuente = fuentes.get(evento.equipo or "")
+            tendencia: TendenciaEvidencia | None = None
             if self._historiador is not None and fuente is not None:
                 variable, unidad = fuente
+                tendencia = self._historiador.consultar_tendencia(
+                    evento.equipo or "", variable, evento.ts, unidad=unidad
+                )
                 evento = self._historiador.enriquecer_evento(
-                    evento, evento.equipo or "", variable, unidad=unidad
+                    evento,
+                    evento.equipo or "",
+                    variable,
+                    unidad=unidad,
+                    tendencia=tendencia,
                 )
             self._repo.registrar_evento(evento, nota_id=nota_id)
             self._cliente.publicar_evento(evento)
@@ -685,7 +793,14 @@ class ServicioParteVoz:
                 # Un escalado abre una orden de trabajo: el análisis del manual
                 # dice qué falla es, qué tarea la resuelve y si la orden se
                 # puede aprobar sola.
-                self.generar_orden(evento, filas=filas)
+                self.generar_orden(
+                    evento,
+                    filas=filas,
+                    filas_confirmadas=filas,
+                    fotos_locales=fotos_locales,
+                    fotos_urls=fotos_urls,
+                    tendencias=[tendencia] if tendencia is not None else None,
+                )
         return eventos
 
     def generar_orden(
@@ -693,8 +808,13 @@ class ServicioParteVoz:
         evento: EventoSistema,
         *,
         filas: list[Hallazgo] | None = None,
+        filas_confirmadas: list[Hallazgo] | None = None,
         texto: str | None = None,
         seguridad: bool = False,
+        fotos_locales: list[Path | None] | None = None,
+        fotos_urls: list[str] | None = None,
+        evidencia_vision: tuple[EvidenciaVision, ...] | None = None,
+        tendencias: list[TendenciaEvidencia] | None = None,
     ) -> None:
         """Analiza el escalado y publica la orden que sale de ese análisis.
 
@@ -704,9 +824,18 @@ class ServicioParteVoz:
         if self._analisis is None:
             return
         try:
+            if evidencia_vision is None:
+                evidencia_vision = self._evaluar_fotos_dano(
+                    fotos_locales or [],
+                    fotos_urls,
+                )
             if seguridad:
                 analisis = self._analisis.analizar_alerta_seguridad(
-                    evento, texto=texto or evento.resumen
+                    evento,
+                    texto=texto or evento.resumen,
+                    fotos=list(fotos_urls or []),
+                    evidencia_vision=evidencia_vision,
+                    tendencias=tendencias,
                 )
             else:
                 # La evidencia es lo que motivó el escalado: las filas
@@ -714,7 +843,14 @@ class ServicioParteVoz:
                 anomalas = filas_anomalas(
                     filas or [], self._planta, evento.equipo or ""
                 )
-                analisis = self._analisis.analizar_evento(evento, filas=anomalas)
+                analisis = self._analisis.analizar_evento(
+                    evento,
+                    filas=anomalas,
+                    fotos=list(fotos_urls or []),
+                    evidencia_vision=evidencia_vision,
+                    filas_confirmadas=filas_confirmadas or filas,
+                    tendencias=tendencias,
+                )
         except Exception:  # noqa: BLE001 - el análisis no frena la planta
             logger.exception("Falló el análisis del evento %s", evento.id)
             return
@@ -857,6 +993,8 @@ class ServicioParteVoz:
                 parte_id=parte_id,
                 ts=respuesta.ts,
                 fotos=fotos,
+                fotos_locales=_rutas_de_fotos(datos),
+                fotos_urls=nota.fotos,
             )
             self._repo.marcar_conversacion(conversacion["nota_id"], "confirmada")
             logger.info(
@@ -940,6 +1078,14 @@ class ServicioParteVoz:
 def _tiene_lecturas(filas: list[Hallazgo]) -> bool:
     """¿El parte tiene alguna medición (no solo observaciones)?"""
     return any(fila.valor is not None for fila in filas)
+
+
+def _rutas_de_fotos(datos: dict[str, Any]) -> list[Path | None]:
+    """Las fotos locales guardadas en la conversación de la nota."""
+    rutas: list[Path | None] = []
+    for valor in datos.get("fotos_locales") or []:
+        rutas.append(Path(valor) if valor else None)
+    return rutas
 
 
 def _datos_base(

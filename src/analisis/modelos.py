@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
@@ -153,6 +154,53 @@ class Evaluacion:
 
 
 @dataclass(frozen=True)
+class EvidenciaVision:
+    """Lo que se pudo observar en una foto, sin convertirlo en decisión.
+
+    El modelo de visión no aprueba ni cambia una tarea. Su resultado sólo
+    puede **activar la revisión humana** cuando detecta daño estructural o
+    cuando no permite descartarlo. Una foto sin daño validado no fuerza la
+    revisión por sí sola.
+    """
+
+    foto_url: str | None
+    ruta_local: str | None
+    estado: Literal["ok", "indeterminado"]
+    danio_estructural: bool | None
+    descripcion: str
+    detalle: str
+    modelo: str
+    # Identidad y contenido de la foto. El hash es del binario local; si no
+    # se pudo descargar o hashear, el manifiesto lo marca como no disponible.
+    foto_id: str | None = None
+    hash_sha256: str | None = None
+    tokens_prompt: int = 0
+    tokens_completion: int = 0
+    segundos: float = 0.0
+
+    @property
+    def requiere_revision_humana(self) -> bool:
+        """¿Esta foto obliga a que una persona revise la orden?"""
+        return self.estado != "ok" or self.danio_estructural is True
+
+    @property
+    def texto(self) -> str:
+        """La evidencia legible que acompaña a la orden."""
+        identificador = self.foto_url or self.ruta_local or "sin identificar"
+        if self.estado == "ok":
+            resultado = (
+                "daño estructural detectado"
+                if self.danio_estructural
+                else "sin daño estructural visible"
+            )
+            detalle = self.descripcion or "ok"
+        else:
+            resultado = "no se pudo determinar si hay daño estructural"
+            detalle = self.detalle or "resultado indeterminado"
+        return f"Foto {identificador}: {resultado} ({detalle})"
+
+
+@dataclass(frozen=True)
 class Analisis:
     """Todo lo que se sabe de un escalado: falla, causas, orden y reglas."""
 
@@ -168,3 +216,11 @@ class Analisis:
     notas: tuple[str, ...] = field(default_factory=tuple)
     # Mediciones estructuradas de la evidencia (sin texto del operador).
     mediciones: tuple[Medicion, ...] = ()
+    # Resultado estructurado de la evidencia fotográfica. No decide el
+    # estado: sólo puede activar el gate de revisión humana.
+    evidencia_vision: tuple[EvidenciaVision, ...] = ()
+    # Snapshot de provenance: parte/filas, fotos, tendencia y fragmentos
+    # realmente consultados. Se escribe aparte, en un manifiesto inmutable.
+    evidencia: Any | None = None
+    contexto: Any | None = None
+    parte_id: str | None = None

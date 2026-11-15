@@ -5,17 +5,19 @@ la orden y el audio con lo que dijo. El sistema baja el audio, lo transcribe
 **local** (el mismo ASR de la planta, sin nube), entiende el texto y lo
 compara contra la orden aprobada.
 
-Con esa comparación decide, en código, el estado de la orden:
+La comparación produce evidencia técnica, pero el estado final lo decide una
+persona autenticada:
 
-* ``Ejecutada``: el trabajo se hizo. Se publica siempre.
-* ``Cerrada``: trabajo propio, con las diferencias a la vista.
-* ``Observada``: contratista con diferencias; vuelve a la contratista con el
-  motivo (CT-SVP-2025 §3.3).
-* ``Certificada``: contratista sin diferencias; se emite el habilita con el
-  monto que sale de la orden y de la lista de precios (§3.2).
+* ``Ejecutada``: el cierre técnico se registró y la orden espera revisión.
+* ``Cerrada``: el ``supervisor`` cerró trabajo propio.
+* ``Observada``: el ``inspector`` observó trabajo de contratista; vuelve con
+  el motivo y sin habilita (CT-SVP-2025 §3.3).
+* ``Certificada``: el ``inspector`` certificó trabajo de contratista; sólo
+  entonces se emite el habilita con el monto de la orden y de la lista de
+  precios (§3.2).
 
 El texto del técnico **no decide**: sólo se extraen datos de él. Las reglas
-están en código, igual que las de aprobación.
+de transición siguen en código y la identidad y el rol salen del token.
 """
 
 from __future__ import annotations
@@ -29,7 +31,17 @@ from typing import Any
 from planta_contrato import NotaCierre, OrdenSistema, Repuesto
 
 from analisis.catalogo import CatalogoManuales
-from analisis.cierre import comparar_cierre, decidir_cierre, monto_de_la_orden, parsear_cierre
+from analisis.cierre import (
+    comparar_cierre,
+    monto_de_la_orden,
+    parsear_cierre,
+    validar_decision_cierre,
+)
+from analisis.provenance import (
+    NO_DISPONIBLE,
+    hash_sha256_archivo,
+    identificador_foto,
+)
 from db.repositorio import Repositorio
 from planta.almacenamiento import Almacenamiento
 from planta.mqtt_listener import ClientePlanta
@@ -37,10 +49,6 @@ from planta.transcriber import Transcriber
 from tools.precios import ListaPrecios
 
 logger = logging.getLogger("planta.cierre")
-
-# El que certifica es el sistema aplicando las reglas del contrato. No es el
-# texto del técnico: el texto se usa para extraer datos, no para decidir.
-INSPECTOR = "PIA-3 (control de cierre)"
 
 # El personal propio no factura: su cierre lo cierra el supervisor, sin
 # habilita. El habilita es para el trabajo de la contratista (§3.4).
@@ -109,15 +117,16 @@ class ServicioCierre:
     # -------------------------------------------------------------- procesamiento
 
     def procesar_cierre(self, nota: NotaCierre) -> None:
-        """El cierre, de punta a punta: transcribe, compara, decide y publica.
+        """Prepara el cierre técnico y deja la orden esperando decisión humana.
 
-        La orden pasa a ``Ejecutada`` apenas llega el cierre y después se
-        publica el estado que corresponde al control (Cerrada, Observada o
-        Certificada).
+        El texto del técnico se transcribe y se compara contra la orden. La
+        comparación produce evidencia y diferencias, pero **no decide el
+        estado final**: la orden queda ``Ejecutada`` hasta que un supervisor o
+        un inspector revisen el cierre en la Central.
 
         Es idempotente: la misma nota de cierre que vuelve a llegar no se
-        procesa dos veces. Lo que sí hace es republicar el estado final de la
-        orden, para que la planta quede al día aunque el sistema se haya
+        procesa dos veces. Lo que sí hace es republicar el estado que tiene en
+        la base, para que la planta quede al día aunque el sistema se haya
         reiniciado entre guardar y publicar.
         """
         if self._repo.obtener_cierre(nota.id) is not None:
@@ -135,33 +144,15 @@ class ServicioCierre:
             return
 
         orden = _orden_desde_fila(fila, ESTADO_INICIAL)
-
-        # La orden pasa a **Ejecutada** en el momento en que llega el cierre:
-        # el técnico dijo que terminó. Se publica antes de transcribir para
-        # que la planta no quede esperando: la transcripción local puede
-        # tardar, y que el trabajo se hizo no depende de ella.
-        ejecutada = _orden_desde_fila(fila, "Ejecutada", motivo=None)
-        self._cliente.publicar_orden(ejecutada)
-
         texto = self._transcribir(nota)
         cierre = parsear_cierre(texto, orden, self._catalogo)
         comparacion = comparar_cierre(orden, cierre, self._catalogo)
-        decision = decidir_cierre(orden, comparacion, self._precios)
+        motivo = comparacion.resumen or None
+        fotos = self._fotos_de_cierre(nota)
 
-        monto = None
-        if decision.estado == "Certificada":
-            monto, detalle = monto_de_la_orden(orden, self._precios, horas=cierre.horas)
-            logger.info(
-                "Monto del habilita de %s: USD %s (%s)",
-                orden.id,
-                f"{monto:,.2f}",
-                "; ".join(detalle) or "sin ítem de contrato",
-            )
-
-        resultado = self._repo.registrar_cierre(
+        self._repo.registrar_cierre(
             cierre_id=nota.id,
             orden_id=orden.id,
-            estado=decision.estado,
             anio=orden.ts.year,
             tecnico=nota.tecnico,
             empresa=nota.empresa,
@@ -185,30 +176,151 @@ class ServicioCierre:
                 }
                 for diferencia in comparacion.diferencias
             ],
-            inspector=INSPECTOR,
-            decision=_decision_de_certificacion(decision.estado),
-            motivo=decision.motivo,
-            monto_usd=monto,
+            fotos=fotos,
+            motivo=motivo,
         )
 
-        # La orden se publica dos veces con el mismo id: primero como ejecutada
-        # (el trabajo se hizo) y después con el estado que corresponde al
-        # cierre. La planta ve la transición; el id sigue siendo idempotente.
-        final = _orden_desde_fila(
-            fila,
-            decision.estado,
-            motivo=decision.motivo,
+        ejecutada = _orden_desde_fila(fila, "Ejecutada", motivo=motivo)
+        self._cliente.publicar_orden(ejecutada)
+        rol = "supervisor" if (orden.ejecutor or "propio").lower() == "propio" else "inspector"
+        logger.info(
+            "Cierre %s de la orden %s preparado; espera decisión de %s%s",
+            nota.id,
+            orden.id,
+            rol,
+            f" · {motivo}" if motivo else "",
+        )
+
+    def decidir_cierre(
+        self,
+        orden_id: str,
+        decision: str,
+        *,
+        actor: str,
+        rol: str,
+        motivo: str | None = None,
+    ) -> dict[str, Any]:
+        """Aplica la decisión humana de G2/G3 sobre un cierre ya preparado.
+
+        El servidor ya autenticó al actor y comprobó su rol. Acá se vuelve a
+        validar la transición contra el ejecutor de la orden y se calcula el
+        monto del habilita a partir de la orden y la lista de precios.
+        """
+        fila = self._repo.obtener_orden_completa(orden_id)
+        if fila is None:
+            return {"ok": False, "error": "La orden no existe", "codigo": 404}
+        cierre = self._repo.obtener_cierre_de_orden(orden_id)
+        if cierre is None:
+            return {"ok": False, "error": "La orden no tiene un cierre registrado", "codigo": 409}
+        orden = _orden_desde_fila(fila, "Ejecutada")
+        try:
+            transicion = validar_decision_cierre(
+                decision=decision,
+                rol=rol,
+                ejecutor=orden.ejecutor or "propio",
+                motivo=motivo,
+            )
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc), "codigo": 400}
+
+        monto: float | None = None
+        if transicion.estado == "Certificada":
+            monto, detalle = monto_de_la_orden(
+                orden,
+                self._precios,
+                horas=float(cierre["horas"]) if cierre.get("horas") is not None else None,
+            )
+            logger.info(
+                "Monto del habilita de %s: USD %s (%s)",
+                orden.id,
+                f"{monto:,.2f}",
+                "; ".join(detalle) or "sin ítem de contrato",
+            )
+
+        try:
+            resultado = self._repo.decidir_cierre_humano(
+                orden_id=orden.id,
+                decision=transicion.decision,
+                actor=actor,
+                rol=transicion.rol,
+                motivo=motivo,
+                monto_usd=monto,
+                fuente_monto="CT-SVP-2025 §2.1",
+            )
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc), "codigo": 400}
+
+        orden_final = resultado.get("orden") or self._repo.obtener_orden_completa(orden.id)
+        if orden_final is None:
+            return {"ok": False, "error": "La orden ya no existe", "codigo": 404}
+        decision_registrada = resultado.get("decision") or {}
+        if "estado_orden" in decision_registrada:
+            estado_final = str(decision_registrada["estado_orden"])
+            motivo_final = decision_registrada.get("motivo")
+        else:
+            estado_final = transicion.estado
+            motivo_final = motivo
+        publicada = _orden_desde_fila(
+            orden_final,
+            estado_final,
+            motivo=motivo_final,
             habilita=resultado.get("habilita"),
             monto=resultado.get("monto_habilita_usd"),
         )
-        self._cliente.publicar_orden(final)
+        self._cliente.publicar_orden(publicada)
         logger.info(
-            "Cierre %s de la orden %s: %s%s",
-            nota.id,
+            "Cierre humano de %s: %s (%s, %s)",
             orden.id,
-            decision.estado,
-            f" · {decision.motivo}" if decision.motivo else "",
+            transicion.estado,
+            actor,
+            transicion.rol,
         )
+        return {
+            "ok": True,
+            "orden": orden_final,
+            "decision": resultado.get("decision"),
+            "habilita": resultado.get("habilita"),
+            "monto_habilita_usd": resultado.get("monto_habilita_usd"),
+        }
+
+    def _fotos_de_cierre(self, nota: NotaCierre) -> list[dict[str, Any]]:
+        """Descarga e identifica las fotos que respaldan el cierre.
+
+        El cierre no usa visión para decidir.  Las fotos nevertheless quedan
+        identificadas por URL y hash para que quien certifique pueda volver
+        al binario exacto.
+        """
+        urls = list(nota.fotos or [])
+        if not urls:
+            return []
+        guardar = getattr(self._almacen, "guardar_fotos", None)
+        if callable(guardar):
+            locales = guardar(nota.id, urls)
+        else:
+            locales = [None] * len(urls)
+        fotos: list[dict[str, Any]] = []
+        for indice, url in enumerate(urls):
+            local = locales[indice] if indice < len(locales) else None
+            hash_foto = hash_sha256_archivo(local) if local is not None else None
+            fotos.append(
+                {
+                    "id": identificador_foto(url, str(local) if local else None, hash_foto),
+                    "url": url,
+                    "ruta_local": str(local) if local else NO_DISPONIBLE,
+                    "hash_sha256": hash_foto or NO_DISPONIBLE,
+                    "vision": {
+                        "estado": NO_DISPONIBLE,
+                        "danio_estructural": NO_DISPONIBLE,
+                        "descripcion": NO_DISPONIBLE,
+                        "detalle": NO_DISPONIBLE,
+                        "modelo": NO_DISPONIBLE,
+                        "tokens_prompt": 0,
+                        "tokens_completion": 0,
+                        "segundos": 0.0,
+                    },
+                }
+            )
+        return fotos
 
     def _transcribir(self, nota: NotaCierre) -> str:
         """Baja el audio del cierre y lo transcribe localmente."""
@@ -239,19 +351,6 @@ class ServicioCierre:
 
 
 # --------------------------------------------------------------------- helpers
-
-
-def _decision_de_certificacion(estado: str) -> str | None:
-    """La decisión que queda en la bitácora de certificación.
-
-    El trabajo propio no se certifica: lo cierra el supervisor. La
-    contratista se certifica u se observa (CT-SVP-2025 §3.3).
-    """
-    if estado == "Certificada":
-        return "certifica"
-    if estado == "Observada":
-        return "observa"
-    return None
 
 
 def _orden_desde_fila(

@@ -104,7 +104,12 @@ def test_aprobar_una_orden_pendiente_cambia_su_estado(repositorio, engine) -> No
     try:
         repositorio.guardar_orden(orden, reglas={"cumple": False}, costo_usd=420)
 
-        fila = repositorio.decidir_orden(orden.id, "Aprobada", usuario="planificador")
+        fila = repositorio.decidir_orden(
+            orden.id,
+            "Aprobada",
+            usuario="ana",
+            rol="planificador",
+        )
 
         assert fila is not None
         assert fila["estado"] == "Aprobada"
@@ -120,7 +125,13 @@ def test_rechazar_una_orden_pendiente_deja_el_motivo(repositorio, engine) -> Non
     try:
         repositorio.guardar_orden(orden, reglas={"cumple": False})
 
-        fila = repositorio.decidir_orden(orden.id, "Rechazada", motivo="falta el repuesto")
+        fila = repositorio.decidir_orden(
+            orden.id,
+            "Rechazada",
+            motivo="falta el repuesto",
+            usuario="ana",
+            rol="planificador",
+        )
 
         assert fila is not None
         assert fila["estado"] == "Rechazada"
@@ -184,12 +195,17 @@ def test_la_decision_queda_escrita_con_su_usuario(repositorio, engine) -> None:
     orden = _orden(evento_id)
     try:
         repositorio.guardar_orden(orden, reglas={"cumple": False, "reglas": []})
-        repositorio.decidir_orden(orden.id, "Aprobada", usuario="juan")
+        repositorio.decidir_orden(
+            orden.id,
+            "Aprobada",
+            usuario="juan",
+            rol="planificador",
+        )
 
         with engine.connect() as conexion:
             filas = conexion.execute(
                 text(
-                    "SELECT decision, usuario, reglas_evaluadas FROM aprobacion "
+                    "SELECT decision, usuario, rol, reglas_evaluadas FROM aprobacion "
                     "WHERE orden_id = :id ORDER BY creada_en"
                 ),
                 {"id": orden.id},
@@ -198,7 +214,10 @@ def test_la_decision_queda_escrita_con_su_usuario(repositorio, engine) -> None:
         assert "Aprobada" in decisiones
         # La fila de las reglas se conserva: la decisión del planificador no
         # borra la evaluación que la dejó pendiente.
-        assert any(fila["usuario"] == "juan" for fila in filas)
+        assert any(
+            fila["usuario"] == "juan" and fila["rol"] == "planificador"
+            for fila in filas
+        )
         assert any(fila["reglas_evaluadas"] for fila in filas)
     finally:
         _limpiar(engine, [orden.id], evento_id)

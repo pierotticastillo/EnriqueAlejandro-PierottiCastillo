@@ -187,14 +187,12 @@ class Comparacion:
 
 
 @dataclass(frozen=True)
-class Decision:
-    """Qué se decide con el cierre y por qué."""
+class DecisionCierreHumano:
+    """La transición final de G2/G3, después de la revisión de una persona."""
 
+    decision: str
     estado: str
-    motivo: str | None = None
-    habilita: str | None = None
-    monto_habilita_usd: float | None = None
-    diferencias: tuple[Diferencia, ...] = ()
+    rol: str
 
 
 # ------------------------------------------------------------------ parseo
@@ -836,38 +834,54 @@ def monto_de_la_orden(
     return round(total, 2), detalle
 
 
-def decidir_cierre(
-    orden: OrdenSistema,
-    comparacion: Comparacion,
-    precios: ListaPrecios,
+def validar_decision_cierre(
     *,
-    habilita: str | None = None,
-    monto_usd: float | None = None,
-) -> Decision:
-    """El estado que corresponde al cierre, con su motivo.
+    decision: str,
+    rol: str,
+    ejecutor: str,
+    motivo: str | None = None,
+) -> DecisionCierreHumano:
+    """Valida la transición humana de G2/G3 y devuelve su estado final.
 
-    * Trabajo propio → ``Cerrada``, con las diferencias a la vista.
-    * Contratista con diferencias sustantivas → ``Observada`` con el motivo:
-      vuelve a la contratista para que aclare (CT-SVP-2025 §3.3).
-    * Contratista sin diferencias → ``Certificada`` con el habilita y el monto.
+    La comparación automática puede preparar una recomendación, pero **no**
+    decide el estado final. La persona responsable decide:
+
+    * el ``supervisor`` cierra trabajo propio;
+    * el ``inspector`` certifica u observa trabajo de contratista;
+    * observar exige un motivo escrito.
+
+    La función no consulta al LLM ni interpreta texto libre: sólo valida la
+    transición, el actor y el rol que ya autenticó el servidor.
     """
-    ejecutor = (orden.ejecutor or "propio").strip().lower()
-    if ejecutor == "propio":
-        return Decision(
+    accion = str(decision or "").strip().lower()
+    rol_normalizado = str(rol or "").strip().lower()
+    ejecutor_normalizado = str(ejecutor or "propio").strip().lower()
+    motivo_normalizado = str(motivo or "").strip() or None
+
+    if accion == "cerrar":
+        if rol_normalizado != "supervisor":
+            raise ValueError("Sólo el supervisor puede cerrar el trabajo")
+        if ejecutor_normalizado != "propio":
+            raise ValueError("El supervisor sólo puede cerrar trabajo propio")
+        return DecisionCierreHumano(
+            decision="cerrar",
             estado="Cerrada",
-            motivo=comparacion.resumen or None,
-            diferencias=comparacion.diferencias,
+            rol="supervisor",
         )
-    if comparacion.sustantivas:
-        return Decision(
-            estado="Observada",
-            motivo=comparacion.resumen,
-            diferencias=comparacion.diferencias,
+
+    if accion in {"certificar", "observar"}:
+        if rol_normalizado != "inspector":
+            raise ValueError("Sólo el inspector puede certificar u observar")
+        if ejecutor_normalizado == "propio":
+            raise ValueError(
+                "El inspector sólo puede certificar u observar trabajo de contratista"
+            )
+        if accion == "observar" and not motivo_normalizado:
+            raise ValueError("La observación necesita un motivo")
+        return DecisionCierreHumano(
+            decision=accion,
+            estado="Certificada" if accion == "certificar" else "Observada",
+            rol="inspector",
         )
-    return Decision(
-        estado="Certificada",
-        motivo=comparacion.resumen or None,
-        habilita=habilita,
-        monto_habilita_usd=monto_usd,
-        diferencias=comparacion.diferencias,
-    )
+
+    raise ValueError(f"Decisión de cierre inválida: {decision!r}")

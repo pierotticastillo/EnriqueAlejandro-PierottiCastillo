@@ -87,18 +87,56 @@ class RepositorioFalso:
 
     def registrar_cierre(self, **datos: Any) -> dict[str, Any]:
         self.cierres[datos["cierre_id"]] = dict(datos)
-        # Como en la base real: el cierre deja la orden en su estado nuevo.
-        self.orden["estado"] = datos["estado"]
-        self.orden["motivo"] = datos["motivo"]
-        habilita = None
-        monto = None
-        if datos.get("decision") == "certifica" and datos.get("monto_usd") is not None:
-            habilita = f"HAB-{datos['anio']}-{len(self.registros) + 1:04d}"
-            monto = datos["monto_usd"]
-        self.registros.append(dict(datos) | {"habilita": habilita, "monto": monto})
+        # Como en la base real: el cierre técnico deja la orden ejecutada y
+        # espera la decisión humana de G2/G3.
+        self.orden["estado"] = "Ejecutada"
+        self.orden["motivo"] = datos.get("motivo")
+        self.registros.append(dict(datos))
         return {
             "cierre_id": datos["cierre_id"],
             "nuevo": True,
+            "habilita": None,
+            "monto_habilita_usd": None,
+        }
+
+    def obtener_cierre_de_orden(self, orden_id: str) -> dict[str, Any] | None:
+        return next(
+            (
+                cierre
+                for cierre in self.cierres.values()
+                if cierre["orden_id"] == orden_id
+            ),
+            None,
+        )
+
+    def decidir_cierre_humano(self, **datos: Any) -> dict[str, Any]:
+        estado = {
+            "cerrar": "Cerrada",
+            "certificar": "Certificada",
+            "observar": "Observada",
+        }[datos["decision"]]
+        habilita = None
+        monto = None
+        if estado == "Certificada":
+            certificaciones = sum(
+                1 for registro in self.registros if registro.get("decision") == "certificar"
+            )
+            habilita = f"HAB-{self.orden['creada_en'].year}-{certificaciones + 1:04d}"
+            monto = datos.get("monto_usd")
+        self.orden["estado"] = estado
+        self.orden["motivo"] = datos.get("motivo")
+        self.registros.append(
+            dict(datos) | {"estado": estado, "habilita": habilita, "monto": monto}
+        )
+        return {
+            "decision": {
+                "decision": datos["decision"],
+                "estado_orden": estado,
+                "actor": datos["actor"],
+                "rol": datos["rol"],
+                "motivo": datos.get("motivo"),
+            },
+            "orden": dict(self.orden),
             "habilita": habilita,
             "monto_habilita_usd": monto,
         }
@@ -185,7 +223,9 @@ def _servicio(
 # ------------------------------------------------------------------- los tests
 
 
-def test_el_cierre_propio_deja_la_orden_cerrada(catalogo, precios) -> None:
+def test_el_cierre_propio_deja_la_orden_esperando_al_supervisor(
+    catalogo, precios
+) -> None:
     repositorio = RepositorioFalso(_fila_orden())
     cliente = ClienteFalso()
     servicio, _ = _servicio(repositorio, cliente, catalogo, precios)
@@ -193,7 +233,8 @@ def test_el_cierre_propio_deja_la_orden_cerrada(catalogo, precios) -> None:
     servicio.procesar_cierre(_nota())
 
     estados = [orden.estado.value for orden in cliente.ordenes]
-    assert estados == ["Ejecutada", "Cerrada"]
+    assert estados == ["Ejecutada"]
+    assert repositorio.orden["estado"] == "Ejecutada"
     assert cliente.ordenes[-1].habilita is None
     assert cliente.ordenes[-1].monto_habilita_usd is None
 
@@ -223,12 +264,14 @@ def test_el_cierre_queda_escrito_con_sus_diferencias(catalogo, precios) -> None:
     assert registro["tareas_hechas"] == ["T-F-CAR"]
     assert registro["repuestos_usados"][0]["codigo"] == "FC-CART-25"
     assert registro["horas"] == pytest.approx(3.2)
-    assert registro["estado"] == "Cerrada"
-    # El trabajo propio no se certifica: lo cierra el supervisor.
-    assert registro["decision"] is None
+    # El sistema no certifica ni cierra: deja la decisión al supervisor.
+    assert repositorio.orden["estado"] == "Ejecutada"
+    assert "decision" not in registro
 
 
-def test_la_contratista_con_diferencias_queda_observada(catalogo, precios) -> None:
+def test_la_contratista_con_diferencias_queda_esperando_al_inspector(
+    catalogo, precios
+) -> None:
     repositorio = RepositorioFalso(
         _fila_orden(tareas=["T-B-ROD"], repuestos=[], ejecutor="Servipat")
     )
@@ -242,13 +285,13 @@ def test_la_contratista_con_diferencias_queda_observada(catalogo, precios) -> No
     servicio.procesar_cierre(_nota(empresa="Servipat", id="CIERRE-2"))
 
     estados = [orden.estado.value for orden in cliente.ordenes]
-    assert estados == ["Ejecutada", "Observada"]
+    assert estados == ["Ejecutada"]
     assert cliente.ordenes[-1].motivo
     assert cliente.ordenes[-1].habilita is None
-    assert repositorio.registros[0]["decision"] == "observa"
+    assert repositorio.registros[0]["diferencias"][0]["tipo"] == "repuesto_extra"
 
 
-def test_la_contratista_sin_diferencias_queda_certificada_con_habilita(
+def test_la_contratista_sin_diferencias_se_certifica_con_habilita_humano(
     catalogo, precios
 ) -> None:
     repositorio = RepositorioFalso(
@@ -262,12 +305,23 @@ def test_la_contratista_sin_diferencias_queda_certificada_con_habilita(
     servicio, _ = _servicio(repositorio, cliente, catalogo, precios, texto=texto)
 
     servicio.procesar_cierre(_nota(empresa="Servipat", id="CIERRE-3"))
+    assert cliente.ordenes[-1].estado.value == "Ejecutada"
+    assert cliente.ordenes[-1].habilita is None
 
+    resultado = servicio.decidir_cierre(
+        "ORD-F-201A-FC-T01",
+        "certificar",
+        actor="marta",
+        rol="inspector",
+    )
+
+    assert resultado["ok"] is True
     estados = [orden.estado.value for orden in cliente.ordenes]
     assert estados == ["Ejecutada", "Certificada"]
     assert cliente.ordenes[-1].habilita == "HAB-2026-0001"
     assert cliente.ordenes[-1].monto_habilita_usd == 1150.0
-    assert repositorio.registros[0]["decision"] == "certifica"
+    assert repositorio.registros[-1]["actor"] == "marta"
+    assert repositorio.registros[-1]["rol"] == "inspector"
 
 
 def test_el_monto_no_sale_de_lo_que_declara_el_cierre(catalogo, precios) -> None:
@@ -284,6 +338,12 @@ def test_el_monto_no_sale_de_lo_que_declara_el_cierre(catalogo, precios) -> None
     servicio, _ = _servicio(repositorio, cliente, catalogo, precios, texto=texto)
 
     servicio.procesar_cierre(_nota(empresa="Servipat", id="CIERRE-4"))
+    servicio.decidir_cierre(
+        "ORD-F-201A-FC-T01",
+        "certificar",
+        actor="marta",
+        rol="inspector",
+    )
 
     assert cliente.ordenes[-1].monto_habilita_usd == 1150.0
 
@@ -301,8 +361,7 @@ def test_el_cierre_que_vuelve_no_se_procesa_dos_veces(catalogo, precios) -> None
     assert len(repositorio.registros) == 1
     assert [orden.estado.value for orden in cliente.ordenes] == [
         "Ejecutada",
-        "Cerrada",
-        "Cerrada",
+        "Ejecutada",
     ]
 
 
@@ -328,4 +387,4 @@ def test_un_cierre_sin_audio_no_tumba_la_planta(catalogo, precios) -> None:
     # se ve, pero el cierre se registra igual.
     assert len(repositorio.registros) == 1
     assert repositorio.registros[0]["transcripcion"] == ""
-    assert [orden.estado.value for orden in cliente.ordenes] == ["Ejecutada", "Cerrada"]
+    assert [orden.estado.value for orden in cliente.ordenes] == ["Ejecutada"]

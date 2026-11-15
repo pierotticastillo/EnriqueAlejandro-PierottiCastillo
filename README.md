@@ -35,21 +35,26 @@ de órdenes.
       duplicar lo pendiente, con `pendientes_sincronizar` visible en el
       latido.
 - [x] Fase 7 — cierre y certificación: el cierre por voz se transcribe con el
-      ASR local (con el vocabulario de la planta), se **compara contra la
-      orden** (tareas, repuestos y horas) y sale el estado: `Cerrada` para el
-      trabajo propio, `Observada` para la contratista con diferencias
-      sustantivas (vuelve con el motivo) y `Certificada` con el habilita
-      `HAB-AAAA-NNNN` y el monto tomado de la orden y de la lista de precios
-      del contrato.
+      ASR local (con el vocabulario de la planta) y se **compara contra la
+      orden** (tareas, repuestos y horas) para preparar evidencia. La decisión
+      final es humana y autenticada: el supervisor cierra trabajo propio y el
+      inspector certifica u observa trabajo de contratista; sólo la
+      certificación emite el habilita `HAB-AAAA-NNNN` con el monto tomado de
+      la orden y de la lista de precios del contrato.
 - [x] Núcleo de agentes (LangChain) — el agente consulta las mismas ocho
       tools del MCP (esquema Pydantic estricto) y **propone** con citas; la
       decisión sigue en código. Corre en el hilo de redacción, así que no
       agrega latencia al camino crítico.
 - [x] Registro de la trayectoria — una fila por paso con el modelo, las tools
       y sus argumentos, los tokens, el costo y el tiempo (`registro_trayectoria`).
-- [x] Central de mantenimiento — el canal de decisión del planificador para las
-      órdenes pendientes (pantalla + API JSON). No es una tool: el agente no
-      puede aprobar nada.
+- [x] Evidencia inmutable y provenance — manifiesto canónico por orden,
+      cierre y decisión; ledger append-only desde el evento hasta el estado
+      final; reconstrucción autenticada desde la Central.
+- [x] Central de mantenimiento — canal de decisión humana autenticada por
+      token Bearer y RBAC (`planificador`, `supervisor`, `inspector`,
+      `lectura`). El planificador decide órdenes pendientes; el supervisor
+      cierra trabajo propio; el inspector certifica u observa trabajo de
+      contratista. No es una tool: el agente no puede aprobar nada.
 - [x] Presupuesto y condiciones de corte — pasos, tokens y **timeout global
       por nota**; el corte queda escrito en la bitácora
       ([`docs/spec-parte.md`](docs/spec-parte.md)).
@@ -92,9 +97,9 @@ docker compose up -d --build
 - `sistema` se conecta a `broker:1883` y `sim:8100` dentro de `planta-lan`.
 - `mcp` publica el servidor MCP en `localhost:${MCP_PORT:-58000}/mcp`
   (streamable-http) y lee la API de la planta desde `planta-lan`.
-- `sistema` publica la **Central de mantenimiento** en
-  `localhost:${CENTRAL_PUERTO:-8200}`: ahí el planificador aprueba o rechaza
-  las órdenes pendientes.
+- `sistema` publica la **Central de mantenimiento** únicamente en
+  `127.0.0.1:${CENTRAL_PUERTO:-8200}`. Sus APIs requieren un token Bearer
+  configurado en `CENTRAL_CREDENCIALES`; sin credenciales responden 401.
 - La build descarga el modelo ASR local en `/modelos`; el contenedor arranca
   con `ASR_LOCAL_ONLY=true` y no necesita internet para transcribir.
 - El volumen `datos` guarda audios y fotos en `/datos/notas/<nota>/`.
@@ -238,6 +243,15 @@ envía un borrador seguro y no se genera error.
 - `migrations/versions/0005_outbox_topico.py`: la cola sabe a qué tópico va
   cada mensaje, y el índice único pasa a ser **parcial** (`WHERE estado =
   'pendiente'`).
+- `migrations/versions/0006_cierre_fase7.py`: cierre técnico, comparación con
+  la orden, certificación e habilita.
+- `migrations/versions/0007_registro_trayectoria.py`: modelo, tools,
+  argumentos, tokens, costo y tiempo de cada paso.
+- `migrations/versions/0008_identidad_y_cierre_humano.py`: roles de la Central
+  y decisión humana de cierre con actor, rol, motivo, evidencia y fecha.
+- `migrations/versions/0009_manifiesto_evidencia_ledger.py`: manifiesto
+  inmutable con hash SHA-256, ledger append-only, triggers de PostgreSQL y
+  backfill histórico.
 
 ```bash
 # aplicar migraciones manualmente (el puerto es el de POSTGRES_PORT del .env)
@@ -578,31 +592,99 @@ El costo **sale de los tokens medidos**: la tarifa del modelo
 (`PRECIO_USD_POR_MILLON`, 0 con el modelo local de la planta) se aplica a los
 tokens de entrada y de salida de cada llamada.
 
-## Central de mantenimiento (la decisión del planificador)
+## Central de mantenimiento (decisiones humanas autenticadas)
 
-El enunciado (sección D) pide que la orden pendiente *"se reanuda cuando el
-planificador la aprueba o la rechaza"*. Persistir y sobrevivir al corte ya
-estaba hecho; lo que faltaba era **el canal de la decisión**.
+La Central (`src/planta/central.py`, puerto 8200) es el canal de decisión
+humana. El shell HTML puede cargarse sin credenciales, pero **toda API está
+protegida** con un token Bearer opaco, uno por persona:
 
-La Central (`src/planta/central.py`, puerto 8200) es ese canal:
-
-- `GET /` — una pantalla con las órdenes, sus tareas, sus repuestos y dos
-  botones (aprobar / rechazar). Se refresca cada 20 s.
-- `GET /api/ordenes` — las mismas órdenes en JSON.
+- `GET /api/sesion` — usuario y rol resueltos por el token.
+- `GET /api/ordenes` — órdenes con tareas, repuestos y estado.
+- `GET /api/cierres` — cierres técnicos pendientes y decisiones tomadas.
+- `GET /api/ordenes/<id>/evidencia` — manifiesto, ledger, trayectoria e
+  integridad de una orden; `/reconstruccion` es su alias.
 - `POST /api/ordenes/<id>/decision` — `{"decision": "aprobar" | "rechazar",
-  "motivo": "...", "usuario": "..."}`.
+  "motivo": "..."}` para el rol `planificador`.
+- `POST /api/cierres/<id>/decision` — `{"decision": "cerrar" | "certificar" |
+  "observar", "motivo": "..."}` para `supervisor` o `inspector` según el
+  ejecutor de la orden.
+
+La identidad sale **exclusivamente del token**. Los campos legacy `usuario` y
+`rol` del cuerpo se ignoran; cualquier otro campo desconocido se rechaza.
+Un token ausente o inválido produce 401 y una operación fuera del rol produce
+403. El navegador conserva el token sólo en `sessionStorage` y lo envía en
+`Authorization`; no usa cookies, por lo que este camino no introduce CSRF
+clásico.
+
+Los roles son:
+
+| Rol | Puede hacer |
+|-----|-------------|
+| `planificador` | aprobar o rechazar órdenes pendientes |
+| `supervisor` | cerrar trabajo propio |
+| `inspector` | certificar u observar trabajo de contratista |
+| `lectura` | consultar la Central, sin decidir |
 
 Reglas de la decisión:
 
 - Sólo se pueden decidir órdenes **`Pendiente de aprobacion`**: una orden ya
   decidida no se toca.
-- **Rechazar exige motivo.**
-- La decisión queda en la tabla `aprobacion` con su usuario, y en el registro
-  de la trayectoria.
+- **Rechazar exige motivo** y **observar un cierre exige motivo**.
+- La decisión de una orden queda en `aprobacion` con usuario y rol; la
+  decisión de un cierre queda en `decision_cierre` con actor, rol, motivo,
+  evidencia y fecha.
 - La orden se vuelve a publicar por MQTT con el estado nuevo y el mismo id.
+- Sin `CENTRAL_CREDENCIALES` no hay acceso: no existe un token de desarrollo
+  por defecto.
 
 La Central se levanta con el sistema (`CENTRAL_ACTIVO`, `CENTRAL_PUERTO`) y
 **no es una tool**: el agente no puede llegar a ella.
+
+## Manifiesto inmutable y ledger de decisiones
+
+La evidencia que sostiene una orden ya no depende de
+`aprobacion.reglas_evaluadas`, que es un JSON mutable. La migración `0009`
+separa dos registros:
+
+| Tabla | Qué conserva |
+|-------|--------------|
+| `manifiesto_evidencia` | una fotografía inmutable de la evidencia usada por una orden, un cierre o una decisión humana |
+| `ledger_decisiones` | la cadena append-only que permite reconstruir el recorrido de la orden |
+
+El manifiesto de una orden registra explícitamente:
+
+- el **parte** y sus filas confirmadas;
+- las **fotos** con id estable, URL, ruta local, SHA-256, salida de visión,
+  veredicto de daño y modelo;
+- la **tendencia** con equipo, variable, unidad, ventana, fuente, muestras,
+  mínimo, máximo, promedio y dirección;
+- los **fragmentos consultados** y sus citas, con documento, sección y texto.
+
+Cada bloque dice si está `disponible`, `parcial` o `no_disponible`; una lista
+vacía nunca se confunde con un dato que no existe. El hash es SHA-256 de la
+representación JSONB canónica de PostgreSQL y un constraint impide que no
+coincida con el contenido. Si una orden se reprocesa, se conserva la primera
+versión: el manifiesto no se actualiza.
+
+El ledger encadena nueve tipos: `evento`, `evidencia`, `analisis`, `propuesta`,
+`reglas`, `aprobacion`, `cierre`, `decision_cierre` y `trayectoria`. Cada
+entrada puede llevar actor, rol, estado, modelo, herramientas, tokens, costo
+y tiempo; la escritura de la orden, su manifiesto y las primeras entradas del
+ledger es **transaccional**. Las reglas siguen evaluándose en código: el
+modelo describe la foto o redacta, pero no cambia tareas, repuestos, costos ni
+aprueba órdenes.
+
+Ambas tablas bloquean `UPDATE` y `DELETE` mediante triggers de PostgreSQL y
+no tienen claves foráneas hacia las tablas operativas: la evidencia de una
+decisión sobrevive aunque se elimine el padre. La migración incluye un
+backfill que marca con `no_disponible` lo que el esquema anterior no guardaba,
+sin inventar datos.
+
+La reconstrucción se consulta en la Central mediante
+`GET /api/ordenes/<id>/evidencia` (alias `/reconstruccion`). Es una API
+protegida: cualquier rol autenticado puede consultarla y la respuesta incluye
+los manifiestos con `hash_verificado`, el ledger, la trayectoria y el resumen
+de integridad.
 
 ## Cola de salida y operación sin enlace (Fase 6)
 
@@ -641,15 +723,17 @@ mandar.
 ## Cierre de órdenes y certificación (Fase 7)
 
 La planta publica el cierre de una orden en `planta/cierres` (la voz del
-técnico). El sistema lo transcribe con el ASR local, lo **compara contra la
-orden** y decide el estado:
+técnico). El sistema lo transcribe con el ASR local y lo **compara contra la
+orden** para preparar evidencia. La comparación **no decide el estado
+final**: la orden queda `Ejecutada` hasta que una persona autenticada revisa
+el cierre en la Central.
 
-| Estado | Quién | Qué pasa |
-|--------|-------|----------|
-| `Ejecutada` | cualquiera | La orden pasa a ejecutada en el momento en que llega el cierre, **antes** de transcribir. |
-| `Cerrada` | trabajo propio | El sistema cierra la orden. Lo cierra el supervisor: el trabajo propio **no se certifica**. |
-| `Observada` | contratista | Hay diferencias **sustantivas** (tareas o repuestos): la orden vuelve a la contratista con el motivo y **sin habilita**. |
-| `Certificada` | contratista | El cierre coincide con la orden: se emite el habilita `HAB-AAAA-NNNN` con el monto. |
+| Estado | Quién decide | Qué pasa |
+|--------|--------------|----------|
+| `Ejecutada` | sistema | El cierre técnico quedó registrado; la orden espera revisión humana. |
+| `Cerrada` | `supervisor` | Cierra trabajo propio. El trabajo propio **no se certifica** ni genera habilita. |
+| `Observada` | `inspector` | Observa trabajo de contratista; exige motivo y **no genera habilita**. |
+| `Certificada` | `inspector` | Certifica trabajo de contratista; sólo entonces se emite el habilita `HAB-AAAA-NNNN` con el monto. |
 
 - **El texto no inventa nada.** Se entienden las tareas, los repuestos (con su
   cantidad), las horas y la prueba final. Lo que no se entiende queda sin
@@ -666,8 +750,9 @@ orden** y decide el estado:
   780, SVP-03 `I-VIB` USD 320. Los repuestos del operador no integran el
   precio (§1.4).
 - **Idempotente y atómico**: el cierre se identifica por su id externo
-  (restricción única) y el estado de la orden, la certificación y el habilita
-  se escriben en la misma transacción.
+  (restricción única). La decisión humana, su evidencia y el estado de la
+  orden se escriben en una transacción; la certificación y el habilita se
+  escriben en esa misma transacción cuando corresponde.
 
 ## Qué corre en la planta y qué en la nube
 
@@ -724,7 +809,8 @@ Las principales están documentadas en `.env.example`:
 | `AGENTE_ESPERA_REINTENTO_S` | `15` | espera entre intento e intento (el reintento respeta el presupuesto) |
 | `NOTA_TIMEOUT_S` | `180` | **timeout global por nota**: desde que entra hasta que sale el parte |
 | `CENTRAL_ACTIVO` | `true` | levanta la Central de mantenimiento |
-| `CENTRAL_HOST` / `CENTRAL_PUERTO` | `0.0.0.0` / `8200` | escucha de la Central |
+| `CENTRAL_HOST` / `CENTRAL_PUERTO` | `127.0.0.1` / `8200` en ejecución nativa | escucha de la Central; Docker usa `0.0.0.0` dentro del contenedor y publica sólo en loopback |
+| `CENTRAL_CREDENCIALES` | `[]` | lista JSON de tokens, usuarios y roles; sin ella las APIs devuelven 401 |
 | `NVIDIA_API_KEY` | (vacío) | clave del modelo de nube con visión; **va en el `.env` local**, que Git ignora |
 | `NVIDIA_MODELO` | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | modelo de visión (el de la lista cerrada; si no coincide, no se llama a la nube) |
 | `NVIDIA_URL` | `https://integrate.api.nvidia.com/v1` | API de NVIDIA (la llamada sale por el proxy del enlace) |
@@ -773,7 +859,9 @@ Las principales están documentadas en `.env.example`:
 │       ├── 0004_rag_pgvector.py
 │       ├── 0005_outbox_topico.py
 │       ├── 0006_cierre_fase7.py
-│       └── 0007_registro_trayectoria.py
+│       ├── 0007_registro_trayectoria.py
+│       ├── 0008_identidad_y_cierre_humano.py
+│       └── 0009_manifiesto_evidencia_ledger.py
 ├── scripts/
 │   ├── analizar_borradores.py
 │   ├── analizar_corrida.py
@@ -807,6 +895,7 @@ Las principales están documentadas en `.env.example`:
 │   │   ├── llm.py
 │   │   ├── modelos.py
 │   │   ├── orden.py
+│   │   ├── provenance.py
 │   │   ├── redaccion.py
 │   │   ├── servicio.py
 │   │   ├── sintomas.py
@@ -850,6 +939,7 @@ Las principales están documentadas en `.env.example`:
 │       ├── cola.py
 │       ├── heartbeat.py
 │       ├── historial.py
+│       ├── identidad.py
 │       ├── main.py
 │       ├── mqtt_listener.py
 │       ├── nombre_resolver.py
@@ -872,10 +962,11 @@ python -m venv .venv
 .venv/Scripts/python -m ruff check src tests migrations
 ```
 
-Resultado actual: **533 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
-PostgreSQL del compose (las 533 pasan). Sin base quedan **496 passed, 37
+Resultado actual: **577 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al
+PostgreSQL del compose (las 577 pasan). Sin base quedan **535 passed, 42
 skipped** (los de idempotencia/constraints, los del índice RAG y los de la
-Central y la trayectoria), porque necesitan la base levantada.
+Central, la trayectoria, el cierre y la evidencia), porque necesitan la base
+levantada.
 
 ## Integración con la planta
 

@@ -15,7 +15,7 @@ import pytest
 from planta_contrato import EventoSistema, TipoEvento
 
 from analisis.catalogo import CatalogoManuales
-from analisis.modelos import Analisis
+from analisis.modelos import Analisis, EvidenciaVision
 from analisis.servicio import ServicioAnalisis
 from manuales import documentos
 from planta.parte_extractor import Hallazgo
@@ -120,6 +120,26 @@ def _fila(
         valor=valor,
         unidad=unidad,
         observacion=observacion,
+    )
+
+
+def _evidencia_vision(
+    *,
+    estado: str = "ok",
+    danio: bool | None = True,
+    descripcion: str = "grieta visible en la carcasa",
+) -> EvidenciaVision:
+    return EvidenciaVision(
+        foto_url="https://planta.example/fotos/B-102.jpg",
+        ruta_local="/datos/NOTA-1/B-102.jpg",
+        estado=estado,
+        danio_estructural=danio,
+        descripcion=descripcion,
+        detalle="ok" if estado == "ok" else "la API no respondió",
+        modelo="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        tokens_prompt=861,
+        tokens_completion=191,
+        segundos=2.9,
     )
 
 
@@ -570,6 +590,130 @@ def test_los_datos_de_la_orden_guardan_las_reglas(catalogo: CatalogoManuales) ->
     assert datos["costo_usd"] == 420
     assert datos["repuestos"][0]["codigo"] == "TX-EMP-KIT"
     assert datos["repuestos"][0]["disponible"] is True
+
+
+# ------------------------------------------------------- daño estructural
+
+
+def test_el_dano_estructural_manda_un_escalado_ordinario_a_revision_humana(
+    catalogo: CatalogoManuales,
+) -> None:
+    """Una foto con daño estructural impide la autoaprobación."""
+    servicio = _servicio(catalogo)
+    filas = [
+        _fila(
+            "F-201A",
+            "presion_diferencial",
+            valor=1.8,
+            unidad="kg/cm2",
+            observacion="diferencial alto",
+        )
+    ]
+
+    analisis = servicio.analizar_evento(
+        _evento("F-201A", "F-201A presion_diferencial: diferencial alto"),
+        filas=filas,
+        evidencia_vision=(_evidencia_vision(),),
+    )
+
+    assert analisis is not None
+    assert analisis.evaluacion.cumple is False
+    falladas = {regla.codigo for regla in analisis.evaluacion.reglas_falladas}
+    assert "revision_humana" in falladas
+    assert "daño estructural" in analisis.evaluacion.motivo.lower()
+    orden = servicio.orden_sistema(analisis)
+    assert orden.estado.value == "PendienteAprobacion"
+    # La foto sólo enruta la orden: no cambia la falla, la tarea ni el costo.
+    assert analisis.borrador.tareas == ("T-F-CAR",)
+    assert [repuesto.codigo for repuesto in analisis.borrador.repuestos] == ["FC-CART-25"]
+    assert analisis.borrador.costo_usd == 672
+
+
+def test_una_foto_validada_sin_dano_no_obliga_a_revisar(
+    catalogo: CatalogoManuales,
+) -> None:
+    """Una salida válida que descarta daño no agrega una regla pendiente."""
+    servicio = _servicio(catalogo)
+    filas = [
+        _fila(
+            "F-201A",
+            "presion_diferencial",
+            valor=1.8,
+            unidad="kg/cm2",
+            observacion="diferencial alto",
+        )
+    ]
+
+    analisis = servicio.analizar_evento(
+        _evento("F-201A", "F-201A presion_diferencial: diferencial alto"),
+        filas=filas,
+        evidencia_vision=(
+            _evidencia_vision(danio=False, descripcion="carcasa sin grietas"),
+        ),
+    )
+
+    assert analisis is not None
+    assert analisis.evaluacion.cumple is True
+    orden = servicio.orden_sistema(analisis)
+    assert orden.estado.value == "Aprobada"
+
+
+def test_una_foto_indeterminada_tambien_va_a_revision_humana(
+    catalogo: CatalogoManuales,
+) -> None:
+    """No poder descartar el daño no se interpreta como "no hay daño"."""
+    servicio = _servicio(catalogo)
+    filas = [
+        _fila(
+            "F-201A",
+            "presion_diferencial",
+            valor=1.8,
+            unidad="kg/cm2",
+            observacion="diferencial alto",
+        )
+    ]
+
+    analisis = servicio.analizar_evento(
+        _evento("F-201A", "F-201A presion_diferencial: diferencial alto"),
+        filas=filas,
+        evidencia_vision=(
+            _evidencia_vision(estado="indeterminado", danio=None, descripcion=""),
+        ),
+    )
+
+    assert analisis is not None
+    assert analisis.evaluacion.cumple is False
+    assert "no se pudo descartar" in analisis.evaluacion.motivo.lower()
+    assert servicio.orden_sistema(analisis).estado.value == "PendienteAprobacion"
+
+
+def test_la_evidencia_fotografica_queda_con_la_orden(catalogo: CatalogoManuales) -> None:
+    """La foto, su salida y el modelo quedan recuperables con la orden."""
+    servicio = _servicio(catalogo)
+    filas = [
+        _fila(
+            "F-201A",
+            "presion_diferencial",
+            valor=1.8,
+            unidad="kg/cm2",
+            observacion="diferencial alto",
+        )
+    ]
+
+    analisis = servicio.analizar_evento(
+        _evento("F-201A", "F-201A presion_diferencial: diferencial alto"),
+        filas=filas,
+        evidencia_vision=(_evidencia_vision(),),
+    )
+
+    assert analisis is not None
+    datos = servicio.datos_de_orden(analisis)
+    evidencia = datos["reglas"]["evidencia_vision"]
+    assert evidencia[0]["foto_url"] == "https://planta.example/fotos/B-102.jpg"
+    assert evidencia[0]["danio_estructural"] is True
+    assert evidencia[0]["modelo"].startswith("nvidia/")
+    assert datos["reglas"]["revision_humana"]["requerida"] is True
+    assert "daño estructural" in " ".join(datos["reglas"]["evidencia"])
 
 
 # ------------------------------------------------------------------- seguridad

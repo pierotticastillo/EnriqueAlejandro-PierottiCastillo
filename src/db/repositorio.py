@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,11 @@ from planta_contrato import EventoSistema, MensajeTablet, NotaRecorrida, OrdenSi
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
+from analisis.provenance import (
+    manifiesto_de_cierre,
+    manifiesto_de_decision_cierre,
+    manifiesto_desde_reglas,
+)
 from planta.parte_extractor import Hallazgo, Pregunta
 
 # El enum de la base y el del contrato no se escriben igual.
@@ -472,6 +478,9 @@ class Repositorio:
         descripcion: str | None = None,
         costo_usd: float | None = None,
         repuestos: list[dict[str, Any]] | None = None,
+        manifiesto: dict[str, Any] | None = None,
+        analisis: dict[str, Any] | None = None,
+        propuesta: dict[str, Any] | None = None,
     ) -> bool:
         """Persiste la orden y su evaluación de reglas, de forma idempotente.
 
@@ -586,7 +595,215 @@ class Repositorio:
                     "reglas": reglas_json,
                 },
             )
+
+            # El manifiesto y el ledger se escriben en la misma transacción
+            # que la orden.  Si la evidencia no se puede dejar escrita, la
+            # orden tampoco queda como si estuviera auditada.
+            payload_evento = conexion.execute(
+                text("SELECT payload FROM evento_sistema WHERE id = :id"),
+                {"id": evento_id},
+            ).scalar_one_or_none()
+            contenido_manifiesto = manifiesto or manifiesto_desde_reglas(
+                evento_id=evento_id,
+                orden_id=orden.id,
+                reglas=reglas,
+            )
+            manifiesto_id, hash_manifiesto = self._insertar_manifiesto(
+                conexion,
+                tipo="orden",
+                referencia_id=orden.id,
+                evento_id=evento_id,
+                orden_id=orden.id,
+                parte_id=_parte_id_manifiesto(contenido_manifiesto),
+                contenido=contenido_manifiesto,
+            )
+            metricas = _metricas_manifiesto(contenido_manifiesto)
+            herramientas_contexto = (
+                ["rag.contexto.construir_contexto"]
+                if contenido_manifiesto.get("fragmentos", {}).get("estado") == "disponible"
+                else []
+            )
+            self._insertar_ledger(
+                conexion,
+                tipo="evento",
+                referencia_id=evento_id,
+                evento_id=evento_id,
+                orden_id=orden.id,
+                datos=payload_evento or {},
+                idempotencia=f"evento:{evento_id}:{orden.id}",
+            )
+            self._insertar_ledger(
+                conexion,
+                tipo="evidencia",
+                referencia_id=evento_id,
+                evento_id=evento_id,
+                orden_id=orden.id,
+                evidencia={
+                    "manifiesto_id": manifiesto_id,
+                    "hash_sha256": hash_manifiesto,
+                },
+                modelo=metricas["modelo"],
+                herramientas=metricas["herramientas"],
+                tokens_prompt=metricas["tokens_prompt"],
+                tokens_completion=metricas["tokens_completion"],
+                costo_usd=metricas["costo_usd"],
+                segundos=metricas["segundos"],
+                idempotencia=f"evidencia:{evento_id}:{orden.id}",
+            )
+            self._insertar_ledger(
+                conexion,
+                tipo="analisis",
+                referencia_id=evento_id,
+                evento_id=evento_id,
+                orden_id=orden.id,
+                analisis=analisis or _analisis_desde_reglas(reglas),
+                herramientas=herramientas_contexto,
+                idempotencia=f"analisis:{evento_id}:{orden.id}",
+            )
+            self._insertar_ledger(
+                conexion,
+                tipo="propuesta",
+                referencia_id=evento_id,
+                evento_id=evento_id,
+                orden_id=orden.id,
+                propuesta=propuesta or _propuesta_desde_orden(orden, repuestos, costo_usd),
+                idempotencia=f"propuesta:{evento_id}:{orden.id}",
+            )
+            self._insertar_ledger(
+                conexion,
+                tipo="reglas",
+                referencia_id=evento_id,
+                evento_id=evento_id,
+                orden_id=orden.id,
+                reglas=reglas or {},
+                actor="codigo",
+                rol="sistema",
+                estado=estado_db,
+                herramientas=herramientas_contexto,
+                idempotencia=f"reglas:{evento_id}:{orden.id}",
+            )
         return True
+
+    def _insertar_manifiesto(
+        self,
+        conexion: Connection,
+        *,
+        tipo: str,
+        referencia_id: str,
+        evento_id: str,
+        orden_id: str,
+        parte_id: str | None,
+        contenido: dict[str, Any],
+    ) -> tuple[str, str]:
+        """Inserta un manifiesto sin permitir que una repeticion lo cambie."""
+        serializado = json.dumps(contenido, ensure_ascii=False, default=str)
+        fila = conexion.execute(
+            text(
+                """
+                INSERT INTO manifiesto_evidencia (
+                    tipo, referencia_id, evento_id, orden_id, parte_id,
+                    contenido, hash_sha256
+                )
+                SELECT
+                    :tipo, :referencia, :evento, :orden, :parte,
+                    CAST(:contenido AS jsonb),
+                    encode(
+                        sha256(convert_to(CAST(:contenido AS jsonb)::text, 'UTF8')),
+                        'hex'
+                    )
+                ON CONFLICT (tipo, referencia_id) DO NOTHING
+                RETURNING id, hash_sha256
+                """
+            ),
+            {
+                "tipo": tipo,
+                "referencia": referencia_id,
+                "evento": evento_id,
+                "orden": orden_id,
+                "parte": parte_id,
+                "contenido": serializado,
+            },
+        ).mappings().first()
+        if fila is None:
+            fila = conexion.execute(
+                text(
+                    """
+                    SELECT id, hash_sha256 FROM manifiesto_evidencia
+                    WHERE tipo = :tipo AND referencia_id = :referencia
+                    """
+                ),
+                {"tipo": tipo, "referencia": referencia_id},
+            ).mappings().one()
+        return str(fila["id"]), str(fila["hash_sha256"])
+
+    def _insertar_ledger(
+        self,
+        conexion: Connection,
+        *,
+        tipo: str,
+        referencia_id: str | None,
+        evento_id: str,
+        orden_id: str,
+        idempotencia: str,
+        evidencia: dict[str, Any] | None = None,
+        analisis: dict[str, Any] | None = None,
+        propuesta: dict[str, Any] | None = None,
+        reglas: dict[str, Any] | None = None,
+        actor: str | None = None,
+        rol: str | None = None,
+        estado: str | None = None,
+        modelo: str | None = None,
+        herramientas: list[str] | None = None,
+        tokens_prompt: int = 0,
+        tokens_completion: int = 0,
+        costo_usd: float = 0.0,
+        segundos: float = 0.0,
+        datos: dict[str, Any] | None = None,
+    ) -> None:
+        """Agrega una entrada al ledger; la idempotencia evita duplicados."""
+        conexion.execute(
+            text(
+                """
+                INSERT INTO ledger_decisiones (
+                    tipo, referencia_id, evento_id, orden_id,
+                    evidencia, analisis, propuesta, reglas,
+                    actor, rol, estado, modelo, herramientas,
+                    tokens_prompt, tokens_completion, costo_usd, segundos,
+                    datos, idempotencia
+                )
+                VALUES (
+                    :tipo, :referencia, :evento, :orden,
+                    CAST(:evidencia AS jsonb), CAST(:analisis AS jsonb),
+                    CAST(:propuesta AS jsonb), CAST(:reglas AS jsonb),
+                    :actor, :rol, :estado, :modelo, CAST(:herramientas AS jsonb),
+                    :tokens_prompt, :tokens_completion, :costo, :segundos,
+                    CAST(:datos AS jsonb), :idempotencia
+                )
+                ON CONFLICT (idempotencia) DO NOTHING
+                """
+            ),
+            {
+                "tipo": tipo,
+                "referencia": referencia_id,
+                "evento": evento_id,
+                "orden": orden_id,
+                "evidencia": _json(contenido=evidencia or {}),
+                "analisis": _json(contenido=analisis or {}),
+                "propuesta": _json(contenido=propuesta or {}),
+                "reglas": _json(contenido=reglas or {}),
+                "actor": actor,
+                "rol": rol,
+                "estado": estado,
+                "modelo": modelo,
+                "herramientas": _json(contenido=herramientas or []),
+                "tokens_prompt": int(tokens_prompt or 0),
+                "tokens_completion": int(tokens_completion or 0),
+                "costo": float(costo_usd or 0.0),
+                "segundos": float(segundos or 0.0),
+                "datos": _json(contenido=datos or {}),
+                "idempotencia": idempotencia,
+            },
+        )
 
     def guardar_redaccion_orden(
         self,
@@ -633,6 +850,66 @@ class Repositorio:
                     "modelo": modelo or "",
                 },
             )
+            if resultado.rowcount:
+                orden = conexion.execute(
+                    text(
+                        """
+                        SELECT evento_id, equipo, estado::text AS estado
+                        FROM orden WHERE id = :id
+                        """
+                    ),
+                    {"id": orden_id},
+                ).mappings().one()
+                pasos = conexion.execute(
+                    text(
+                        """
+                        SELECT modelo, herramienta, tokens_prompt,
+                               tokens_completion, costo_usd, segundos
+                        FROM registro_trayectoria
+                        WHERE orden_id = :orden
+                        ORDER BY ts, paso
+                        """
+                    ),
+                    {"orden": orden_id},
+                ).mappings().all()
+                modelos = {
+                    str(paso["modelo"])
+                    for paso in pasos
+                    if paso["modelo"] and str(paso["modelo"]) != "no_disponible"
+                }
+                if modelo:
+                    modelos.add(modelo)
+                herramientas = sorted(
+                    {
+                        str(paso["herramienta"])
+                        for paso in pasos
+                        if paso["herramienta"]
+                    }
+                )
+                tokens_prompt = sum(int(paso["tokens_prompt"] or 0) for paso in pasos)
+                tokens_completion = sum(
+                    int(paso["tokens_completion"] or 0) for paso in pasos
+                )
+                costo_usd = sum(float(paso["costo_usd"] or 0.0) for paso in pasos)
+                segundos = sum(float(paso["segundos"] or 0.0) for paso in pasos)
+                digest = hashlib.sha256(redaccion.encode("utf-8")).hexdigest()[:16]
+                self._insertar_ledger(
+                    conexion,
+                    tipo="trayectoria",
+                    referencia_id=orden_id,
+                    evento_id=str(orden["evento_id"]),
+                    orden_id=orden_id,
+                    propuesta={"redaccion": redaccion},
+                    estado=str(orden["estado"]),
+                    modelo=", ".join(sorted(modelos)) or None,
+                    herramientas=herramientas,
+                    tokens_prompt=tokens_prompt,
+                    tokens_completion=tokens_completion,
+                    costo_usd=costo_usd,
+                    segundos=segundos,
+                    datos={"tipo": "redaccion_tecnica"},
+                    idempotencia=f"trayectoria:redaccion:{orden_id}:{digest}",
+                )
         return bool(resultado.rowcount)
 
     def obtener_redaccion_orden(self, orden_id: str) -> dict[str, Any] | None:
@@ -725,7 +1002,6 @@ class Repositorio:
         *,
         cierre_id: str,
         orden_id: str,
-        estado: str,
         anio: int,
         tecnico: str,
         empresa: str,
@@ -735,33 +1011,20 @@ class Repositorio:
         horas: float | None,
         prueba_final: str | None,
         diferencias: list[dict[str, Any]],
-        inspector: str,
-        decision: str | None,
-        motivo: str | None,
-        monto_usd: float | None = None,
-        fuente_monto: str | None = None,
+        fotos: list[dict[str, Any]] | None = None,
+        motivo: str | None = None,
     ) -> dict[str, Any]:
-        """Guarda el cierre, la certificación y el habilita, y actualiza la orden.
+        """Guarda el cierre técnico y deja la orden esperando decisión humana.
 
-        Todo en una transacción: o queda escrito el cierre con su certificación
-        y el estado nuevo de la orden, o no queda nada.
+        El procesamiento automático **no** decide el estado final. La orden pasa
+        a ``Ejecutada`` y queda en la bandeja de la Central hasta que un
+        ``supervisor`` cierre el trabajo propio o un ``inspector`` certifique u
+        observe el trabajo de la contratista.
 
-        Es **idempotente** por el id externo del cierre: la misma nota de
-        cierre puede volver a llegar (o el sistema puede reiniciar) y no se
-        duplica ni el cierre ni la certificación ni el habilita.
-
-        Devuelve el número del habilita y su monto: el número se emite acá,
-        dentro de la transacción, para que no haya dos habilita con el mismo
-        número.
-
-        ``decision`` es ``None`` cuando el cierre no se certifica: el trabajo
-        propio lo cierra el supervisor, sin habilita ni certificación.
+        Es idempotente por ``cierre.externa_id``: si la misma nota vuelve a
+        llegar, no se duplica el cierre ni se vuelve a mover una orden que ya
+        tenga una decisión humana.
         """
-        if decision is not None and decision not in {"certifica", "observa"}:
-            raise ValueError(f"Decisión de certificación inválida: {decision}")
-        estado_db = _ESTADO_ORDEN_DB.get(estado)
-        if estado_db is None:
-            raise ValueError(f"Estado de orden desconocido: {estado}")
         with self._engine.begin() as conexion:
             id_cierre = conexion.execute(
                 text(
@@ -800,6 +1063,503 @@ class Repositorio:
                     {"externa_id": cierre_id},
                 ).scalar_one()
 
+            if nuevo:
+                conexion.execute(
+                    text(
+                        """
+                        UPDATE orden
+                        SET estado = CAST('Ejecutada' AS estado_orden),
+                            motivo = :motivo,
+                            actualizada_en = now()
+                        WHERE id = :id
+                        """
+                    ),
+                    {"motivo": motivo, "id": orden_id},
+                )
+                orden = conexion.execute(
+                    text(
+                        """
+                        SELECT evento_id, equipo FROM orden WHERE id = :id
+                        """
+                    ),
+                    {"id": orden_id},
+                ).mappings().one()
+                contenido_manifiesto = manifiesto_de_cierre(
+                    evento_id=str(orden["evento_id"]),
+                    orden_id=orden_id,
+                    cierre_id=cierre_id,
+                    tecnico=tecnico,
+                    empresa=empresa,
+                    transcripcion=transcripcion,
+                    tareas_hechas=list(tareas_hechas),
+                    repuestos_usados=list(repuestos_usados),
+                    horas=horas,
+                    prueba_final=prueba_final,
+                    diferencias=list(diferencias),
+                    fotos=list(fotos or []),
+                )
+                manifiesto_id, hash_manifiesto = self._insertar_manifiesto(
+                    conexion,
+                    tipo="cierre",
+                    referencia_id=cierre_id,
+                    evento_id=str(orden["evento_id"]),
+                    orden_id=orden_id,
+                    parte_id=None,
+                    contenido=contenido_manifiesto,
+                )
+                self._insertar_ledger(
+                    conexion,
+                    tipo="cierre",
+                    referencia_id=cierre_id,
+                    evento_id=str(orden["evento_id"]),
+                    orden_id=orden_id,
+                    evidencia={
+                        "manifiesto_id": manifiesto_id,
+                        "hash_sha256": hash_manifiesto,
+                    },
+                    propuesta={
+                        "tareas": list(tareas_hechas),
+                        "repuestos": list(repuestos_usados),
+                        "horas": horas,
+                        "prueba_final": prueba_final,
+                    },
+                    actor="codigo",
+                    rol="sistema",
+                    estado="Ejecutada",
+                    datos={"diferencias": list(diferencias)},
+                    idempotencia=f"cierre:{cierre_id}",
+                )
+
+        return {
+            "cierre_id": str(id_cierre),
+            "nuevo": nuevo,
+            "habilita": None,
+            "monto_habilita_usd": None,
+        }
+
+    def obtener_cierre_de_orden(self, orden_id: str) -> dict[str, Any] | None:
+        """El último cierre técnico registrado para una orden."""
+        with self._engine.connect() as conexion:
+            fila = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT id, externa_id, orden_id, tecnico, empresa,
+                               transcripcion, tareas_hechas, repuestos_usados,
+                               horas, prueba_final, diferencias, creado_en
+                        FROM cierre
+                        WHERE orden_id = :orden_id
+                        ORDER BY creado_en DESC, id DESC
+                        LIMIT 1
+                        """
+                    ),
+                    {"orden_id": orden_id},
+                )
+                .mappings()
+                .first()
+            )
+        return dict(fila) if fila else None
+
+    def obtener_manifiesto(
+        self,
+        tipo: str,
+        referencia_id: str,
+    ) -> dict[str, Any] | None:
+        """El manifiesto inmutable de una referencia, si existe."""
+        with self._engine.connect() as conexion:
+            fila = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT id::text AS id, creado_en, tipo, referencia_id,
+                               evento_id, orden_id, parte_id, contenido,
+                               hash_sha256,
+                               encode(
+                                   sha256(convert_to(contenido::text, 'UTF8')),
+                                   'hex'
+                               ) AS hash_calculado
+                        FROM manifiesto_evidencia
+                        WHERE tipo = :tipo AND referencia_id = :referencia
+                        """
+                    ),
+                    {"tipo": tipo, "referencia": referencia_id},
+                )
+                .mappings()
+                .first()
+            )
+        return _manifiesto_desde_fila(fila) if fila is not None else None
+
+    def obtener_manifiestos_de_orden(self, orden_id: str) -> list[dict[str, Any]]:
+        """Todos los manifiestos de evidencia de una orden."""
+        with self._engine.connect() as conexion:
+            return self._manifiestos_de_orden(conexion, orden_id)
+
+    def obtener_ledger_de_orden(self, orden_id: str) -> list[dict[str, Any]]:
+        """La cadena append-only de decisiones de una orden, en orden."""
+        with self._engine.connect() as conexion:
+            return self._ledger_de_orden(conexion, orden_id)
+
+    def reconstruir_orden(self, orden_id: str) -> dict[str, Any] | None:
+        """Reconstruye una orden desde su evento hasta la decisión humana.
+
+        La respuesta incluye el estado operativo actual, el evento que la
+        originó, los manifiestos inmutables, el ledger y la trayectoria
+        detallada.  Los manifiestos vuelven con ``hash_verificado`` para que
+        el consumidor pueda comprobar que la evidencia no fue alterada.
+        """
+        with self._engine.connect() as conexion:
+            orden = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT o.id, o.evento_id, o.equipo, o.estado, o.motivo,
+                               o.detencion, o.ejecutor, o.reduce_inyeccion,
+                               o.costo_estimado, o.creada_en, o.actualizada_en,
+                               COALESCE(
+                                   (SELECT json_agg(t.tarea_id ORDER BY t.tarea_id)
+                                    FROM orden_tarea t WHERE t.orden_id = o.id),
+                                   '[]'::json
+                               ) AS tareas,
+                               COALESCE(
+                                   (SELECT json_agg(
+                                       json_build_object(
+                                           'codigo', r.repuesto_id,
+                                           'cantidad', r.cantidad
+                                       ) ORDER BY r.repuesto_id
+                                   )
+                                    FROM orden_repuesto r WHERE r.orden_id = o.id),
+                                   '[]'::json
+                               ) AS repuestos
+                        FROM orden o
+                        WHERE o.id = :id
+                        """
+                    ),
+                    {"id": orden_id},
+                )
+                .mappings()
+                .first()
+            )
+            if orden is None:
+                return None
+            evento = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT id, origen, estado, payload, creado_en
+                        FROM evento_sistema WHERE id = :id
+                        """
+                    ),
+                    {"id": orden["evento_id"]},
+                )
+                .mappings()
+                .first()
+            )
+            manifiestos = self._manifiestos_de_orden(conexion, orden_id)
+            ledger = self._ledger_de_orden(conexion, orden_id)
+            trayectoria = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT id::text AS id, ts, etapa, tipo, modelo, herramienta,
+                               argumentos, salida, tokens_prompt, tokens_completion,
+                               costo_usd, segundos, error, orden_id, evento_id,
+                               equipo, paso
+                        FROM registro_trayectoria
+                        WHERE orden_id = :orden
+                        ORDER BY ts, paso, id
+                        """
+                    ),
+                    {"orden": orden_id},
+                )
+                .mappings()
+                .all()
+            )
+        return {
+            "orden": dict(orden),
+            "evento": dict(evento) if evento is not None else None,
+            "manifiestos": manifiestos,
+            "ledger": ledger,
+            "trayectoria": [dict(fila) for fila in trayectoria],
+            "integridad": {
+                "manifiestos_verificados": all(
+                    bool(manifiesto["hash_verificado"]) for manifiesto in manifiestos
+                ),
+                "entradas_ledger": len(ledger),
+            },
+        }
+
+    def _manifiestos_de_orden(
+        self,
+        conexion: Connection,
+        orden_id: str,
+    ) -> list[dict[str, Any]]:
+        filas = (
+            conexion.execute(
+                text(
+                    """
+                    SELECT id::text AS id, creado_en, tipo, referencia_id,
+                           evento_id, orden_id, parte_id, contenido,
+                           hash_sha256,
+                           encode(
+                               sha256(convert_to(contenido::text, 'UTF8')),
+                               'hex'
+                           ) AS hash_calculado
+                    FROM manifiesto_evidencia
+                    WHERE orden_id = :orden
+                    ORDER BY creado_en, id
+                    """
+                ),
+                {"orden": orden_id},
+            )
+            .mappings()
+            .all()
+        )
+        return [_manifiesto_desde_fila(fila) for fila in filas]
+
+    def _ledger_de_orden(
+        self,
+        conexion: Connection,
+        orden_id: str,
+    ) -> list[dict[str, Any]]:
+        filas = (
+            conexion.execute(
+                text(
+                    """
+                    SELECT id, creado_en, tipo, referencia_id, evento_id, orden_id,
+                           evidencia, analisis, propuesta, reglas, actor, rol,
+                           estado, modelo, herramientas, tokens_prompt,
+                           tokens_completion, costo_usd, segundos, datos,
+                           idempotencia
+                    FROM ledger_decisiones
+                    WHERE orden_id = :orden
+                    ORDER BY creado_en, id
+                    """
+                ),
+                {"orden": orden_id},
+            )
+            .mappings()
+            .all()
+        )
+        return [_ledger_desde_fila(fila) for fila in filas]
+
+    def decidir_cierre_humano(
+        self,
+        *,
+        orden_id: str,
+        decision: str,
+        actor: str,
+        rol: str,
+        motivo: str | None = None,
+        monto_usd: float | None = None,
+        fuente_monto: str | None = None,
+    ) -> dict[str, Any]:
+        """Registra la decisión humana de G2/G3 y sus efectos, en una transacción.
+
+        * ``supervisor`` + ``cerrar`` deja la orden ``Cerrada``;
+        * ``inspector`` + ``certificar`` la deja ``Certificada`` y emite el
+          habilita;
+        * ``inspector`` + ``observar`` la deja ``Observada``, sin habilita.
+
+        La decisión, su actor, su rol, el motivo y la evidencia del cierre
+        quedan en ``decision_cierre``. La certificación y el habilita sólo se
+        escriben cuando corresponde.
+        """
+        accion = str(decision or "").strip().lower()
+        actor = str(actor or "").strip()
+        rol = str(rol or "").strip().lower()
+        motivo = str(motivo or "").strip() or None
+        if accion not in {"cerrar", "certificar", "observar"}:
+            raise ValueError(f"Decisión de cierre inválida: {decision!r}")
+        if not actor:
+            raise ValueError("La decisión de cierre necesita un actor")
+        if rol not in {"supervisor", "inspector"}:
+            raise ValueError(f"Rol inválido para decidir un cierre: {rol!r}")
+        if accion == "observar" and not motivo:
+            raise ValueError("La observación necesita un motivo")
+
+        estado = {"cerrar": "Cerrada", "certificar": "Certificada", "observar": "Observada"}[accion]
+        with self._engine.begin() as conexion:
+            fila = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT o.id, o.evento_id, o.equipo, o.estado, o.motivo,
+                               o.detencion, o.ejecutor, o.reduce_inyeccion,
+                               o.creada_en, o.actualizada_en,
+                               c.id AS cierre_id, c.externa_id, c.tecnico, c.empresa,
+                               c.transcripcion, c.tareas_hechas, c.repuestos_usados,
+                               c.horas, c.prueba_final, c.diferencias, c.creado_en
+                        FROM orden o
+                        JOIN cierre c ON c.orden_id = o.id
+                        WHERE o.id = :orden_id
+                        ORDER BY c.creado_en DESC, c.id DESC
+                        LIMIT 1
+                        FOR UPDATE OF o, c
+                        """
+                    ),
+                    {"orden_id": orden_id},
+                )
+                .mappings()
+                .first()
+            )
+            if fila is None:
+                raise ValueError("La orden no tiene un cierre técnico registrado")
+
+            existente = (
+                conexion.execute(
+                    text(
+                        """
+                        SELECT decision, estado_orden, actor, rol, motivo, evidencia,
+                               creada_en
+                        FROM decision_cierre
+                        WHERE cierre_id = :cierre_id
+                        """
+                    ),
+                    {"cierre_id": fila["cierre_id"]},
+                )
+                .mappings()
+                .first()
+            )
+            if existente is not None:
+                if existente["decision"] != accion:
+                    raise ValueError("La orden ya tiene una decisión de cierre")
+                habilitacion = (
+                    conexion.execute(
+                        text(
+                            """
+                            SELECT numero, monto FROM habilitacion
+                            WHERE orden_id = :orden_id
+                            ORDER BY emitida_en LIMIT 1
+                            """
+                        ),
+                        {"orden_id": orden_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+                return {
+                    "decision": dict(existente),
+                    "orden": {"id": orden_id, "estado": existente["estado_orden"]},
+                    "habilita": habilitacion["numero"] if habilitacion else None,
+                    "monto_habilita_usd": (
+                        float(habilitacion["monto"]) if habilitacion else None
+                    ),
+                }
+
+            if fila["estado"] != "Ejecutada":
+                raise ValueError("La orden ya tiene una decisión de cierre")
+            ejecutor = str(fila["ejecutor"] or "propio").strip().lower()
+            if accion == "cerrar":
+                if rol != "supervisor":
+                    raise ValueError("Sólo el supervisor puede cerrar el trabajo")
+                if ejecutor != "propio":
+                    raise ValueError("El supervisor sólo puede cerrar trabajo propio")
+            else:
+                if rol != "inspector":
+                    raise ValueError("Sólo el inspector puede certificar u observar")
+                if ejecutor == "propio":
+                    raise ValueError(
+                        "El inspector sólo puede certificar u observar trabajo de contratista"
+                    )
+
+            diferencias = list(fila["diferencias"] or [])
+            cierre_referencia = str(fila["externa_id"] or fila["cierre_id"])
+            evidencia = {
+                "cierre_id": cierre_referencia,
+                "tecnico": fila["tecnico"],
+                "empresa": fila["empresa"],
+                "transcripcion": fila["transcripcion"],
+                "tareas_hechas": list(fila["tareas_hechas"] or []),
+                "repuestos_usados": list(fila["repuestos_usados"] or []),
+                "horas": fila["horas"],
+                "prueba_final": fila["prueba_final"],
+                "diferencias": diferencias,
+                "cierre_registrado_en": fila["creado_en"].isoformat(),
+            }
+            conexion.execute(
+                text(
+                    """
+                    INSERT INTO decision_cierre (
+                        cierre_id, orden_id, decision, estado_orden,
+                        actor, rol, motivo, evidencia
+                    )
+                    VALUES (
+                        :cierre_id, :orden_id, :decision, CAST(:estado AS estado_orden),
+                        :actor, :rol, :motivo, CAST(:evidencia AS jsonb)
+                    )
+                    """
+                ),
+                {
+                    "cierre_id": fila["cierre_id"],
+                    "orden_id": orden_id,
+                    "decision": accion,
+                    "estado": estado,
+                    "actor": actor,
+                    "rol": rol,
+                    "motivo": motivo,
+                    "evidencia": json.dumps(evidencia, ensure_ascii=False, default=str),
+                },
+            )
+
+            if accion in {"certificar", "observar"}:
+                conexion.execute(
+                    text(
+                        """
+                        INSERT INTO certificacion (
+                            orden_id, cierre_id, inspector, decision, motivo, rol
+                        )
+                        VALUES (
+                            :orden_id, :cierre_id, :actor, :decision, :motivo, :rol
+                        )
+                        """
+                    ),
+                    {
+                        "orden_id": orden_id,
+                        "cierre_id": fila["cierre_id"],
+                        "actor": actor,
+                        "decision": "certifica" if accion == "certificar" else "observa",
+                        "motivo": motivo,
+                        "rol": rol,
+                    },
+                )
+
+            reglas = {
+                "tipo": "cierre_humano",
+                "decision": accion,
+                "rol": rol,
+                "cierre_id": cierre_referencia,
+                "evidencia": evidencia,
+            }
+            conexion.execute(
+                text(
+                    """
+                    INSERT INTO aprobacion (
+                        orden_id, decision, motivo, reglas_evaluadas, usuario, rol
+                    )
+                    VALUES (
+                        :orden_id, :decision, :motivo, CAST(:reglas AS jsonb),
+                        :actor, :rol
+                    )
+                    """
+                ),
+                {
+                    "orden_id": orden_id,
+                    "decision": estado,
+                    "motivo": motivo,
+                    "reglas": json.dumps(reglas, ensure_ascii=False, default=str),
+                    "actor": actor,
+                    "rol": rol,
+                },
+            )
+
+            motivo_final = motivo
+            if not motivo_final:
+                detalle = [
+                    str(diferencia.get("detalle"))
+                    for diferencia in diferencias
+                    if isinstance(diferencia, dict) and diferencia.get("detalle")
+                ]
+                motivo_final = "; ".join(detalle) or None
             conexion.execute(
                 text(
                     """
@@ -810,58 +1570,101 @@ class Repositorio:
                     WHERE id = :id
                     """
                 ),
-                {"estado": estado_db, "motivo": motivo, "id": orden_id},
-            )
-
-            conexion.execute(
-                text(
-                    """
-                    INSERT INTO certificacion (
-                        orden_id, cierre_id, inspector, decision, motivo
-                    )
-                    SELECT :orden_id, :cierre_id, :inspector, :decision, :motivo
-                    WHERE CAST(:decision AS text) IS NOT NULL
-                      AND NOT EXISTS (
-                          SELECT 1 FROM certificacion WHERE cierre_id = :cierre_id
-                      )
-                    """
-                ),
-                {
-                    "orden_id": orden_id,
-                    "cierre_id": id_cierre,
-                    "inspector": inspector,
-                    "decision": decision,
-                    "motivo": motivo,
-                },
+                {"estado": estado, "motivo": motivo_final, "id": orden_id},
             )
 
             habilita: str | None = None
             monto: float | None = None
-            if decision == "certifica" and monto_usd is not None:
-                existente = conexion.execute(
-                    text(
-                        """
-                        SELECT numero, monto FROM habilitacion
-                        WHERE orden_id = :orden_id
-                        ORDER BY emitida_en LIMIT 1
-                        """
+            if accion == "certificar":
+                if monto_usd is None:
+                    raise ValueError("La certificación necesita el monto del habilita")
+                habilita, monto = self._emitir_habilita(
+                    conexion,
+                    orden_id=orden_id,
+                    monto_usd=monto_usd,
+                    anio=int(fila["creada_en"].year),
+                    fuente=fuente_monto or "CT-SVP-2025 §2.1",
+                )
+
+            manifiesto_cierre = conexion.execute(
+                text(
+                    """
+                    SELECT id, hash_sha256, contenido
+                    FROM manifiesto_evidencia
+                    WHERE tipo = 'cierre' AND referencia_id = :referencia
+                    """
+                ),
+                {"referencia": cierre_referencia},
+            ).mappings().first()
+            contenido_cierre = (
+                dict(manifiesto_cierre["contenido"])
+                if manifiesto_cierre is not None
+                else {}
+            )
+            evidencia_cierre = dict(
+                contenido_cierre.get("evidencia_cierre") or evidencia
+            )
+            contenido_decision = manifiesto_de_decision_cierre(
+                evento_id=str(fila["evento_id"]),
+                orden_id=orden_id,
+                cierre_id=cierre_referencia,
+                decision=accion,
+                estado=estado,
+                actor=actor,
+                rol=rol,
+                motivo=motivo,
+                evidencia_cierre=evidencia_cierre,
+                habilita=habilita,
+                monto_usd=monto,
+            )
+            manifiesto_id, hash_manifiesto = self._insertar_manifiesto(
+                conexion,
+                tipo="decision_cierre",
+                referencia_id=cierre_referencia,
+                evento_id=str(fila["evento_id"]),
+                orden_id=orden_id,
+                parte_id=None,
+                contenido=contenido_decision,
+            )
+            self._insertar_ledger(
+                conexion,
+                tipo="decision_cierre",
+                referencia_id=cierre_referencia,
+                evento_id=str(fila["evento_id"]),
+                orden_id=orden_id,
+                evidencia={
+                    "manifiesto_id": manifiesto_id,
+                    "hash_sha256": hash_manifiesto,
+                    "cierre_manifiesto_id": (
+                        str(manifiesto_cierre["id"])
+                        if manifiesto_cierre is not None
+                        else None
                     ),
-                    {"orden_id": orden_id},
-                ).mappings().first()
-                if existente is not None:
-                    habilita = str(existente["numero"])
-                    monto = float(existente["monto"])
-                else:
-                    habilita, monto = self._emitir_habilita(
-                        conexion,
-                        orden_id=orden_id,
-                        monto_usd=monto_usd,
-                        anio=anio,
-                        fuente=fuente_monto or "CT-SVP-2025 §2.1",
-                    )
+                },
+                reglas=reglas,
+                actor=actor,
+                rol=rol,
+                estado=estado,
+                datos={
+                    "decision": accion,
+                    "motivo": motivo,
+                    "habilita": habilita,
+                    "monto_usd": monto,
+                },
+                idempotencia=f"decision_cierre:{cierre_referencia}",
+            )
+
+        orden = self.obtener_orden_completa(orden_id)
         return {
-            "cierre_id": str(id_cierre),
-            "nuevo": nuevo,
+            "decision": {
+                "decision": accion,
+                "estado_orden": estado,
+                "actor": actor,
+                "rol": rol,
+                "motivo": motivo,
+                "evidencia": evidencia,
+            },
+            "orden": orden,
             "habilita": habilita,
             "monto_habilita_usd": monto,
         }
@@ -1019,6 +1822,7 @@ class Repositorio:
         *,
         motivo: str | None = None,
         usuario: str | None = None,
+        rol: str | None = None,
     ) -> dict[str, Any] | None:
         """La decisión del planificador sobre una orden pendiente.
 
@@ -1081,14 +1885,16 @@ class Repositorio:
             conexion.execute(
                 text(
                     """
-                    INSERT INTO aprobacion (orden_id, decision, motivo, reglas_evaluadas, usuario)
+                    INSERT INTO aprobacion (
+                        orden_id, decision, motivo, reglas_evaluadas, usuario, rol
+                    )
                     SELECT :orden, :decision, :motivo,
                            COALESCE(
                                (SELECT reglas_evaluadas FROM aprobacion
                                 WHERE orden_id = :orden ORDER BY creada_en DESC LIMIT 1),
                                '{}'::jsonb
                            ),
-                           :usuario
+                           :usuario, :rol
                     WHERE NOT EXISTS (
                         SELECT 1 FROM aprobacion
                         WHERE orden_id = :orden AND decision = :decision
@@ -1101,7 +1907,53 @@ class Repositorio:
                     "decision": decision,
                     "motivo": motivo,
                     "usuario": usuario,
+                    "rol": rol,
                 },
+            )
+            reglas = conexion.execute(
+                text(
+                    "SELECT reglas_evaluadas FROM aprobacion "
+                    "WHERE orden_id = :orden ORDER BY creada_en DESC, id DESC LIMIT 1"
+                ),
+                {"orden": orden_id},
+            ).scalar_one()
+            manifiesto = conexion.execute(
+                text(
+                    """
+                    SELECT id, hash_sha256 FROM manifiesto_evidencia
+                    WHERE orden_id = :orden AND tipo = 'orden'
+                    ORDER BY creado_en DESC, id DESC LIMIT 1
+                    """
+                ),
+                {"orden": orden_id},
+            ).mappings().first()
+            self._insertar_ledger(
+                conexion,
+                tipo="aprobacion",
+                referencia_id=orden_id,
+                evento_id=str(fila["evento_id"]),
+                orden_id=orden_id,
+                evidencia=(
+                    {
+                        "manifiesto_id": str(manifiesto["id"]),
+                        "hash_sha256": str(manifiesto["hash_sha256"]),
+                    }
+                    if manifiesto is not None
+                    else {}
+                ),
+                propuesta={
+                    "tareas": list(fila["tareas"] or []),
+                    "repuestos": list(fila["repuestos"] or []),
+                    "costo_usd": fila["costo_estimado"],
+                },
+                reglas=reglas or {},
+                actor=usuario,
+                rol=rol,
+                estado=estado,
+                datos={"decision": decision, "motivo": motivo},
+                idempotencia=(
+                    f"aprobacion:{orden_id}:{decision}:{usuario or 'sin_usuario'}"
+                ),
             )
         return dict(fila)
 
@@ -1136,6 +1988,73 @@ class Repositorio:
                         FROM orden o
                         ORDER BY (o.estado = 'Pendiente de aprobacion') DESC,
                                  o.actualizada_en DESC
+                        LIMIT :limite
+                        """
+                    ),
+                    {"limite": max(1, int(limite))},
+                )
+                .mappings()
+                .all()
+            )
+        return [dict(fila) for fila in filas]
+
+    def cierres_para_central(self, limite: int = 50) -> list[dict[str, Any]]:
+        """Los cierres técnicos y su decisión humana para la Central.
+
+        Primero quedan los cierres en estado ``Ejecutada`` que todavía no
+        tienen decisión. Cada fila incluye la evidencia técnica del cierre y,
+        cuando existe, el actor, rol, motivo y evidencia de la decisión.
+        """
+        with self._engine.connect() as conexion:
+            filas = (
+                conexion.execute(
+                    text(
+                        """
+                        WITH ultimo AS (
+                            SELECT DISTINCT ON (orden_id)
+                                   id, externa_id, orden_id, tecnico, empresa,
+                                   transcripcion, tareas_hechas, repuestos_usados,
+                                   horas, prueba_final, diferencias, creado_en
+                            FROM cierre
+                            ORDER BY orden_id, creado_en DESC, id DESC
+                        ), habilita AS (
+                            SELECT DISTINCT ON (orden_id)
+                                   orden_id, numero, monto
+                            FROM habilitacion
+                            ORDER BY orden_id, emitida_en, id
+                        )
+                        SELECT o.id AS orden_id, o.equipo, o.estado, o.motivo,
+                               o.ejecutor, o.creada_en, o.actualizada_en,
+                               c.externa_id AS cierre_id, c.tecnico, c.empresa,
+                               c.transcripcion, c.tareas_hechas, c.repuestos_usados,
+                               c.horas, c.prueba_final, c.diferencias,
+                               c.creado_en AS cierre_registrado_en,
+                               dc.id AS decision_id, dc.decision,
+                               dc.estado_orden, dc.actor, dc.rol,
+                               dc.motivo AS decision_motivo, dc.evidencia,
+                               dc.creada_en AS decidido_en,
+                               h.numero AS habilita, h.monto AS monto_habilita_usd,
+                               COALESCE(
+                                   (SELECT json_agg(t.tarea_id ORDER BY t.tarea_id)
+                                    FROM orden_tarea t WHERE t.orden_id = o.id),
+                                   '[]'::json
+                               ) AS tareas,
+                               COALESCE(
+                                   (SELECT json_agg(
+                                       json_build_object(
+                                           'codigo', r.repuesto_id,
+                                           'cantidad', r.cantidad
+                                       ) ORDER BY r.repuesto_id
+                                    )
+                                    FROM orden_repuesto r WHERE r.orden_id = o.id),
+                                   '[]'::json
+                               ) AS repuestos
+                        FROM orden o
+                        JOIN ultimo c ON c.orden_id = o.id
+                        LEFT JOIN decision_cierre dc ON dc.cierre_id = c.id
+                        LEFT JOIN habilita h ON h.orden_id = o.id
+                        ORDER BY (o.estado = 'Ejecutada' AND dc.id IS NULL) DESC,
+                                 c.creado_en DESC
                         LIMIT :limite
                         """
                     ),
@@ -1275,6 +2194,101 @@ class Repositorio:
                 ),
                 {"id": id_outbox},
             )
+
+
+def _parte_id_manifiesto(manifiesto: dict[str, Any]) -> str | None:
+    """El id real del parte; ``no_disponible`` no es un id."""
+    valor = (manifiesto.get("parte") or {}).get("id")
+    if valor is None or str(valor) in {"", "no_disponible"}:
+        return None
+    return str(valor)
+
+
+def _manifiesto_desde_fila(fila: Any) -> dict[str, Any]:
+    """Normaliza un manifiesto y verifica su hash contra el contenido."""
+    datos = dict(fila)
+    hash_guardado = str(datos.get("hash_sha256") or "")
+    hash_calculado = str(datos.get("hash_calculado") or "")
+    datos["hash_verificado"] = bool(hash_guardado and hash_guardado == hash_calculado)
+    return datos
+
+
+def _ledger_desde_fila(fila: Any) -> dict[str, Any]:
+    """Normaliza una entrada del ledger para la API y las pruebas."""
+    datos = dict(fila)
+    datos["id"] = int(datos["id"])
+    datos["tokens_prompt"] = int(datos.get("tokens_prompt") or 0)
+    datos["tokens_completion"] = int(datos.get("tokens_completion") or 0)
+    datos["costo_usd"] = float(datos.get("costo_usd") or 0.0)
+    datos["segundos"] = float(datos.get("segundos") or 0.0)
+    return datos
+
+
+def _json(contenido: Any) -> str:
+    """Serializa JSON para PostgreSQL sin perder acentos ni datos simples."""
+    return json.dumps(contenido, ensure_ascii=False, default=str)
+
+
+def _metricas_manifiesto(manifiesto: dict[str, Any]) -> dict[str, Any]:
+    """Modelo, tools, tokens, costo y tiempo que dejó la evidencia."""
+    modelos: set[str] = set()
+    herramientas: set[str] = set()
+    tokens_prompt = 0
+    tokens_completion = 0
+    costo_usd = 0.0
+    segundos = 0.0
+    fotos = manifiesto.get("fotos", {}).get("elementos") or []
+    for foto in fotos:
+        if not isinstance(foto, dict):
+            continue
+        vision = foto.get("vision") or {}
+        if not isinstance(vision, dict):
+            continue
+        modelo = str(vision.get("modelo") or "").strip()
+        if modelo and modelo != "no_disponible":
+            modelos.add(modelo)
+            herramientas.add("vision.describir")
+        tokens_prompt += int(vision.get("tokens_prompt") or 0)
+        tokens_completion += int(vision.get("tokens_completion") or 0)
+        segundos += float(vision.get("segundos") or 0.0)
+    if manifiesto.get("fragmentos", {}).get("estado") == "disponible":
+        herramientas.add("rag.contexto.construir_contexto")
+    return {
+        "modelo": ", ".join(sorted(modelos)) or None,
+        "herramientas": sorted(herramientas),
+        "tokens_prompt": tokens_prompt,
+        "tokens_completion": tokens_completion,
+        "costo_usd": costo_usd,
+        "segundos": segundos,
+    }
+
+
+def _analisis_desde_reglas(reglas: dict[str, Any] | None) -> dict[str, Any]:
+    """Snapshot mínimo para llamadas directas al repositorio."""
+    datos = reglas or {}
+    return {
+        "falla": datos.get("falla"),
+        "causas": list(datos.get("causas") or []),
+        "citas": list(datos.get("citas") or []),
+        "reincidencia": bool(datos.get("reincidencia")),
+    }
+
+
+def _propuesta_desde_orden(
+    orden: OrdenSistema,
+    repuestos: list[dict[str, Any]] | None,
+    costo_usd: float | None,
+) -> dict[str, Any]:
+    """Propuesta persistida para llamadas directas al repositorio."""
+    return {
+        "equipo": orden.equipo,
+        "tareas": list(orden.tareas),
+        "repuestos": list(repuestos or []),
+        "costo_usd": costo_usd,
+        "detiene_equipo": orden.detiene_equipo,
+        "reduce_inyeccion": orden.reduce_inyeccion,
+        "ejecutor": orden.ejecutor,
+    }
 
 
 def _filas_json(filas: list[Hallazgo]) -> list[dict[str, Any]]:

@@ -11,6 +11,8 @@ from typing import Any
 import httpx
 from planta_contrato import EventoSistema, TipoEvento
 
+from analisis.evidencia import TendenciaEvidencia
+
 logger = logging.getLogger("planta.historial")
 
 
@@ -29,20 +31,21 @@ class Historiador:
         self._timeout_s = timeout_s
         self._cliente = cliente or httpx.Client(timeout=timeout_s, trust_env=True)
         self._ventana = ventana
-        self._cache: dict[tuple[str, str, int], str] = {}
+        self._cache: dict[tuple[str, str, int], TendenciaEvidencia] = {}
         self._lock = threading.Lock()
 
     def cerrar(self) -> None:
         self._cliente.close()
 
-    def resumen_tendencia(
+    def consultar_tendencia(
         self,
         tag: str,
         variable: str,
         hasta: datetime,
         *,
         unidad: str | None = None,
-    ) -> str | None:
+    ) -> TendenciaEvidencia | None:
+        """La tendencia estructurada de una variable en la ventana reciente."""
         fin = _aware(hasta)
         inicio = fin - self._ventana
         clave = (tag, variable, int(fin.timestamp() // 60))
@@ -72,14 +75,42 @@ class Historiador:
             "baja" if primero - ultimo > margen else "estable"
         )
         sufijo = f" {unidad}" if unidad else ""
+        ventana = _duracion_texto(self._ventana)
         resumen = (
-            f"Tendencia {variable} últimas 6 h: {len(valores)} muestras, "
+            f"Tendencia {variable} últimas {ventana}: {len(valores)} muestras, "
             f"{primero:g}→{ultimo:g}{sufijo} ({direccion}), "
             f"rango {min(valores):g}–{max(valores):g}{sufijo}."
         )
+        tendencia = TendenciaEvidencia(
+            tag=tag,
+            variable=variable,
+            unidad=unidad,
+            desde=inicio.isoformat(),
+            hasta=fin.isoformat(),
+            ventana=ventana,
+            fuente="historiador",
+            muestras=len(valores),
+            minimo=min(valores),
+            maximo=max(valores),
+            promedio=sum(valores) / len(valores),
+            tendencia=direccion,
+            resumen=resumen,
+        )
         with self._lock:
-            self._cache[clave] = resumen
-        return resumen
+            self._cache[clave] = tendencia
+        return tendencia
+
+    def resumen_tendencia(
+        self,
+        tag: str,
+        variable: str,
+        hasta: datetime,
+        *,
+        unidad: str | None = None,
+    ) -> str | None:
+        """El resumen legible; la fuente estructurada sale de ``consultar_tendencia``."""
+        tendencia = self.consultar_tendencia(tag, variable, hasta, unidad=unidad)
+        return tendencia.resumen if tendencia is not None else None
 
     def enriquecer_evento(
         self,
@@ -88,19 +119,29 @@ class Historiador:
         variable: str,
         *,
         unidad: str | None = None,
+        tendencia: TendenciaEvidencia | None = None,
     ) -> EventoSistema:
         if evento.tipo is not TipoEvento.escalado:
             return evento
-        tendencia = self.resumen_tendencia(tag, variable, evento.ts, unidad=unidad)
-        if not tendencia:
+        if tendencia is None:
+            tendencia = self.consultar_tendencia(tag, variable, evento.ts, unidad=unidad)
+        if tendencia is None or not tendencia.resumen:
             return evento
-        return evento.model_copy(update={"resumen": f"{evento.resumen} {tendencia}"})
+        return evento.model_copy(update={"resumen": f"{evento.resumen} {tendencia.resumen}"})
 
 
 def _aware(valor: datetime) -> datetime:
     if valor.tzinfo is None:
         return valor.replace(tzinfo=UTC)
     return valor
+
+
+def _duracion_texto(ventana: timedelta) -> str:
+    """La ventana en unidades legibles (``6 h``, ``90 min``)."""
+    minutos = int(ventana.total_seconds() // 60)
+    if minutos % 60 == 0:
+        return f"{minutos // 60} h"
+    return f"{minutos} min"
 
 
 def _puntos_en_ventana(

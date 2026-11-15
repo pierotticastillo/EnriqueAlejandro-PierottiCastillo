@@ -6,7 +6,9 @@ implementa; los tests la fijan.
 
 - **Alcance**: la nota de voz del técnico → el parte en la tablet → el
   escalado → la orden de trabajo → la decisión del planificador.
-- **Fuera de alcance**: el cierre por voz (Fase 7), que tiene su propio flujo.
+- **Fuera de alcance**: el flujo principal del cierre por voz (Fase 7), que
+  tiene su propio recorrido. La Central sí comparte aquí su autenticación y
+  su RBAC, porque también registra las decisiones humanas de G2/G3.
 - **Regla que manda sobre todo lo demás**: *el LLM redacta; el código decide*.
   Las seis reglas de `analisis/aprobacion.py` no se delegan al LLM, y el
   prompt **nunca** lleva texto libre del operador.
@@ -143,17 +145,40 @@ planificador la aprueba o la rechaza"*.
 - La orden pendiente queda **persistida** y se vuelve a publicar con el
   mismo id después de un reinicio.
 - La **Central de mantenimiento** (`planta/central.py`, puerto 8200) es el
-  canal de la decisión: una pantalla con las órdenes que esperan decisión y
-  una API JSON equivalente.
+  canal de la decisión: un shell público sin datos y APIs protegidas por un
+  token Bearer opaco, uno por persona.
+- La identidad y el rol salen **exclusivamente del token**; `usuario` y `rol`
+  del cuerpo se ignoran. Sin credencial válida: 401; con un rol insuficiente:
+  403.
+- Los roles son `planificador`, `supervisor`, `inspector` y `lectura`.
 - Sólo se pueden decidir órdenes **`Pendiente de aprobacion`**: una orden
   ya decidida no se toca.
 - **Rechazar exige motivo.**
-- La decisión queda en `aprobacion` con su usuario, y en la trayectoria.
+- La decisión queda en `aprobacion` con su usuario y su rol, y en la
+  trayectoria.
+- El navegador usa `sessionStorage` y `Authorization`, sin cookies; por eso
+  este camino no introduce un ataque CSRF clásico.
 
 **La Central no es una tool.** No está en `tools.registro.REGISTRO` ni en el
 servidor MCP: el agente no puede llegar a ella.
 
-## 7. Los criterios de aceptación
+## 7. La decisión humana de G2/G3
+
+La comparación técnica del cierre prepara evidencia; **no elige el estado
+final**:
+
+- el cierre técnico deja la orden en `Ejecutada`;
+- el `supervisor` cierra trabajo propio;
+- el `inspector` certifica u observa trabajo de contratista;
+- observar exige motivo;
+- el habilita se emite únicamente dentro de una certificación humana.
+
+La decisión, el actor, el rol, el motivo, la evidencia y la fecha quedan en
+`decision_cierre` (migración `0008`). La decisión, el estado de la orden, la
+certificación y el habilita se escriben en una transacción. Una decisión ya
+tomada no se cambia.
+
+## 8. Los criterios de aceptación
 
 Cada línea tiene un test que la fija.
 
@@ -170,3 +195,9 @@ Cada línea tiene un test que la fija.
 | A9 | La Central no es una tool | `tests/test_central.py` |
 | A10 | Sin agente, sin modelo o sin base, el sistema sigue igual | `tests/test_agente.py`, `tests/test_db_central.py` |
 | A11 | Si el modelo escribe prosa, el cierre estructurado arma la propuesta | `tests/test_agente.py` |
+| A12 | La API exige un token Bearer y no acepta identidad del cuerpo | `tests/test_central_auth.py` |
+| A13 | Cada rol sólo puede hacer su operación; `lectura` no decide | `tests/test_central_auth.py` |
+| A14 | El cierre técnico deja la orden `Ejecutada` y espera una persona | `tests/test_cierre_humano.py`, `tests/test_servicio_cierre.py` |
+| A15 | Supervisor cierra lo propio; inspector certifica u observa lo de contratista | `tests/test_cierre_humano.py` |
+| A16 | Observar exige motivo y el habilita sólo se emite al certificar | `tests/test_cierre_humano.py`, `tests/test_db_cierre.py` |
+| A17 | La decisión humana queda auditada y no se puede cambiar | `tests/test_db_cierre.py` |

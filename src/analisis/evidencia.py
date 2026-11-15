@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from analisis.sintomas import direccion_de_texto, normalizar_variable
 from rag.texto import tokenizar
@@ -23,6 +24,78 @@ _RESUMEN_MEDICION = re.compile(
     r"^\s*(?P<tag>\S+)\s+(?P<variable>[A-Za-z_]+)\s*:\s*"
     r"(?P<valor>-?\d+(?:[.,]\d+)?)"
 )
+
+# El resumen que agrega el historiador. Se conserva también en forma
+# estructurada para el manifiesto: fuente, ventana, muestras y extremos.
+_TENDENCIA = re.compile(
+    r"Tendencia\s+(?P<variable>[A-Za-z_]+)\s+últimas\s+"
+    r"(?P<ventana>\d+)\s*h:\s*(?P<muestras>\d+)\s*muestras,\s*"
+    r"(?P<primero>-?\d+(?:[.,]\d+)?)→(?P<ultimo>-?\d+(?:[.,]\d+)?)"
+    r"(?P<unidad>[^\s(]*)\s*\((?P<direccion>sube|baja|estable)\),\s*"
+    r"rango\s+(?P<minimo>-?\d+(?:[.,]\d+)?)–(?P<maximo>-?\d+(?:[.,]\d+)?)"
+    r"(?P<unidad_final>[^\s.]*)"
+)
+
+
+@dataclass(frozen=True)
+class FilaConfirmada:
+    """Una fila confirmada del parte, conservada para el manifiesto."""
+
+    tag: str
+    variable: str
+    valor: float | None = None
+    unidad: str | None = None
+    observacion: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "tag": self.tag,
+            "variable": self.variable,
+            "valor": self.valor,
+            "unidad": self.unidad,
+            "observacion": self.observacion,
+        }
+
+
+@dataclass(frozen=True)
+class TendenciaEvidencia:
+    """Una tendencia consultada, con su ventana y su fuente.
+
+    ``None`` significa que el dato no estaba disponible. El manifiesto lo
+    convierte en la marca explícita ``no_disponible``; nunca inventa una
+    muestra, una ventana o un promedio.
+    """
+
+    variable: str
+    tag: str | None = None
+    unidad: str | None = None
+    desde: str | None = None
+    hasta: str | None = None
+    ventana: str | None = None
+    fuente: str | None = None
+    muestras: int | None = None
+    minimo: float | None = None
+    maximo: float | None = None
+    promedio: float | None = None
+    tendencia: str | None = None
+    resumen: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "variable": self.variable,
+            "tag": self.tag,
+            "unidad": self.unidad,
+            "desde": self.desde,
+            "hasta": self.hasta,
+            "ventana": self.ventana,
+            "fuente": self.fuente,
+            "muestras": self.muestras,
+            "minimo": self.minimo,
+            "maximo": self.maximo,
+            "promedio": self.promedio,
+            "tendencia": self.tendencia,
+            "resumen": self.resumen,
+        }
 
 
 @dataclass(frozen=True)
@@ -56,6 +129,11 @@ class Evidencia:
     resumen: str
     tokens: frozenset[str]
     direcciones: dict[str, str]
+    # Provenience del parte y de la ventana de tendencia. Son datos del
+    # escalado, no un agregado de la redacción posterior.
+    parte_id: str | None = None
+    filas_confirmadas: tuple[FilaConfirmada, ...] = ()
+    tendencias: tuple[TendenciaEvidencia, ...] = ()
 
     @property
     def texto(self) -> str:
@@ -85,8 +163,16 @@ def reunir_parte(
     fotos: list[str] | None = None,
     resumen: str = "",
     planta: dict | None = None,
+    parte_id: str | None = None,
+    filas_confirmadas: list[object] | None = None,
+    tendencias: list[TendenciaEvidencia] | None = None,
 ) -> Evidencia:
-    """Evidencia de un parte confirmado: sus filas, sus fotos y su tendencia."""
+    """Evidencia de un parte confirmado: sus filas, sus fotos y su tendencia.
+
+    ``filas`` son las filas anómalas que motivan el análisis. El manifiesto
+    necesita además el parte confirmado completo, que llega en
+    ``filas_confirmadas``.
+    """
     fragmentos: list[Fragmento] = []
     for fila in filas:
         if getattr(fila, "tag", None) != equipo:
@@ -109,6 +195,11 @@ def reunir_parte(
         fotos=fotos or [],
         resumen=resumen,
         planta=planta,
+        parte_id=parte_id,
+        filas_confirmadas=_filas_confirmadas(
+            filas_confirmadas if filas_confirmadas is not None else filas
+        ),
+        tendencias=tuple(tendencias or []),
     )
 
 
@@ -119,6 +210,7 @@ def reunir_texto(
     fotos: list[str] | None = None,
     resumen: str = "",
     planta: dict | None = None,
+    tendencias: list[TendenciaEvidencia] | None = None,
 ) -> Evidencia:
     """Evidencia de un texto (una nota de seguridad, por ejemplo)."""
     fragmentos = [
@@ -134,6 +226,7 @@ def reunir_texto(
         fotos=fotos or [],
         resumen=resumen,
         planta=planta,
+        tendencias=tuple(tendencias or []),
     )
 
 
@@ -144,6 +237,9 @@ def _armar(
     fotos: list[str],
     resumen: str,
     planta: dict | None,
+    parte_id: str | None = None,
+    filas_confirmadas: list[FilaConfirmada] | None = None,
+    tendencias: tuple[TendenciaEvidencia, ...] = (),
 ) -> Evidencia:
     completados = list(fragmentos)
     lectura = _medicion_del_resumen(resumen)
@@ -163,6 +259,7 @@ def _armar(
         tokens.update(tokenizar(fragmento.texto))
     tokens.update(tokenizar(resumen))
     direcciones = _direcciones(completados, equipo, planta)
+    tendencias_efectivas = tendencias or _tendencia_estructurada(resumen)
     return Evidencia(
         equipo=equipo,
         fragmentos=tuple(completados),
@@ -171,6 +268,9 @@ def _armar(
         resumen=resumen,
         tokens=frozenset(tokens),
         direcciones=direcciones,
+        parte_id=parte_id,
+        filas_confirmadas=tuple(filas_confirmadas or []),
+        tendencias=tendencias_efectivas,
     )
 
 
@@ -239,8 +339,72 @@ def _direccion_por_valor(
     return None
 
 
+def _filas_confirmadas(filas: list[object]) -> list[FilaConfirmada]:
+    """Las filas confirmadas, sin perder el equipo al que pertenecen."""
+    salida: list[FilaConfirmada] = []
+    for fila in filas:
+        tag = str(getattr(fila, "tag", "") or "")
+        variable = str(getattr(fila, "variable", "") or "")
+        if not tag or not variable:
+            continue
+        valor = getattr(fila, "valor", None)
+        try:
+            valor = float(valor) if valor is not None else None
+        except (TypeError, ValueError):
+            valor = None
+        salida.append(
+            FilaConfirmada(
+                tag=tag,
+                variable=variable,
+                valor=valor,
+                unidad=getattr(fila, "unidad", None),
+                observacion=getattr(fila, "observacion", None),
+            )
+        )
+    return salida
+
+
 def _tendencia(resumen: str) -> tuple[str, ...]:
     """Las frases de tendencia que el historiador agrega al resumen del evento."""
     if "Tendencia" not in resumen:
         return ()
     return tuple(parte.strip() for parte in resumen.split("Tendencia", 1)[1:] if parte.strip())
+
+
+def _tendencia_estructurada(resumen: str) -> tuple[TendenciaEvidencia, ...]:
+    """Recupera del resumen legacy los datos estructurados de la tendencia.
+
+    Es un fallback para eventos que ya venían enrichidos antes de que el
+    historial entregara su muestra estructurada. No estima el promedio: si no
+    está, queda ``None`` y el manifiesto lo marca como no disponible.
+    """
+    coincidencia = _TENDENCIA.search(resumen)
+    if coincidencia is None:
+        return ()
+    grupos = coincidencia.groupdict()
+
+    def numero(nombre: str) -> float:
+        return float(grupos[nombre].replace(",", "."))
+
+    unidad = grupos["unidad"] or grupos["unidad_final"] or None
+    ventana = f"{int(grupos['ventana'])} h"
+    return (
+        TendenciaEvidencia(
+            variable=grupos["variable"],
+            ventana=ventana,
+            fuente="historiador",
+            muestras=int(grupos["muestras"]),
+            minimo=numero("minimo"),
+            maximo=numero("maximo"),
+            promedio=None,
+            tendencia=grupos["direccion"],
+            unidad=unidad,
+            resumen=(
+                f"Tendencia {grupos['variable']} últimas {ventana}: "
+                f"{grupos['muestras']} muestras, {grupos['primero']}→{grupos['ultimo']}"
+                f"{(' ' + unidad) if unidad else ''} ({grupos['direccion']}), "
+                f"rango {grupos['minimo']}–{grupos['maximo']}"
+                f"{(' ' + unidad) if unidad else ''}."
+            ),
+        ),
+    )

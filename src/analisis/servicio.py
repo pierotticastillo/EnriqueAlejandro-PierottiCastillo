@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime
 from typing import Any
 
@@ -30,14 +30,15 @@ from analisis.aprobacion import Contexto, evaluar
 from analisis.catalogo import CatalogoManuales
 from analisis.causas import causalizar
 from analisis.estado import EstadoBombas
-from analisis.evidencia import Evidencia, reunir_parte, reunir_texto
+from analisis.evidencia import Evidencia, TendenciaEvidencia, reunir_parte, reunir_texto
 from analisis.historial import es_reincidencia
 from analisis.llm import AnalysisModel
-from analisis.modelos import Analisis, FallaCatalogo, Medicion
+from analisis.modelos import Analisis, EvidenciaVision, FallaCatalogo, Medicion
 from analisis.orden import TAREA_NO_ESTANDAR, armar_borrador, descripcion_de_reincidencia
+from analisis.provenance import manifiesto_de_analisis
 from analisis.redaccion import redactar
+from rag.contexto import ContextoAnalisis, construir_contexto
 from tools.cliente import ClientePlanta, ErrorHerramienta
-from tools.modelos import ConsultaManuales
 
 logger = logging.getLogger("analisis.servicio")
 
@@ -116,8 +117,16 @@ class ServicioAnalisis:
         *,
         filas: list[Any] | None = None,
         fotos: list[str] | None = None,
+        evidencia_vision: tuple[EvidenciaVision, ...] = (),
+        filas_confirmadas: list[Any] | None = None,
+        tendencias: list[TendenciaEvidencia] | None = None,
     ) -> Analisis | None:
-        """Analiza un evento escalado y devuelve el análisis con su borrador."""
+        """Analiza un evento escalado y devuelve el análisis con su borrador.
+
+        La evidencia fotográfica no decide la falla ni la tarea. Si una foto
+        muestra daño estructural —o si no permite descartarlo—, la orden queda
+        para revisión humana mediante una regla que está en código.
+        """
         equipo = evento.equipo
         if not equipo:
             return None
@@ -127,8 +136,18 @@ class ServicioAnalisis:
             fotos=fotos,
             resumen=evento.resumen,
             planta=self._planta,
+            parte_id=evento.parte_id,
+            filas_confirmadas=filas_confirmadas,
+            tendencias=tendencias,
         )
-        return self._analizar(evento, evidencia)
+        revision_vision = any(item.requiere_revision_humana for item in evidencia_vision)
+        return self._analizar(
+            evento,
+            evidencia,
+            revision_humana=revision_vision,
+            motivo_revision_humana=_motivo_revision_vision(evidencia_vision),
+            evidencia_vision=evidencia_vision,
+        )
 
     def analizar_alerta_seguridad(
         self,
@@ -136,6 +155,8 @@ class ServicioAnalisis:
         *,
         texto: str,
         fotos: list[str] | None = None,
+        evidencia_vision: tuple[EvidenciaVision, ...] = (),
+        tendencias: list[TendenciaEvidencia] | None = None,
     ) -> Analisis | None:
         """Analiza una alerta de seguridad: la orden va siempre a una persona.
 
@@ -149,8 +170,18 @@ class ServicioAnalisis:
             fotos=fotos,
             resumen=evento.resumen,
             planta=self._planta,
+            tendencias=tendencias,
         )
-        return self._analizar(evento, evidencia, revision_humana=True, incluir_seguridad=True)
+        return self._analizar(
+            evento,
+            evidencia,
+            revision_humana=True,
+            motivo_revision_humana=(
+                "la evidencia muestra una condición insegura: la orden no se aprueba sola"
+            ),
+            incluir_seguridad=True,
+            evidencia_vision=evidencia_vision,
+        )
 
     def _analizar(
         self,
@@ -158,11 +189,14 @@ class ServicioAnalisis:
         evidencia: Evidencia,
         *,
         revision_humana: bool = False,
+        motivo_revision_humana: str | None = None,
         incluir_seguridad: bool = False,
+        evidencia_vision: tuple[EvidenciaVision, ...] = (),
     ) -> Analisis:
         equipo = evento.equipo or evidencia.equipo
         tipo_equipo = self._tipo_de(equipo)
-        citas_rag = self._consultar_manual(evidencia)
+        contexto = self._construir_contexto(evento, evidencia)
+        citas_rag = tuple(contexto.citas) if contexto is not None else ()
         causas = causalizar(
             evidencia,
             self._catalogo,
@@ -192,12 +226,19 @@ class ServicioAnalisis:
             causas=causas,
             reincidencia=reincidencia,
         )
+        if evidencia_vision:
+            borrador = replace(
+                borrador,
+                evidencia=borrador.evidencia
+                + tuple(item.texto for item in evidencia_vision),
+            )
         evaluacion = evaluar(
             borrador,
             Contexto(
                 catalogo=self._catalogo,
                 estado_bombas=estado_bombas,
                 revision_humana=revision_humana,
+                motivo_revision_humana=motivo_revision_humana,
             ),
         )
         borrador = replace(borrador, motivo=None if evaluacion.cumple else evaluacion.motivo)
@@ -215,8 +256,11 @@ class ServicioAnalisis:
                 )
         if revision_humana:
             notas.append(
-                "La evidencia muestra una condición insegura o daño estructural: "
-                "la orden no se aprueba sola."
+                (
+                    motivo_revision_humana
+                    or "La evidencia requiere revisión humana: la orden no se aprueba sola."
+                ).rstrip(".")
+                + "."
             )
         return Analisis(
             evento_id=evento.id,
@@ -230,6 +274,10 @@ class ServicioAnalisis:
             reincidencia=reincidencia,
             notas=tuple(notas),
             mediciones=_mediciones(evidencia),
+            evidencia_vision=evidencia_vision,
+            evidencia=evidencia,
+            contexto=contexto,
+            parte_id=evento.parte_id,
         )
 
     # -------------------------------------------------------------------- orden
@@ -271,6 +319,52 @@ class ServicioAnalisis:
         borrador = analisis.borrador
         evaluacion = analisis.evaluacion
         return {
+            "manifiesto": manifiesto_de_analisis(analisis),
+            "analisis": {
+                "falla": (
+                    {
+                        "codigo": analisis.falla.codigo,
+                        "titulo": analisis.falla.titulo,
+                        "documento": analisis.falla.documento,
+                        "cita": analisis.falla.cita,
+                    }
+                    if analisis.falla is not None
+                    else None
+                ),
+                "causas": [
+                    {
+                        "falla": causa.falla,
+                        "causa": causa.causa,
+                        "evidencia": list(causa.evidencia),
+                        "falta_confirmar": causa.falta_confirmar,
+                        "cita": causa.cita,
+                        "puntaje": causa.puntaje,
+                    }
+                    for causa in analisis.causas
+                ],
+                "mediciones": [asdict(medicion) for medicion in analisis.mediciones],
+                "citas": list(analisis.citas),
+                "reincidencia": analisis.reincidencia,
+                "notas": list(analisis.notas),
+            },
+            "propuesta": {
+                "equipo": borrador.equipo,
+                "tareas": list(borrador.tareas),
+                "repuestos": [
+                    {
+                        "codigo": repuesto.codigo,
+                        "cantidad": repuesto.cantidad,
+                        "costo_unitario": repuesto.costo_unitario,
+                        "disponible": repuesto.disponible,
+                    }
+                    for repuesto in borrador.repuestos
+                ],
+                "costo_usd": borrador.costo_usd,
+                "descripcion": borrador.descripcion,
+                "detiene_equipo": borrador.detiene_equipo,
+                "reduce_injeccion": borrador.reduce_inyeccion,
+                "ejecutor": borrador.ejecutor,
+            },
             "reglas": {
                 "cumple": evaluacion.cumple,
                 "motivo": evaluacion.motivo,
@@ -286,6 +380,22 @@ class ServicioAnalisis:
                 "falla": borrador.falla,
                 "causas": list(borrador.causas),
                 "evidencia": list(borrador.evidencia),
+                "evidencia_vision": [asdict(item) for item in analisis.evidencia_vision],
+                "revision_humana": {
+                    "requerida": any(
+                        not regla.cumple
+                        for regla in evaluacion.reglas
+                        if regla.codigo == "revision_humana"
+                    ),
+                    "motivo": next(
+                        (
+                            regla.detalle
+                            for regla in evaluacion.reglas
+                            if regla.codigo == "revision_humana" and not regla.cumple
+                        ),
+                        None,
+                    ),
+                },
                 "citas": list(borrador.citas),
                 "reincidencia": analisis.reincidencia,
             },
@@ -523,25 +633,52 @@ class ServicioAnalisis:
             return tarea
         return None
 
-    def _consultar_manual(self, evidencia: Evidencia) -> tuple[str, ...]:
-        """Las citas que el RAG propone para esta evidencia."""
+    def _construir_contexto(
+        self,
+        evento: EventoSistema,
+        evidencia: Evidencia,
+    ) -> ContextoAnalisis | None:
+        """Arma el contexto productive con el builder del RAG.
+
+        A partir de ahora el camino que analiza una orden conserva el
+        contexto completo —filas, fotos, tendencia y fragmentos consultados—
+        y no sólo la lista final de citas.  Si el índice todavía no está
+        listo, el cruce léxico del catálogo sigue funcionando y el manifiesto
+        marca los fragmentos como no disponibles.
+        """
         if self._recuperador is None:
-            return ()
+            return None
         if not getattr(self._recuperador, "disponible", True):
             # El índice del manual todavía se está armando: el cruce léxico
             # sigue funcionando solo.
-            return ()
+            return None
         consulta = evidencia.texto or evidencia.resumen
         if not consulta.strip():
-            return ()
+            return None
+        filas = [fila.as_dict() for fila in evidencia.filas_confirmadas]
+        tendencias = []
+        for tendencia in evidencia.tendencias:
+            dato = tendencia.as_dict()
+            dato["tag"] = tendencia.tag or evento.equipo or ""
+            tendencias.append(dato)
         try:
-            fragmentos = self._recuperador.buscar(
-                ConsultaManuales(consulta=consulta[:500], top_k=6)
+            return construir_contexto(
+                evento_id=evento.id,
+                equipo=evento.equipo,
+                parte_id=evento.parte_id,
+                estado=evento.tipo.value,
+                resumen=evento.resumen,
+                recuperador=self._recuperador,
+                consulta=consulta[:500],
+                filas=filas,
+                fotos=list(evidencia.fotos),
+                tendencia=tendencias,
+                max_fragmentos=6,
+                max_caracteres=6000,
             )
         except Exception:  # noqa: BLE001 - el RAG no puede tumbar el análisis
-            logger.warning("Falló la consulta al manual por RAG", exc_info=True)
-            return ()
-        return tuple(fragmento.cita for fragmento in fragmentos if fragmento.cita)
+            logger.warning("Falló la construcción del contexto del manual", exc_info=True)
+            return None
 
     def _ordenes_previas(self, equipo: str) -> list[dict]:
         if self._cliente is None:
@@ -554,6 +691,23 @@ class ServicioAnalisis:
         if not isinstance(datos, list):
             return []
         return [orden for orden in datos if isinstance(orden, dict)]
+
+
+def _motivo_revision_vision(evidencia: tuple[EvidenciaVision, ...]) -> str | None:
+    """El motivo determinista para mandar la orden a revisión humana."""
+    if not evidencia:
+        return None
+    if any(item.danio_estructural is True for item in evidencia):
+        return (
+            "la evidencia fotográfica muestra daño estructural: "
+            "la orden no se aprueba sola"
+        )
+    if any(item.estado != "ok" for item in evidencia):
+        return (
+            "no se pudo descartar daño estructural en la evidencia fotográfica: "
+            "la orden no se aprueba sola"
+        )
+    return None
 
 
 def _mediciones(evidencia: Evidencia) -> tuple[Medicion, ...]:

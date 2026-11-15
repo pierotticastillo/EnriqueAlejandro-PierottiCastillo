@@ -22,9 +22,9 @@ from planta_contrato import OrdenSistema, Repuesto
 from analisis.catalogo import CatalogoManuales
 from analisis.cierre import (
     comparar_cierre,
-    decidir_cierre,
     monto_de_la_orden,
     parsear_cierre,
+    validar_decision_cierre,
 )
 from manuales import documentos
 from tools.precios import ListaPrecios, precios_desde_texto
@@ -388,60 +388,43 @@ def test_las_horas_diferentes_no_bloquean_la_observacion(
 # --------------------------------------------------------------- la decisión
 
 
-def test_el_trabajo_propio_se_cierra_con_las_diferencias_a_la_vista(
-    catalogo: CatalogoManuales,
-) -> None:
-    orden = _orden()
-    cierre = parsear_cierre(CIERRE_PROPIO, orden, catalogo)
-    comparacion = comparar_cierre(orden, cierre, catalogo)
-    decision = decidir_cierre(orden, comparacion, ListaPrecios())
+def test_el_trabajo_propio_lo_cierra_el_supervisor() -> None:
+    decision = validar_decision_cierre(
+        decision="cerrar",
+        rol="supervisor",
+        ejecutor="propio",
+        motivo="el trabajo terminó",
+    )
     assert decision.estado == "Cerrada"
-    assert decision.habilita is None
-    assert decision.monto_habilita_usd is None
+    assert decision.rol == "supervisor"
 
 
-def test_la_contratista_con_diferencias_queda_observada(catalogo: CatalogoManuales) -> None:
-    orden = _orden(
-        id="ORD-B-101-TX-T03",
-        equipo="B-101",
-        tareas=("T-B-ROD",),
-        repuestos=(),
+def test_el_supervisor_no_cierra_trabajo_de_contratista() -> None:
+    with pytest.raises(ValueError, match="supervisor"):
+        validar_decision_cierre(
+            decision="cerrar",
+            rol="supervisor",
+            ejecutor="Servipat",
+        )
+
+
+def test_la_contratista_la_certifica_el_inspector() -> None:
+    decision = validar_decision_cierre(
+        decision="certificar",
+        rol="inspector",
         ejecutor="Servipat",
-    )
-    cierre = parsear_cierre(CIERRE_REPUESTO_EXTRA, orden, catalogo)
-    comparacion = comparar_cierre(orden, cierre, catalogo)
-    decision = decidir_cierre(orden, comparacion, ListaPrecios())
-    assert decision.estado == "Observada"
-    assert decision.motivo
-    assert decision.habilita is None
-    assert decision.monto_habilita_usd is None
-
-
-def test_la_contratista_sin_diferencias_queda_certificada(
-    catalogo: CatalogoManuales,
-    precios: ListaPrecios,
-) -> None:
-    orden = _orden(
-        id="ORD-B-101-TX-T03",
-        equipo="B-101",
-        tareas=("T-B-ROD",),
-        repuestos=(),
-        ejecutor="Servipat",
-    )
-    texto = (
-        "Cierro la orden ORD B 101 TX T03. Hice cambio de rodamientos del cigüeñal. "
-        "Probé a ciento diez kilos, sin pérdida. Fueron dieciséis horas."
-    )
-    cierre = parsear_cierre(texto, orden, catalogo)
-    comparacion = comparar_cierre(orden, cierre, catalogo)
-    assert comparacion.sustantivas == ()
-    monto, _detalle = monto_de_la_orden(orden, precios)
-    decision = decidir_cierre(
-        orden, comparacion, precios, habilita="HAB-2026-0001", monto_usd=monto
     )
     assert decision.estado == "Certificada"
-    assert decision.habilita == "HAB-2026-0001"
-    assert decision.monto_habilita_usd == 1150.0
+    assert decision.rol == "inspector"
+
+
+def test_observar_una_contratista_exige_motivo() -> None:
+    with pytest.raises(ValueError, match="motivo"):
+        validar_decision_cierre(
+            decision="observar",
+            rol="inspector",
+            ejecutor="Servipat",
+        )
 
 
 # ---------------------------------------------------------------- el monto

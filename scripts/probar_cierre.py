@@ -1,4 +1,4 @@
-"""Prueba en vivo del cierre de órdenes (Fase 7).
+"""Prueba en vivo del cierre de órdenes (Fase 7 + G2/G3).
 
 Monta el escenario completo contra la planta simulada:
 
@@ -9,16 +9,24 @@ Monta el escenario completo contra la planta simulada:
    para probar el flujo completo la orden se guarda en la base del sistema
    (como la aprueba el planificador) y se publica en el bus;
 3. escucha ``planta/cierres`` y ``sistema/ordenes``;
-4. cuando el sistema publica el estado final, muestra lo que quedó escrito
-   en la base: el cierre, la certificación y el habilita.
+4. comprueba que el cierre técnico deja cada orden en ``Ejecutada``;
+5. opcionalmente envía a la Central una decisión humana autenticada por
+   token Bearer y muestra el estado final, la auditoría y el habilita.
+
+Sin ``--token`` la prueba se detiene deliberadamente en ``Ejecutada``: el
+sistema no puede certificar, observar ni cerrar por su cuenta.
 
 Cada corrida usa ids de orden nuevos: la planta simulada no vuelve a
 programar un trabajo si la orden ya estaba aprobada.
 
 Uso:
 
-    # dentro del contenedor del sistema (el bus y la base están a mano)
+    # técnico: deja las órdenes esperando decisión humana
     docker compose exec sistema python scripts/probar_cierre.py contratista 3
+
+    # decisión humana explícita mediante un token de inspector
+    docker compose exec sistema python scripts/probar_cierre.py contratista 3 \
+        --token "$TOKEN_INSPECTOR" --decision certificar
 
     # desde el host: el script se copia al contenedor y corre adentro
     docker cp scripts/probar_cierre.py pia3-sistema:/tmp/ && \\
@@ -31,6 +39,8 @@ import argparse
 import json
 import sys
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from datetime import UTC, datetime
@@ -92,6 +102,37 @@ def _control(ruta: str, cuerpo: dict) -> dict:
         return json.loads(respuesta.read().decode("utf-8"))
 
 
+def _decidir_central(
+    central_url: str,
+    token: str,
+    orden_id: str,
+    decision: str,
+    *,
+    motivo: str | None = None,
+) -> dict:
+    """Registra en la Central una decisión con la identidad del token."""
+    cuerpo = {"decision": decision}
+    if motivo:
+        cuerpo["motivo"] = motivo
+    peticion = urllib.request.Request(
+        f"{central_url.rstrip('/')}/api/cierres/{urllib.parse.quote(orden_id, safe='')}/decision",
+        data=json.dumps(cuerpo).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(peticion, timeout=30) as respuesta:
+            return json.loads(respuesta.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detalle = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"La Central rechazó la decisión de {orden_id} ({error.code}): {detalle}"
+        ) from error
+
+
 def _preparar_orden(repo: Repositorio, plantilla: dict, marca: str) -> OrdenSistema:
     """Guarda la orden como lo haría el planificador al aprobarla."""
     evento_id = f"ev-prueba-{uuid.uuid4().hex[:8]}"
@@ -131,7 +172,29 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("modo", nargs="?", default="contratista", choices=["propio", "contratista"])
     parser.add_argument("cuantas", nargs="?", type=int, default=1)
+    parser.add_argument(
+        "--token",
+        help="token Bearer de la persona que decide (no se imprime)",
+    )
+    parser.add_argument(
+        "--decision",
+        choices=["cerrar", "certificar", "observar"],
+        help="decisión humana explícita que se envía a la Central",
+    )
+    parser.add_argument(
+        "--central-url",
+        default="http://127.0.0.1:8200",
+        help="dirección de la Central dentro del contenedor del sistema",
+    )
     args = parser.parse_args()
+    if args.decision and not args.token:
+        parser.error("--decision requiere --token")
+    if args.token and not args.decision:
+        parser.error("--token requiere una decisión explícita con --decision")
+    if args.token and args.modo == "propio" and args.decision != "cerrar":
+        parser.error("el trabajo propio se cierra con --decision cerrar")
+    if args.token and args.modo == "contratista" and args.decision == "cerrar":
+        parser.error("el trabajo de contratista no se cierra: certificá u observá")
 
     settings = Settings()
     repo = Repositorio(crear_engine(settings.database_url))
@@ -139,6 +202,7 @@ def main() -> None:
 
     publicaciones: list[dict] = []
     cierres: list[dict] = []
+    ordenes_preparadas: list[OrdenSistema] = []
 
     def al_mensaje(_cliente, _datos, mensaje) -> None:
         try:
@@ -176,6 +240,7 @@ def main() -> None:
     plantillas = ORDENES[args.modo][: args.cuantas]
     for plantilla in plantillas:
         orden = _preparar_orden(repo, plantilla, marca)
+        ordenes_preparadas.append(orden)
         cliente.publish("sistema/ordenes", orden.model_dump_json(), qos=1)
         print(f"  Publicada la orden {orden.id} ({orden.ejecutor})")
 
@@ -185,17 +250,59 @@ def main() -> None:
         time.sleep(3)
 
     if cierres:
-        print("\n== Esperando el estado final del sistema")
-        fin = time.time() + 300
+        print("\n== Esperando el estado técnico Ejecutada")
+        fin = time.time() + 120
         while time.time() < fin:
-            estados = [
-                p["estado"] for p in publicaciones if p["id"].startswith(f"ORD-PRUEBA-{marca}")
-            ]
-            if len(estados) >= len(plantillas) and all(
-                estado in ("Cerrada", "Observada", "Certificada") for estado in estados
+            estados = {
+                p["id"]: p["estado"]
+                for p in publicaciones
+                if p["id"].startswith(f"ORD-PRUEBA-{marca}")
+            }
+            if len(estados) == len(plantillas) and all(
+                estado == "Ejecutada" for estado in estados.values()
             ):
                 break
             time.sleep(3)
+
+        if not args.token:
+            print(
+                "\n== Las órdenes quedaron en Ejecutada y esperan una decisión humana.\n"
+                "   Usá la Central o repetí con --token y --decision para probar G2/G3."
+            )
+        else:
+            print("\n== Registrando la decisión humana autenticada")
+            for orden in ordenes_preparadas:
+                motivo = (
+                    "La revisión técnica encontró diferencias sustantivas"
+                    if args.decision == "observar"
+                    else None
+                )
+                resultado = _decidir_central(
+                    args.central_url,
+                    args.token,
+                    orden.id,
+                    args.decision,
+                    motivo=motivo,
+                )
+                print(
+                    f"  {orden.id} · {resultado.get('orden', {}).get('estado')} · "
+                    f"habilita={resultado.get('habilita')}"
+                )
+
+            print("\n== Esperando la publicación del estado final")
+            fin = time.time() + 60
+            while time.time() < fin:
+                estados = {
+                    p["id"]: p["estado"]
+                    for p in publicaciones
+                    if p["id"].startswith(f"ORD-PRUEBA-{marca}")
+                }
+                if len(estados) == len(plantillas) and all(
+                    estado in ("Cerrada", "Observada", "Certificada")
+                    for estado in estados.values()
+                ):
+                    break
+                time.sleep(2)
 
     print("\n== Lo que publicó el sistema")
     for publicacion in publicaciones:
@@ -225,14 +332,31 @@ def main() -> None:
         certificaciones = conexion.execute(
             text(
                 """
-                SELECT orden_id, inspector, decision, motivo
+                SELECT orden_id, inspector, rol, decision, motivo
                 FROM certificacion WHERE orden_id LIKE :patron ORDER BY creada_en
                 """
             ),
             {"patron": f"ORD-PRUEBA-{marca}%"},
         ).mappings()
         for fila in certificaciones:
-            print(f"  certificación: {fila['orden_id']} · {fila['decision']} · {fila['motivo']}")
+            print(
+                f"  certificación: {fila['orden_id']} · {fila['decision']} · "
+                f"{fila['inspector']} ({fila['rol']}) · {fila['motivo']}"
+            )
+        decisiones = conexion.execute(
+            text(
+                """
+                SELECT orden_id, decision, actor, rol, motivo, creada_en
+                FROM decision_cierre WHERE orden_id LIKE :patron ORDER BY creada_en
+                """
+            ),
+            {"patron": f"ORD-PRUEBA-{marca}%"},
+        ).mappings()
+        for fila in decisiones:
+            print(
+                f"  decisión humana: {fila['orden_id']} · {fila['decision']} · "
+                f"{fila['actor']} ({fila['rol']}) · {fila['motivo']}"
+            )
         habilitas = conexion.execute(
             text(
                 """

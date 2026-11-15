@@ -3,10 +3,12 @@
 **Trabajo práctico:** Academia Novit 2026 — planta de inyección de agua PIA‑3
 **Repositorio de la solución:** `EnriqueAlejandro-PierottiCastillo`
 **Planta simulada:** [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
-**Fecha del informe:** 2026-11-10
+**Fecha del informe:** 2026-11-14
 **Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5, 6 y 7 implementadas y verificadas.
 Entrega 1 (núcleo de agentes, trayectoria, Central de mantenimiento y
-presupuesto) implementada y verificada.
+presupuesto) implementada y verificada. Del Plan de implementación 2 están
+implementados y verificados P0-01 a P0-05; P0-06 (corrida anclada al commit
+final) y P0-07 (alcance y rúbrica oficiales) siguen pendientes.
 Corrector oficial: **92,6/100 — APRUEBA** (los 7 escenarios de la rúbrica,
 93 de 93 puntos medidos, sin eliminatorias; el bloque G mide `orden_ejecutada`,
 que quedó en el 100 %).
@@ -53,7 +55,12 @@ El sistema PIA‑3 corre junto a la planta simulada dentro de la red Docker
 9. la **decisión del planificador**: la orden pendiente se reanuda cuando una
    persona la aprueba o la rechaza, desde una Central de mantenimiento
    (pantalla web y API JSON) que deja la decisión auditada con su usuario y su
-   motivo.
+   motivo;
+10. la **evidencia inmutable y su provenance**: cada orden, cierre y decisión
+    conserva un manifiesto con parte/filas, fotos hasheadas, salida y modelo de
+    visión, tendencia con ventana/fuente, fragmentos y citas; un ledger
+    append-only permite reconstruir la cadena completa desde el evento hasta el
+    estado final.
 
 La transcripción, la detección de seguridad, las tools, el RAG, el análisis y
 el control del cierre son locales: el modelo de embeddings corre en el
@@ -81,6 +88,11 @@ agente no tiene forma de aprobar nada.
 | 6 | Operación sin enlace y cola | Completa y verificada |
 | 7 | Cierre y certificación | Completa y verificada |
 | — | Núcleo de agentes (LangChain), trayectoria, Central y presupuesto | Completa y verificada |
+| 8 | Alineación de la Entrega 2 | En espera de información oficial de la Academia |
+| 9 | Gobierno humano y seguridad | Completa y verificada (P0-01, P0-04, P0-05) |
+| 10 | Evidencia y provenance | Completa y verificada (P0-02, P0-03) |
+| 11 | Evaluación, red team y calidad | Pendiente |
+| 12 | Operación y cierre | Pendiente; la corrida P0-06 espera el commit final |
 
 ### Fase 2 — lo que hay
 
@@ -259,6 +271,14 @@ pendiente no queda invisible hasta el siguiente latido.
 - `0005_outbox_topico.py`: la cola sabe **a qué tópico** va cada mensaje, y el
   índice único pasa a ser **parcial** (`WHERE estado = 'pendiente'`), para que
   un mensaje ya enviado pueda volver a encolarse si el bus se cae otra vez.
+- `0006_cierre_fase7.py`: cierre técnico, comparación con la orden,
+  certificación e habilita.
+- `0007_registro_trayectoria.py`: modelo, tools, argumentos, tokens, costo y
+  tiempo de cada paso.
+- `0008_identidad_y_cierre_humano.py`: roles de la Central y decisión humana
+  de cierre con actor, rol, motivo, evidencia y fecha.
+- `0009_manifiesto_evidencia_ledger.py`: manifiesto inmutable con hash
+  SHA-256, ledger append-only, triggers de PostgreSQL y backfill histórico.
 
 Cambios principales de `0002`:
 
@@ -1129,6 +1149,64 @@ planta—: no hay borrador, por más bien armado que esté, que ese operador vir
 pueda confirmar. Lo que sí importa es que el sistema **no da vueltas**: corta el
 bucle y deja la nota para revisión humana.
 
+#### 9.11 Manifiesto inmutable y ledger de provenance
+
+La evidencia ya no vive sólo dentro de
+`aprobacion.reglas_evaluadas`. Ese JSON es mutable y sirve para mostrar por qué
+se evaluaron las reglas, pero no es un registro de auditoría: una actualización
+puede cambiarlo sin que quede rastro. La migración `0009` lo separa en dos
+registros con responsabilidades distintas:
+
+| Registro | Qué conserva |
+|----------|--------------|
+| `manifiesto_evidencia` | la fotografía inmutable de la evidencia usada por una orden, un cierre o una decisión humana |
+| `ledger_decisiones` | la cadena append-only que permite reconstruir el recorrido de la orden |
+
+El manifiesto de una orden se arma en el camino productivo
+(`src/analisis/provenance.py`) y registra:
+
+| Bloque | Contenido |
+|--------|-----------|
+| `parte` | id del parte y filas confirmadas |
+| `fotos` | id estable, URL, ruta local, SHA-256, salida de visión, veredicto de daño y modelo |
+| `tendencia` | variable, equipo, unidad, ventana, fuente, muestras, mínimo, máximo, promedio y dirección |
+| `fragmentos` | documento, sección, cita, texto, título y vigencia de los fragmentos consultados |
+| `citas` | citas usadas por el análisis |
+
+Cada bloque dice si está `disponible`, `parcial` o `no_disponible`: un dato
+ausente nunca se disfraza de lista vacía. El hash es SHA-256 de la
+representación JSONB canónica de PostgreSQL y un constraint exige que
+coincida con el contenido. Si la orden se reprocesa, se conserva la primera
+versión; el manifiesto no se actualiza.
+
+El ledger encadena nueve tipos: `evento`, `evidencia`, `analisis`, `propuesta`,
+`reglas`, `aprobacion`, `cierre`, `decision_cierre` y `trayectoria`. La orden,
+el manifiesto y las primeras entradas del ledger se escriben en una misma
+transacción. Cada entrada puede conservar actor, rol, estado, modelo,
+herramientas, tokens, costo y tiempo. Las tablas de auditoría bloquean
+`UPDATE` y `DELETE` mediante triggers y no tienen claves foráneas hacia las
+tablas operativas: el registro sobrevive aunque se elimine el padre.
+
+`construir_contexto` ya participa del análisis productivo: el mismo contexto
+que usa el cruce de evidencia conserva el parte, las fotos, la tendencia y los
+fragmentos consultados. Eso permite que el manifiesto describa la evidencia
+real, no una reconstrucción posterior.
+
+La Central expone `GET /api/ordenes/<id>/evidencia`, con alias
+`/reconstruccion`, para recuperar orden, evento, manifiestos, ledger,
+trayectoria e indicador de integridad. Está protegida por el mismo token
+Bearer y el mismo RBAC que el resto de las APIs; cualquier rol autenticado
+puede consultarla.
+
+El backfill de `0009` se validó sobre un histórico sintético: produjo **3
+manifiestos**, **9 tipos de ledger**, **3/3 hashes válidos** e idempotencias
+únicas. `UPDATE` y `DELETE` fueron rechazados por PostgreSQL y el ciclo
+`0008 → 0009 → 0008 → 0009` terminó con la base limpia en `0009 (head)`. Una
+base nueva aplicó además la cadena completa `0001 → 0009` y quedó con las dos
+tablas y ambos triggers. Las reglas de aprobación siguen **en código**: el
+modelo puede describir la foto y redactar la justificación, pero no cambia la
+falla, las tareas, los repuestos, el costo, el estado ni la aprobación.
+
 ---
 
 ### Pruebas automáticas
@@ -1139,12 +1217,12 @@ bucle y deja la nota para revisión humana.
 
 Resultado local:
 
-- **533 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
-  compose (las 533 pasan).
-- **496 passed, 37 skipped** sin base: los omitidos son los tests de
-  idempotencia/constraints, los del índice RAG y los de la Central y la
-  trayectoria, que requieren PostgreSQL.
-- `ruff check src tests migrations` sin observaciones.
+- **577 tests, 0 fallas** con `TEST_DATABASE_URL` apuntando al PostgreSQL del
+  compose (las 577 pasan).
+- **535 passed, 42 skipped** sin base: los omitidos son los tests de
+  idempotencia/constraints, los del índice RAG y los de la Central, la
+  trayectoria, el cierre y la evidencia, que requieren PostgreSQL.
+- `ruff check src tests migrations scripts` sin observaciones.
 
 Cobertura funcional de los tests:
 
@@ -1174,6 +1252,13 @@ Cobertura funcional de los tests:
   para parte y para sensor, reincidencia con ventana, las seis reglas de
   aprobación, id determinista, orden nunca en `Borrador`, orden inmune a la
   nota y persistencia de la orden con sus reglas;
+- **evidencia y provenance**: el contexto productivo conserva parte, filas,
+  fotos, tendencias y fragmentos consultados; el manifiesto declara lo
+  ausente como `no_disponible`; su hash y sus triggers append-only son
+  verificados en PostgreSQL; el ledger contiene la cadena evento → evidencia
+  → análisis → propuesta → reglas → decisión con actor, rol, estado, modelo,
+  tools, tokens, costo y tiempo; la Central reconstruye una orden con un token
+  válido;
 - **modelo de nube con visión**: la foto viaja como `data:` URL, el prompt no
   lleva el texto libre del operador, la salida se valida contra el esquema
   (y se rechazan los campos de más), sin clave **no se llama a la nube**, un
@@ -1195,10 +1280,11 @@ Cobertura funcional de los tests:
   encolarse** si el bus se cae otra vez;
 - **cierre y certificación**: el parseo del cierre (tareas, repuestos con
   cantidad, horas y prueba final), la comparación contra la orden (tareas,
-  repuestos y horas), los tres estados (`Cerrada`, `Observada`, `Certificada`),
-  el monto tomado de la lista de precios del contrato y **no** del cierre, la
-  idempotencia por `cierre.externa_id` y la escritura atómica del estado, la
-  certificación y el habilita;
+  repuestos y horas), la separación entre evidencia técnica y decisión humana,
+  el cierre técnico que deja `Ejecutada`, el monto tomado de la lista de
+  precios del contrato y **no** del cierre, la idempotencia por
+  `cierre.externa_id` y `decision_cierre.cierre_id`, y la escritura atómica
+  de la decisión, el estado, la certificación y el habilita;
 - **núcleo de agentes**: las tools del agente son las del MCP con el mismo
   esquema estricto, la propuesta se contrasta con el catálogo (una falla o una
   cita inventada la descartan entera), las causas que el manual no respalda se
@@ -1206,9 +1292,12 @@ Cobertura funcional de los tests:
   cuando el modelo escribe prosa, el presupuesto corta (pasos, tokens y
   timeout) y el corte queda escrito, y cada paso queda registrado con modelo,
   herramientas, argumentos, tokens, costo y tiempo;
-- **Central de mantenimiento**: sólo se deciden órdenes pendientes, el rechazo
-  exige motivo, la decisión queda en `aprobacion` y en la trayectoria, y la
-  Central **no es una tool** (el agente no la puede alcanzar);
+- **Central de mantenimiento**: todas sus APIs exigen un token Bearer opaco,
+  uno por persona, y aplican RBAC (`planificador`, `supervisor`, `inspector`,
+  `lectura`); sin credencial responde 401 y con rol insuficiente 403. Sólo se
+  deciden órdenes pendientes, el rechazo y la observación exigen motivo, la
+  identidad no se toma del cuerpo, la decisión queda auditada con actor y rol,
+  y la Central **no es una tool** (el agente no la puede alcanzar);
 - **tolerancia al garblado del ASR**: el alias pegado ("Lados" por "la dos"),
   la palabra partida ("gol peteo") y la fonética ("gropeteo") se reconocen, sin
   confundir "correas" con "chorrea";
@@ -1698,22 +1787,35 @@ canal de la decisión**, y ése es el de la Central (`src/planta/central.py`):
 
 | Ruta | Qué hace |
 |---|---|
-| `GET /` | La pantalla: las órdenes con sus tareas, repuestos y motivo, y los botones aprobar / rechazar. Se refresca cada 20 s. |
+| `GET /` | La pantalla: las órdenes con sus tareas, repuestos y motivo, y los botones aprobar / rechazar. Se refresca cada 20 s. El shell puede cargarse sin credenciales. |
+| `GET /api/sesion` | Usuario y rol resueltos por el token. |
 | `GET /api/ordenes` | Las mismas órdenes en JSON. |
-| `POST /api/ordenes/<id>/decision` | `{"decision": "aprobar" \| "rechazar", "motivo": "...", "usuario": "..."}`. |
+| `GET /api/cierres` | Cierres técnicos pendientes y decisiones tomadas. |
+| `GET /api/ordenes/<id>/evidencia` | Manifiestos, ledger, trayectoria e integridad; `/reconstruccion` es su alias. |
+| `POST /api/ordenes/<id>/decision` | `{"decision": "aprobar" \| "rechazar", "motivo": "..."}` para `planificador`. |
+| `POST /api/cierres/<id>/decision` | `{"decision": "cerrar" \| "certificar" \| "observar", "motivo": "..."}` para `supervisor` o `inspector`. |
 
 Reglas:
 
+- **Todas las APIs exigen un token Bearer opaco**, uno por persona. La
+  identidad y el rol salen exclusivamente del token; los campos legacy
+  `usuario` y `rol` del cuerpo se ignoran. Sin credencial válida: 401; con un
+  rol insuficiente: 403.
+- Los roles son `planificador`, `supervisor`, `inspector` y `lectura`. No hay
+  token de desarrollo por defecto.
 - Sólo se pueden decidir órdenes **`Pendiente de aprobacion`**. Una orden ya
   decidida no se toca: el `UPDATE` lleva la condición del estado.
-- **Rechazar exige motivo**: si no hay motivo, se rechaza la petición.
-- La decisión queda en `aprobacion` con su `usuario` y su `motivo`, y en el
-  registro de la trayectoria (tipo `decision`).
+- **Rechazar exige motivo** y **observar un cierre exige motivo**.
+- La decisión de una orden queda en `aprobacion` con usuario y rol; la
+  decisión de un cierre queda en `decision_cierre` con actor, rol, motivo,
+  evidencia y fecha.
 - La orden se vuelve a publicar por MQTT con el estado nuevo y **el mismo id**.
 
 El servidor es el de la biblioteca estándar (`ThreadingHTTPServer`): una
 dependencia menos en una planta con 8 GB. La Central corre en su propio hilo
-y su apagado es limpio.
+y su apagado es limpio. En ejecución nativa escucha en `127.0.0.1`; dentro de
+Docker escucha en `0.0.0.0` y el puerto se publica únicamente en el loopback
+del host.
 
 ### 12.4 Presupuesto y condiciones de corte
 
@@ -2391,11 +2493,15 @@ repuestos**.
     modelo de 3B tiende a resumir de más. Por eso la del agente **no reemplaza**
     al texto determinista: se agrega, y la del catálogo sigue siendo la base.
     En una planta con un modelo más grande, el orden puede invertirse.
-18. **La Central de mantenimiento no tiene autenticación.** Es una pantalla
-    interna de la planta, en la red de depuración, para que el planificador
-    apruebe o rechace. Si la planta tuviera que exponerla fuera de la red
-    interna, habría que ponerle autenticación y control de acceso por rol: hoy
-    la decisión queda auditada (usuario, motivo, orden), pero no autenticada.
+18. **La Central de mantenimiento está autenticada y sólo se publica en
+    loopback.** El shell HTML puede cargarse sin credenciales, pero todas las
+    APIs exigen un token Bearer opaco, uno por persona, y aplican RBAC con
+    `planificador`, `supervisor`, `inspector` y `lectura`. La identidad sale
+    exclusivamente del token; sin credencial válida la API responde 401 y una
+    operación fuera del rol responde 403. En ejecución nativa escucha en
+    `127.0.0.1`; dentro de Docker escucha en `0.0.0.0` y el puerto se publica
+    únicamente en el loopback del host. Si se expone fuera del host, debe
+    añadirse TLS y un proxy con rate limiting.
 19. **El costo en USD de la trayectoria es 0 con el modelo local.** No es un
     campo vacío: el costo se calcula con los tokens medidos y la tarifa del
     modelo (`PRECIO_USD_POR_MILLON`), que con Ollama en la planta es 0 porque
@@ -2443,8 +2549,10 @@ repuestos**.
    tests y con la corrida de los 7 escenarios (la trayectoria muestra las
    consultas con su modelo, sus tokens y su tiempo), pero falta medir cuánto
    aporta la justificación del agente sobre la del cruce léxico.
-8. Ponerle **autenticación** a la Central si la planta la expone fuera de la
-   red interna.
+8. Congelar el commit final y ejecutar **P0-06**: siete escenarios, pruebas,
+   evaluación RAG, métricas, costo, latencia y hash del commit auditado.
+9. Registrar en **P0-07** la fecha, el alcance, la rúbrica, los escenarios y
+   los datos externos confirmados por la Academia.
 
 ---
 

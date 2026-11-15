@@ -32,6 +32,7 @@ from planta.cola import DrenadorCola
 from planta.heartbeat import Heartbeat, comprobar_enlace
 from planta.heartbeat import crear_cliente as crear_cliente_latido
 from planta.historial import Historiador
+from planta.identidad import AutenticadorToken
 from planta.mqtt_listener import ClientePlanta
 from planta.servicio import ServicioParteVoz
 from planta.transcriber import crear_transcriptor
@@ -348,11 +349,18 @@ def main() -> None:
         evento = detector_sensores.evaluar(lectura)
         if evento is None:
             return
+        tendencia = historiador.consultar_tendencia(
+            lectura.tag,
+            lectura.variable,
+            evento.ts,
+            unidad=lectura.unidad,
+        )
         evento = historiador.enriquecer_evento(
             evento,
             lectura.tag,
             lectura.variable,
             unidad=lectura.unidad,
+            tendencia=tendencia,
         )
         if repositorio.registrar_evento_sensor(evento):
             cliente_ref["cliente"].publicar_evento(evento)
@@ -362,7 +370,7 @@ def main() -> None:
             # servicio, no en el callback: el loop de MQTT es uno solo y no
             # puede quedarse esperando un análisis mientras la planta le
             # manda notas de voz.
-            referencia["servicio"].encolar_orden_por_evento(evento)
+            referencia["servicio"].encolar_orden_por_evento(evento, tendencia=tendencia)
 
     def al_cierre(nota) -> None:
         """Cierre de orden por voz (Fase 7).
@@ -415,6 +423,19 @@ def main() -> None:
     )
     referencia["drenador"] = drenador
 
+    # Cierre de órdenes por voz (Fase 7 + G2/G3): el técnico cierra la orden
+    # hablando; el sistema prepara la evidencia y deja la decisión final al
+    # supervisor o al inspector autenticados.
+    servicio_cierre = ServicioCierre(
+        repositorio,
+        almacenamiento,
+        transcriptor,
+        cliente,
+        catalogo,
+        precios,
+    )
+    referencia["cierre"] = servicio_cierre
+
     # ------------------------------------------------- Central de mantenimiento
     #
     # El enunciado pide que la orden pendiente "se reanuda cuando el
@@ -432,10 +453,17 @@ def main() -> None:
         cliente_ref["cliente"].publicar_orden(orden)
         logger.info("Orden %s con la decisión del planificador: %s", orden.id, estado)
 
+    autenticador = AutenticadorToken(settings.central_credenciales)
+    if not autenticador.habilitado:
+        logger.warning(
+            "La Central no tiene credenciales configuradas: sus APIs responderán 401"
+        )
     central = Central(
         repositorio,
         publicar_orden=_publicar_orden_decidida,
         registrar_paso=registrador.registrar,
+        decidir_cierre=servicio_cierre.decidir_cierre,
+        autenticador=autenticador,
         host=settings.central_host,
         puerto=settings.central_puerto,
     )
@@ -455,19 +483,6 @@ def main() -> None:
         registrador=registrador,
     )
     referencia["servicio"] = servicio
-    # Cierre de órdenes por voz (Fase 7): el técnico cierra la orden hablando
-    # y el sistema decide, contra la orden, si queda cerrada, observada o
-    # certificada.
-    servicio_cierre = ServicioCierre(
-        repositorio,
-        almacenamiento,
-        transcriptor,
-        cliente,
-        catalogo,
-        precios,
-    )
-    referencia["cierre"] = servicio_cierre
-
     parar = threading.Event()
 
     def _detener(_signum: int, _frame: object) -> None:
