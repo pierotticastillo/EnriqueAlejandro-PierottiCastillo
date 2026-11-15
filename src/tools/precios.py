@@ -8,6 +8,7 @@ mano en el código: si el contrato cambia, el monto cambia con él.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
@@ -34,6 +35,12 @@ class PrecioContrato:
     horas_incluidas: float | None = None
     tareas: tuple[str, ...] = ()
     cita: str = CITA_PRECIOS
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.precio_usd) or self.precio_usd <= 0:
+            raise ValueError(
+                f"El precio contractual {self.codigo} no es positivo y finito"
+            )
 
     @property
     def precio_cerrado(self) -> bool:

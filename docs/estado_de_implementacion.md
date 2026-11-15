@@ -136,22 +136,40 @@ el corrector oficial sin modificarlo en disco, corrige en memoria el error
 `TypeError: int + str` de su scorer y captura trayectoria, tokens, costo y
 latencia de PostgreSQL justo antes de que cada escenario elimine su volumen.
 El manifiesto `integridad_correccion.json` fija los hashes del corrector, scorer,
-rúbrica y suite RAG, el commit y los dos ajustes. La corrida oficial anclada al
-commit publicado sigue pendiente.
+rúbrica y suite RAG, el commit y los dos ajustes. La corrección se publicó en
+`main` el 2026-11-15 en el commit `a13d7cb` y la corrida completa de diagnóstico
+obtuvo **93,1/100 — APRUEBA**, con 0 eliminatorias y 469 mensajes válidos.
+Una auditoría posterior detectó un bloqueador real en la transición
+`Aprobada → Ejecutada` después de una aprobación humana y cinco huecos de
+integridad financiera/trazabilidad en PostgreSQL. Por tanto, `a13d7cb` es sólo
+un ancla diagnóstica. La remediación quedó implementada en la migración
+`0011`: corrige la transición bloqueada, exige evidencia para estados
+terminales, protege el habilita y hace fail-closed el monto contractual. La
+suite completa quedó en **631 aprobadas con PostgreSQL** y **553 aprobadas +
+78 omitidas sin base**, sin fallas; Ruff y `compileall` también pasan. Falta
+publicar el nuevo hash y repetir la corrida oficial sobre ese commit antes de
+cerrar P0-06.
+
+> **Rollback.** `0011 → 0010` no borra datos, pero restaura controles más
+> permisivos. El rollback heredado `0010 → 0009` **sí es destructivo**: elimina
+> la relación de aclaración y los enlaces del habilita con decisión y
+> certificación, y restaura cascadas permisivas. No debe ejecutarse sobre una
+> base con evidencia; para una reversión controlada se usa una copia y el
+> ciclo `0010 → 0011 → 0010 → 0011`.
 
 ## Avance por fase
 
 | Fase | Estado | Avance y pendientes |
 |---|---|---|
 | 0 — Preparación del entorno | Completa | Compose (`postgres`, `migraciones`, `sistema`, `mcp`), red externa `planta-lan`, labels `academia.planta: pc`, proxy `enlace:3128` con `NO_PROXY`, presupuesto agregado 4 CPU / 8 GB y latido `sistema/estado`. |
-| 0.5 — Esquema y migraciones | Completa | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido, trayectoria, roles, decisiones de cierre, manifiestos y ledger) e idempotencia por `evento_sistema.id`. La revisión vigente es `0010`. Los tests de persistencia, constraints, RAG, Central, trayectoria, cierre y evidencia requieren base: sin `TEST_DATABASE_URL` quedan **61 omitidos**; con PostgreSQL, los **606 tests** pasan. |
+| 0.5 — Esquema y migraciones | **Remediación verificada** | Alembic con esquema versionado (nota, foto, parte, fila_parte, conversación, pregunta, evento, alerta, orden, outbox, latido, trayectoria, roles, decisiones de cierre, manifiestos y ledger) e idempotencia por `evento_sistema.id`. La nueva revisión `0011` exige decisión/certificación/habilita para estados terminales, vuelve `habilitacion` append-only y positivo, hace único y determinista el ciclo de aclaración y permite el motivo técnico en `Aprobada → Ejecutada`. Las pruebas de PostgreSQL y el ciclo `0010 → 0011 → 0010 → 0011` pasan, incluida una instalación limpia y el backfill ambiguo fail-closed. |
 | 1 — Parte por voz | Completa y verificada | Listener MQTT, descarga de medios a disco, ASR local (`faster-whisper`), extracción determinista, resolución de nombres y unidades, preguntas de ambigüedad y conversación con tablet. La corrección del operador se aplica **a la lectura que está corrigiendo** y la conversación tiene tope: si no converge, la nota queda para revisión humana. |
 | 2 — Detección sin LLM | Completa y verificada | S1–S4 con los procedimientos del MBP-4, aviso en tablet y por radio al supervisor (canal 1), **un evento por equipo** (`parte:<nota>:<tag>`), contexto y tendencia en los escalados, sensores MQTT con límites de `/api/planta`. |
 | 3 — Tools y MCP | Completa y verificada | Siete tools de solo lectura con `extra="forbid"`, cliente HTTP con timeout/reintentos/errores tipados, búsqueda léxica de manuales y servidor MCP (streamable-http y stdio) probado en vivo. |
 | 4 — RAG, contexto y memoria | **Completa y verificada** | Índice híbrido (BM25 + embeddings) en PostgreSQL + pgvector con metadatos (`equipo`, `fabricante`, `documento`, `seccion`, `cita`, `vigente`), evaluación contra el baseline oficial, citas obligatorias en el context builder, política de memoria escrita y tool `busqueda_rag` expuesta por MCP. |
 | 5 — Análisis y borrador de orden | **Completa y verificada** | Catálogo de fallas parseado de los manuales de la planta (18 fallas vigentes, con cita), cruce con la evidencia del parte, causas probables ordenadas con lo que falta confirmar, borrador de orden con tareas/repuestos/costo y **las seis reglas de aprobación evaluadas en código**, publicación en `sistema/ordenes` y persistencia auditada. |
 | 6 — Operación sin enlace | **Completa y verificada** | La cola en PostgreSQL es **la salida de la planta**: eventos, órdenes y avisos. Si el bus no está, el mensaje queda en la base (no se pierde en la memoria del proceso) y sale cuando vuelve. Orden **por destino**: el radio espera al enlace y conserva su orden entre sí; los eventos y las órdenes no quedan bloqueados detrás del radio. Índice único **parcial** (`WHERE estado = 'pendiente'`): no hay dos copias esperando, pero un mensaje ya enviado se puede volver a encolar. `idempotency_key` deja escrito qué salió. Hilo dedicado `cola-salida` (`COLA_SONDEO_S=5`) y drenaje al reconectar. `pendientes_sincronizar` visible en el latido. Verificado en vivo (encolado, drenaje en orden, llegada al bus, enlace caído y restaurado, re-encolado). |
-| 7 — Cierre y certificación | **Completa y verificada tras auditoría** | El cierre técnico deja `Ejecutada`; `supervisor` cierra trabajo propio e `inspector` certifica u observa trabajo de contratista. La corrección `0010` impide que un reproceso degrade una decisión humana, que un segundo cierre reabra una orden terminal y que una orden tenga más de un habilita. `Observada → Ejecutada → Certificada` queda permitido únicamente como ciclo explícito de aclaración. |
+| 7 — Cierre y certificación | **Remediación verificada** | El cierre técnico deja `Ejecutada`; `supervisor` cierra trabajo propio e `inspector` certifica u observa trabajo de contratista. La migración `0011` corrige `Aprobada → Ejecutada` con motivo tras aprobación humana, exige evidencia válida para estados terminales, vuelve el habilita append-only y rechaza montos no positivos/no finitos. El cálculo contractual es estricto y fail-closed: sin precio completo no se certifica. Las regresiones PostgreSQL y la suite completa pasan; falta repetir la corrida oficial sobre el hash publicado. |
 | — — Núcleo de agentes, trayectoria, Central y presupuesto | **Completa y verificada** | Agente de LangChain (`create_agent`) que consulta las ocho tools del MCP y propone con citas (lo que propone se contrasta con el catálogo), con **cierre estructurado** para los modelos que no llaman a la herramienta de salida; registro `registro_trayectoria` con modelo, tools y argumentos, tokens, costo y tiempo (el costo sale de los tokens medidos por la tarifa del modelo); Central de mantenimiento autenticada por token Bearer y RBAC, como canal de decisión humana del planificador, supervisor e inspector; presupuesto de pasos, tokens y timeout global por nota, con el corte escrito en la bitácora y la comprobación **antes** de cada vuelta. Mini spec en `docs/spec-parte.md`. |
 
 | 8 — Alineación de Entrega 2 | En espera de información externa | Se registra la fecha, el alcance, los escenarios y la rúbrica cuando el usuario los comunique después de confirmarlos con la Academia. La implementación de los P0 independientes continúa sin esperar esta respuesta. |
@@ -169,7 +187,7 @@ commit publicado sigue pendiente.
 | P0-03 — Evidencia y provenance | **Implementado y verificado tras corrección** | Manifiesto canónico para orden, cierre y decisión, separado del JSON mutable de reglas; `construir_contexto` participa del análisis productivo; ledger transaccional con nueve tipos y reconstrucción autenticada. `decision_cierre`, manifiesto y ledger bloquean `UPDATE`, `DELETE` y `TRUNCATE`; la FK compuesta garantiza que decisión, cierre y orden sean el mismo caso. |
 | P0-04 — Autenticación y RBAC | **Implementado y verificado** | La Central exige un token Bearer opaco, uno por persona. Roles: `planificador`, `supervisor`, `inspector` y `lectura`. Sin credencial válida: 401; operación fuera del rol: 403. `usuario`/`rol` del cuerpo se ignoran; la identidad sale sólo del token. |
 | P0-05 — XSS y CSP | **Implementado y verificado** | `src/planta/central.py`: construcción DOM con `textContent`/`replaceChildren`, CSP con nonce por respuesta y cabeceras defensivas. Sigue integrado con P0-01/P0-04 y verificado por la suite completa. |
-| P0-06 — Corrida sobre el commit final | **Pendiente; corrección lista para publicar** | `ec94637` fue el primer commit de implementación, pero la auditoría posterior detectó bloqueadores en P0-01/P0-03. La corrección con migración `0010`, guardas de aplicación y **606 pruebas aprobadas con PostgreSQL** está verificada; se publicará en `main` y ese hash será el ancla de los siete escenarios, la evaluación RAG y el archivado de modelos, corpus/dataset, métricas, eliminatorias, mensajes inválidos, costo y latencia. |
+| P0-06 — Corrida sobre el commit final | **Remediación verificada; publicación y corrida pendientes** | La corrección `a13d7cb` produjo una corrida diagnóstica de **93,1/100 — APRUEBA**, 0 eliminatorias y 469 mensajes válidos, pero no es el ancla final. `0011`, las guardas fail-closed, las regresiones H-01–H-06, la outbox `tablet` y el wrapper con commit/árbol/revisión exigidos ya pasan la suite completa. Falta publicar el nuevo hash y repetir los siete escenarios, RAG, digest, métricas y archivado. |
 | P0-07 — Alcance y rúbrica oficiales | Pendiente de información externa | Se actualizará cuando el usuario comunique la información confirmada por la Academia. |
 
 ## Decisiones que conviene no perder de vista
@@ -647,10 +665,33 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 5. **Pedir al curso el registro de ingreso y egreso** (§3.1/§3.2): mientras la planta no lo publique, la diferencia de horas no puede ser bloqueante.
 6. **Cerrar el hueco de `B1`/`D2`**: el corrector espera «Escalado» en cualquier nota que mencione un equipo con una falla activa, y el sistema sólo escala con lo que el operador lee. El camino corto es reconocer más síntomas cualitativos del catálogo (ruido, golpepeo, no arranca) como anomalía —y que el decodificador escriba esas frases: los síntomas ya están en el prompt del ASR—; el camino largo es pedirle al curso la lista de fallas activas por equipo, que la planta no publica.
 7. **Confirmar con la Academia** fecha, alcance, rúbrica, escenarios y datos externos de la Entrega 2; registrarlos en P0-07.
-8. **Congelar el commit final y ejecutar P0-06** sobre los siete escenarios, archivando hash, modelos, corpus, métricas, costo y latencia.
+8. Publicar el hash remediado y **repetir** P0-06 sobre los siete escenarios; la corrida `a13d7cb` queda archivada sólo como diagnóstico.
 9. Completar las Fases 11 y 12: benchmark y red team, outbox/PUBACK, observabilidad, CI/CD y cierre reproducible.
 
 ## Historial
+
+- **2026-11-15 (Plan 2, remediación `0011` verificada):** se corrigió el
+  bloqueador `Aprobada → Ejecutada` después de una aprobación humana; los
+  estados terminales ahora exigen decisión, certificación y habilita válidos;
+  `habilitacion` bloquea `UPDATE`/`DELETE`/`TRUNCATE` y exige monto USD
+  positivo y finito; el cálculo contractual rechaza precios ausentes,
+  incompletos o no finitos; y el ciclo de aclaración es único y determinista.
+  El wrapper exige commit, árbol limpio y revisión Alembic. La suite completa
+  quedó en **631 aprobadas con PostgreSQL** y **553 aprobadas + 78 omitidas
+  sin base**; Ruff y `compileall` pasan. El rollback heredado `0010 → 0009` se
+  documentó como destructivo de provenance.
+
+- **2026-11-15 (Plan 2, auditoría de la corrida diagnóstica y remediación):**
+  la corrida completa anclada a `a13d7cb` obtuvo **93,1/100 — APRUEBA**, 0
+  eliminatorias y 469 mensajes válidos, pero la revisión independiente detectó
+  un bloqueador B0: el trigger de `0010` impedía `Aprobada → Ejecutada` cuando
+  el cierre aportaba un motivo después de una aprobación humana. También se
+  detectaron cinco huecos B1: PostgreSQL permitía estados terminales sin
+  decisión/certificación, `habilitacion` era mutable, podía emitirse con monto
+  cero, faltaba unicidad de aclaración y el backfill podía ser ambiguo. El
+  commit `a13d7cb` deja de ser el ancla final; se inició la migración `0011`
+  con guardas fail-closed y regresiones, y la corrida oficial deberá repetirse
+  sobre el nuevo hash.
 
 - **2026-11-15 (Plan 2, verificación final antes de P0-06):** la publicación de
   órdenes usa siempre el snapshot comprometido en PostgreSQL; si la

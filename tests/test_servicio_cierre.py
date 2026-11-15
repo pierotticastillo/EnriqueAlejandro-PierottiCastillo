@@ -351,6 +351,70 @@ def test_la_contratista_sin_diferencias_se_certifica_con_habilita_humano(
     assert repositorio.registros[-1]["rol"] == "inspector"
 
 
+def test_la_certificacion_sin_precios_no_decide_ni_emite_habilita(catalogo) -> None:
+    repositorio = RepositorioFalso(
+        _fila_orden(tareas=["T-B-ROD"], repuestos=[], ejecutor="Servipat")
+    )
+    cliente = ClienteFalso()
+    texto = (
+        "Hice cambio de rodamientos del cigüeñal. "
+        "Probé a ciento diez kilos, sin pérdida. Fueron dieciséis horas."
+    )
+    servicio, _ = _servicio(
+        repositorio,
+        cliente,
+        catalogo,
+        ListaPrecios(),
+        texto=texto,
+    )
+    servicio.procesar_cierre(_nota(empresa="Servipat", id="CIERRE-SIN-PRECIO"))
+
+    resultado = servicio.decidir_cierre(
+        "ORD-F-201A-FC-T01",
+        "certificar",
+        actor="marta",
+        rol="inspector",
+    )
+
+    assert resultado["ok"] is False
+    assert resultado["codigo"] == 409
+    assert "precio contractual" in resultado["error"]
+    assert repositorio.orden["estado"] == "Ejecutada"
+    assert all("decision" not in registro for registro in repositorio.registros)
+    assert all(orden.estado.value != "Certificada" for orden in cliente.ordenes)
+
+
+def test_observar_no_depende_de_la_lista_de_precios(catalogo) -> None:
+    repositorio = RepositorioFalso(
+        _fila_orden(tareas=["T-B-ROD"], repuestos=[], ejecutor="Servipat")
+    )
+    cliente = ClienteFalso()
+    texto = (
+        "Hice cambio de rodamientos del cigüeñal. "
+        "Usé un juego de sellos de cárter TX-350. Fueron dieciséis horas."
+    )
+    servicio, _ = _servicio(
+        repositorio,
+        cliente,
+        catalogo,
+        ListaPrecios(),
+        texto=texto,
+    )
+    servicio.procesar_cierre(_nota(empresa="Servipat", id="CIERRE-OBSERVA-SIN-PRECIO"))
+
+    resultado = servicio.decidir_cierre(
+        "ORD-F-201A-FC-T01",
+        "observar",
+        actor="marta",
+        rol="inspector",
+        motivo="falta justificar un repuesto",
+    )
+
+    assert resultado["ok"] is True
+    assert repositorio.orden["estado"] == "Observada"
+    assert repositorio.obtener_habilitacion("ORD-F-201A-FC-T01") is None
+
+
 def test_el_monto_no_sale_de_lo_que_declara_el_cierre(catalogo, precios) -> None:
     """El habilita se paga con el precio del contrato, no con lo que dice el
     técnico (CT-SVP-2025 §3.2)."""
@@ -441,7 +505,7 @@ def test_el_precheck_de_ejecutor_precede_a_la_existencia_del_cierre(
 
 def test_un_conflicto_del_repositorio_se_traduce_a_409(catalogo, precios) -> None:
     repositorio = RepositorioConError(
-        _fila_orden(ejecutor="Servipat"),
+        _fila_orden(tareas=["T-B-ROD"], repuestos=[], ejecutor="Servipat"),
         ConflictoEstado("la orden ya fue decidida"),
     )
     cliente = ClienteFalso()
@@ -463,7 +527,7 @@ def test_un_conflicto_del_repositorio_se_traduce_a_409(catalogo, precios) -> Non
 
 def test_un_error_de_autorizacion_se_traduce_a_403(catalogo, precios) -> None:
     repositorio = RepositorioConError(
-        _fila_orden(ejecutor="Servipat"),
+        _fila_orden(tareas=["T-B-ROD"], repuestos=[], ejecutor="Servipat"),
         AutorizacionInvalida("el ejecutor no corresponde"),
     )
     cliente = ClienteFalso()

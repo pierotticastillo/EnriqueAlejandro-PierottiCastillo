@@ -231,6 +231,19 @@ def test_un_mensaje_invalido_no_bloquea_a_los_demas() -> None:
     assert len(publicador.publicados) == 1
 
 
+def test_un_aviso_de_tablet_pendiente_no_se_descarta() -> None:
+    repo = RepoFalso()
+    publicador = PublicadorFalso()
+    repo.encolar_outbox("tablet", _mensaje("tablet-1").model_dump(mode="json"), Topicos.TABLET)
+
+    enviados = publicar_pendientes(repo, publicador, enlace_ok=False)
+
+    assert enviados == 1
+    assert repo.enviados == ["out-1"]
+    assert repo.pendientes == []
+    assert '"tablet-1"' in publicador.publicados[0][1]
+
+
 def test_un_tipo_desconocido_se_descarta() -> None:
     repo = RepoFalso()
     publicador = PublicadorFalso()

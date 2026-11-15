@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -20,6 +22,7 @@ from planta_contrato import (
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
+from analisis.cierre import MontoContractualInvalido
 from analisis.provenance import (
     manifiesto_de_cierre,
     manifiesto_de_decision_cierre,
@@ -1714,6 +1717,25 @@ class Repositorio:
 
             if fila["estado"] != "Ejecutada":
                 raise ConflictoEstado("La orden ya tiene una decisión de cierre")
+            if accion == "certificar":
+                if (
+                    monto_usd is None
+                    or isinstance(monto_usd, bool)
+                    or not isinstance(monto_usd, (int, float, Decimal))
+                ):
+                    raise MontoContractualInvalido(
+                        "El habilita necesita un monto USD positivo y finito"
+                    )
+                try:
+                    monto_usd = float(monto_usd)
+                except (TypeError, ValueError, OverflowError) as exc:
+                    raise MontoContractualInvalido(
+                        "El habilita necesita un monto USD positivo y finito"
+                    ) from exc
+                if not math.isfinite(monto_usd) or monto_usd <= 0:
+                    raise MontoContractualInvalido(
+                        "El habilita necesita un monto USD positivo y finito"
+                    )
             diferencias = list(fila["diferencias"] or [])
             cierre_referencia = str(fila["externa_id"] or fila["cierre_id"])
             evidencia = {
@@ -1815,19 +1837,9 @@ class Repositorio:
                     if isinstance(diferencia, dict) and diferencia.get("detalle")
                 ]
                 motivo_final = "; ".join(detalle) or None
-            conexion.execute(
-                text(
-                    """
-                    UPDATE orden
-                    SET estado = CAST(:estado AS estado_orden),
-                        motivo = :motivo,
-                        actualizada_en = now()
-                    WHERE id = :id
-                    """
-                ),
-                {"estado": estado, "motivo": motivo_final, "id": orden_id},
-            )
-
+            # PostgreSQL exige que el estado terminal tenga su habilita válido.
+            # Se emite dentro de la misma transacción antes del UPDATE; si la
+            # orden no cambia, el rollback también deshace la autorización.
             habilita: str | None = None
             monto: float | None = None
             if accion == "certificar":
@@ -1844,6 +1856,19 @@ class Repositorio:
                     decision_id=str(decision_id),
                     certificacion_id=str(certificacion_id),
                 )
+
+            conexion.execute(
+                text(
+                    """
+                    UPDATE orden
+                    SET estado = CAST(:estado AS estado_orden),
+                        motivo = :motivo,
+                        actualizada_en = now()
+                    WHERE id = :id
+                    """
+                ),
+                {"estado": estado, "motivo": motivo_final, "id": orden_id},
+            )
 
             manifiesto_cierre = conexion.execute(
                 text(

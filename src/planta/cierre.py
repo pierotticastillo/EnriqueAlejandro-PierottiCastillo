@@ -32,6 +32,7 @@ from planta_contrato import NotaCierre, OrdenSistema, Repuesto
 
 from analisis.catalogo import CatalogoManuales
 from analisis.cierre import (
+    MontoContractualInvalido,
     comparar_cierre,
     monto_de_la_orden,
     parsear_cierre,
@@ -278,17 +279,31 @@ class ServicioCierre:
             return {"ok": False, "error": str(exc), "codigo": 400}
 
         monto: float | None = None
-        if transicion.estado == "Certificada":
-            monto, detalle = monto_de_la_orden(
-                orden,
-                self._precios,
-                horas=float(cierre["horas"]) if cierre.get("horas") is not None else None,
-            )
+        if transicion.estado == "Certificada" and orden.estado.value != "Certificada":
+            # La certificación es fail-closed: cada tarea debe tener un ítem
+            # contractual y el total debe ser positivo. Una lista vacía o una
+            # tarea sin precio nunca puede producir un habilita por USD 0.
+            try:
+                monto, detalle = monto_de_la_orden(
+                    orden,
+                    self._precios,
+                    horas=(
+                        float(cierre["horas"])
+                        if cierre.get("horas") is not None
+                        else None
+                    ),
+                )
+            except MontoContractualInvalido as exc:
+                return {
+                    "ok": False,
+                    "error": f"No se puede emitir el habilita: {exc}",
+                    "codigo": 409,
+                }
             logger.info(
                 "Monto del habilita de %s: USD %s (%s)",
                 orden.id,
                 f"{monto:,.2f}",
-                "; ".join(detalle) or "sin ítem de contrato",
+                "; ".join(detalle) or "sin detalle de precio",
             )
 
         try:
@@ -305,6 +320,8 @@ class ServicioCierre:
             return {"ok": False, "error": str(exc), "codigo": 409}
         except AutorizacionInvalida as exc:
             return {"ok": False, "error": str(exc), "codigo": 403}
+        except MontoContractualInvalido as exc:
+            return {"ok": False, "error": str(exc), "codigo": 409}
         except ValueError as exc:
             return {"ok": False, "error": str(exc), "codigo": 400}
 

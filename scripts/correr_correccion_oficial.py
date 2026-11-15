@@ -280,7 +280,79 @@ def _capturar_metricas(database_url: str, destino: Path, escenario: str) -> None
     )
 
 
-def _integridad(correccion: Path, repo: Path, salida: Path, parche: str) -> None:
+def _verificar_ancla(
+    correccion: Path,
+    repo: Path,
+    database_url: str,
+    *,
+    expected_commit: str | None,
+    expected_alembic: str | None,
+    expected_correccion_commit: str | None,
+    require_clean: bool,
+) -> dict[str, str | bool]:
+    """Verifica commit, árbol limpio y revisión antes de iniciar la corrida.
+
+    Exigir el commit esperado activa también la exigencia de árbol limpio:
+    una evidencia reproducible no puede salir de un checkout alterado.
+    """
+    commit = _git(repo, "rev-parse", "HEAD")
+    if not commit:
+        raise RuntimeError(f"El checkout de la solución no es un repositorio Git: {repo}")
+    if expected_commit and commit != expected_commit:
+        raise RuntimeError(
+            f"El checkout de la solución está en {commit}, no en {expected_commit}"
+        )
+    estado = _git(repo, "status", "--porcelain=v1", "--untracked-files=all")
+    if (expected_commit or require_clean) and estado:
+        raise RuntimeError(
+            "El checkout de la solución tiene cambios sin confirmar; la corrida se detiene"
+        )
+
+    correccion_commit = ""
+    correccion_estado = ""
+    if expected_correccion_commit:
+        correccion_commit = _git(correccion.parent, "rev-parse", "HEAD")
+        if not correccion_commit:
+            raise RuntimeError("No se pudo determinar el commit del repositorio de la Academia")
+        if correccion_commit != expected_correccion_commit:
+            raise RuntimeError(
+                "El repositorio de la Academia está en "
+                f"{correccion_commit}, no en {expected_correccion_commit}"
+            )
+        correccion_estado = _git(
+            correccion.parent, "status", "--porcelain=v1", "--untracked-files=all"
+        )
+        if correccion_estado:
+            raise RuntimeError(
+                "El repositorio de la Academia tiene cambios sin confirmar"
+            )
+
+    motor = create_engine(database_url, pool_pre_ping=True)
+    try:
+        with motor.connect() as conexion:
+            version = conexion.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+    finally:
+        motor.dispose()
+    if expected_alembic and version != expected_alembic:
+        raise RuntimeError(
+            f"La base está en Alembic {version}, no en {expected_alembic}"
+        )
+    return {
+        "commit": commit,
+        "arbol_limpio": not bool(estado),
+        "alembic_version": str(version),
+    }
+
+
+def _integridad(
+    correccion: Path,
+    repo: Path,
+    salida: Path,
+    parche: str,
+    verificacion: dict[str, str | bool],
+) -> None:
     rubrica = correccion / "rubrica.yaml"
     suite = correccion.parent / "datos" / "documentos" / "evaluacion" / "retrieval.json"
     nota = {
@@ -292,6 +364,7 @@ def _integridad(correccion: Path, repo: Path, salida: Path, parche: str) -> None
         "solucion_repo": str(repo),
         "solucion_commit": _git(repo, "rev-parse", "HEAD"),
         "solucion_status": _git(repo, "status", "--porcelain"),
+        "verificacion_ancla": verificacion,
         "archivos": {
             "corregir.py": _sha256(correccion / "corregir.py"),
             "puntuar.py": _sha256(correccion / "puntuar.py"),
@@ -328,6 +401,10 @@ def main() -> int:
     parser.add_argument("--alumno")
     parser.add_argument("--escenarios", nargs="*")
     parser.add_argument("--database-url")
+    parser.add_argument("--expected-commit")
+    parser.add_argument("--expected-alembic")
+    parser.add_argument("--expected-correccion-commit")
+    parser.add_argument("--require-clean", action="store_true")
     parser.add_argument("--api", default="http://localhost:8100")
     parser.add_argument("--rubrica", type=Path)
     parser.add_argument("--velocidad", type=float)
@@ -339,13 +416,22 @@ def main() -> int:
     correccion = args.correccion_dir.resolve()
     repo = args.repo.resolve()
     salida = args.salida.resolve()
+    database_url = _url_postgres(repo, args.database_url)
+    verificacion = _verificar_ancla(
+        correccion,
+        repo,
+        database_url,
+        expected_commit=args.expected_commit,
+        expected_alembic=args.expected_alembic,
+        expected_correccion_commit=args.expected_correccion_commit,
+        require_clean=args.require_clean,
+    )
     salida.mkdir(parents=True, exist_ok=True)
 
     scorer = _cargar_modulo("puntuar", correccion / "puntuar.py")
     parche = _corregir_scorer_en_memoria(scorer)
-    _integridad(correccion, repo, salida, parche)
+    _integridad(correccion, repo, salida, parche, verificacion)
 
-    database_url = _url_postgres(repo, args.database_url)
     corrector = _cargar_modulo("corregir_oficial", correccion / "corregir.py")
     original_sh = corrector.sh
 

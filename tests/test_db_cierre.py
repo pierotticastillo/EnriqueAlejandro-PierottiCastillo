@@ -964,3 +964,266 @@ def test_postgresql_rechaza_una_segunda_certificacion_final(
         assert certificaciones == 1
     finally:
         _limpiar(engine, [orden.id], evento_id)
+
+
+def test_el_cierre_con_motivo_tras_aprobacion_humana_puede_registrarse(
+    repositorio,
+    engine,
+) -> None:
+    """La aprobación humana no bloquea el motivo técnico de Aprobada a Ejecutada."""
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id, ejecutor="Servipat")
+    pendiente = orden.model_copy(update={"estado": EstadoOrden.pendiente})
+    try:
+        repositorio.guardar_orden(
+            pendiente,
+            reglas={"cumple": False},
+            costo_usd=1150,
+        )
+        aprobado = repositorio.decidir_orden(
+            orden.id,
+            "Aprobada",
+            usuario="ana",
+            rol="planificador",
+        )
+        assert aprobado is not None
+
+        resultado = _registrar(
+            repositorio,
+            orden,
+            empresa="Servipat",
+            motivo="El cierre declara un repuesto que no estaba en la orden",
+            diferencias=[
+                {
+                    "tipo": "repuesto_extra",
+                    "detalle": "El cierre declara un juego de sellos",
+                    "sustantiva": True,
+                }
+            ],
+        )
+
+        assert resultado["nuevo"] is True
+        guardada = repositorio.obtener_orden(orden.id)
+        assert guardada["estado"] == "Ejecutada"
+        assert "no estaba en la orden" in guardada["motivo"]
+    finally:
+        _limpiar(engine, [orden.id], evento_id)
+
+
+def test_postgresql_exige_decision_para_entrar_en_estado_terminal(
+    repositorio,
+    engine,
+) -> None:
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id, ejecutor="Servipat")
+    try:
+        repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
+        _registrar(repositorio, orden, empresa="Servipat")
+
+        with pytest.raises(DBAPIError, match="decisión humana"):
+            with engine.begin() as conexion:
+                conexion.execute(
+                    text(
+                        "UPDATE orden "
+                        "SET estado = CAST('Certificada' AS estado_orden) "
+                        "WHERE id = :id"
+                    ),
+                    {"id": orden.id},
+                )
+
+        assert repositorio.obtener_orden(orden.id)["estado"] == "Ejecutada"
+    finally:
+        _limpiar(engine, [orden.id], evento_id)
+
+
+def test_postgresql_exige_habilita_para_entrar_en_certificada(
+    repositorio,
+    engine,
+) -> None:
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id, ejecutor="Servipat")
+    try:
+        repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
+        _registrar(repositorio, orden, empresa="Servipat")
+        cierre_id = repositorio.obtener_cierre_de_orden(orden.id)["id"]
+        with engine.begin() as conexion:
+            conexion.execute(
+                text(
+                    """
+                    INSERT INTO decision_cierre (
+                        cierre_id, orden_id, decision, estado_orden,
+                        actor, rol, motivo, evidencia
+                    )
+                    VALUES (
+                        :cierre, :orden, 'certificar', 'Certificada',
+                        'marta', 'inspector', NULL, '{}'::jsonb
+                    )
+                    """
+                ),
+                {"cierre": cierre_id, "orden": orden.id},
+            )
+            conexion.execute(
+                text(
+                    """
+                    INSERT INTO certificacion (
+                        orden_id, cierre_id, inspector, decision, motivo, rol
+                    )
+                    VALUES (
+                        :orden, :cierre, 'marta', 'certifica', NULL, 'inspector'
+                    )
+                    """
+                ),
+                {"orden": orden.id, "cierre": cierre_id},
+            )
+
+        with pytest.raises(DBAPIError, match="certificación y habilita"):
+            with engine.begin() as conexion:
+                conexion.execute(
+                    text(
+                        "UPDATE orden "
+                        "SET estado = CAST('Certificada' AS estado_orden) "
+                        "WHERE id = :id"
+                    ),
+                    {"id": orden.id},
+                )
+
+        assert repositorio.obtener_orden(orden.id)["estado"] == "Ejecutada"
+        assert repositorio.obtener_habilitacion(orden.id) is None
+    finally:
+        _limpiar(engine, [orden.id], evento_id)
+
+
+def test_habilitacion_es_append_only_para_update_delete_y_truncate(
+    repositorio,
+    engine,
+) -> None:
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id, ejecutor="Servipat")
+    try:
+        repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
+        _registrar(repositorio, orden, empresa="Servipat")
+        repositorio.decidir_cierre_humano(
+            orden_id=orden.id,
+            decision="certificar",
+            actor="marta",
+            rol="inspector",
+            monto_usd=1150.0,
+        )
+
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as conexion:
+                conexion.execute(
+                    text(
+                        "UPDATE habilitacion SET monto = 999999 "
+                        "WHERE orden_id = :id"
+                    ),
+                    {"id": orden.id},
+                )
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as conexion:
+                conexion.execute(
+                    text("DELETE FROM habilitacion WHERE orden_id = :id"),
+                    {"id": orden.id},
+                )
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as conexion:
+                conexion.execute(text("TRUNCATE TABLE habilitacion"))
+
+        habilitacion = repositorio.obtener_habilitacion(orden.id)
+        assert habilitacion is not None
+        assert float(habilitacion["monto"]) == 1150.0
+    finally:
+        _limpiar(engine, [orden.id], evento_id)
+
+
+@pytest.mark.parametrize(
+    "monto",
+    [None, 0.0, -1.0, "1150", True, float("nan"), float("inf"), float("-inf")],
+)
+def test_el_repositorio_rechaza_un_monto_de_habilita_invalido(
+    repositorio,
+    engine,
+    monto,
+) -> None:
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id, ejecutor="Servipat")
+    try:
+        repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
+        _registrar(repositorio, orden, empresa="Servipat")
+
+        with pytest.raises(ValueError, match="monto"):
+            repositorio.decidir_cierre_humano(
+                orden_id=orden.id,
+                decision="certificar",
+                actor="marta",
+                rol="inspector",
+                monto_usd=monto,
+            )
+
+        assert repositorio.obtener_orden(orden.id)["estado"] == "Ejecutada"
+        assert repositorio.obtener_habilitacion(orden.id) is None
+        with engine.connect() as conexion:
+            decisiones = conexion.execute(
+                text("SELECT count(*) FROM decision_cierre WHERE orden_id = :id"),
+                {"id": orden.id},
+            ).scalar_one()
+        assert decisiones == 0
+    finally:
+        _limpiar(engine, [orden.id], evento_id)
+
+
+def test_no_se_pueden_insertar_dos_aclaraciones_para_la_misma_observacion(
+    repositorio,
+    engine,
+) -> None:
+    with engine.begin() as conexion:
+        evento_id = _evento(conexion)
+    orden = _orden(evento_id, ejecutor="Servipat")
+    try:
+        repositorio.guardar_orden(orden, reglas={"cumple": True}, costo_usd=1150)
+        _registrar(repositorio, orden, empresa="Servipat")
+        repositorio.decidir_cierre_humano(
+            orden_id=orden.id,
+            decision="observar",
+            actor="marta",
+            rol="inspector",
+            motivo="falta justificar un repuesto",
+        )
+        observada = repositorio.obtener_cierre_de_orden(orden.id)
+        _registrar(
+            repositorio,
+            orden,
+            cierre_id=f"CIERRE-{uuid.uuid4().hex[:8]}",
+            empresa="Servipat",
+        )
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conexion:
+                conexion.execute(
+                    text(
+                        """
+                        INSERT INTO cierre (
+                            externa_id, orden_id, tecnico, empresa, transcripcion,
+                            tareas_hechas, repuestos_usados, horas, prueba_final,
+                            diferencias, aclara_cierre_id
+                        )
+                        VALUES (
+                            :externa, :orden, 'otro técnico', 'Servipat',
+                            'segunda aclaración', '[]'::jsonb, '[]'::jsonb,
+                            1.0, 'prueba', '[]'::jsonb, :observada
+                        )
+                        """
+                    ),
+                    {
+                        "externa": f"CIERRE-{uuid.uuid4().hex[:8]}",
+                        "orden": orden.id,
+                        "observada": observada["id"],
+                    },
+                )
+    finally:
+        _limpiar(engine, [orden.id], evento_id)

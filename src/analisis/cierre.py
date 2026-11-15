@@ -26,6 +26,7 @@ nunca de lo que declara el cierre (CT-SVP-2025 §3.2).
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
@@ -47,6 +48,11 @@ TOLERANCIA_CANTIDAD = 0.10
 # Las horas de la orden son las *incluidas* en el precio, no un tope de
 # trabajo: un trabajo de 16 h puede llevar 20 h y seguir siendo correcto.
 TOLERANCIA_HORAS = 0.30
+
+
+class MontoContractualInvalido(ValueError):
+    """El monto del habilita no puede calcularse con el contrato vigente."""
+
 
 # Verbos con los que el técnico dice qué hizo y qué usó.
 _VERBOS_TRABAJO = (
@@ -814,24 +820,49 @@ def monto_de_la_orden(
     cerrados va el precio del ítem; para los ítems por equipo, el precio por
     cada equipo de la orden; para los ítems por hora, las horas (la menor
     entre el registro de ingreso y las declaradas, §3.2).
+
+    El cálculo es estricto: una tarea sin precio, horas ausentes o un importe
+    no positivo/infinito abortan la certificación. Nunca devuelve un total
+    parcial ni USD 0 como si fuera un monto contractual válido.
     """
+    if not math.isfinite(float(equipos)) or equipos <= 0:
+        raise MontoContractualInvalido("La cantidad de equipos no es positiva y finita")
+    if horas is not None and (not math.isfinite(horas) or horas <= 0):
+        raise MontoContractualInvalido("Las horas no son positivas y finitas")
+
     total = 0.0
     detalle: list[str] = []
     for codigo in orden.tareas:
         precio = precios.de_tarea(codigo)
         if precio is None:
-            continue
+            raise MontoContractualInvalido(
+                f"Falta el precio contractual de la tarea {codigo}"
+            )
+        if not math.isfinite(precio.precio_usd) or precio.precio_usd <= 0:
+            raise MontoContractualInvalido(
+                f"El precio contractual de {codigo} no es positivo y finito"
+            )
         if precio.por_hora:
             if horas is None:
-                continue
+                raise MontoContractualInvalido(
+                    f"Faltan las horas para el precio por hora de {codigo}"
+                )
             importe = precio.precio_usd * horas
         elif precio.por_equipo:
             importe = precio.precio_usd * equipos
         else:
             importe = precio.precio_usd
+        if not math.isfinite(importe) or importe <= 0:
+            raise MontoContractualInvalido(
+                f"El importe contractual de {codigo} no es positivo y finito"
+            )
         total += importe
         detalle.append(f"{precio.codigo} ({precio.descripcion}): USD {importe:,.0f}")
-    return round(total, 2), detalle
+
+    total = round(total, 2)
+    if not math.isfinite(total) or total <= 0:
+        raise MontoContractualInvalido("El monto contractual total no es positivo y finito")
+    return total, detalle
 
 
 def validar_decision_cierre(

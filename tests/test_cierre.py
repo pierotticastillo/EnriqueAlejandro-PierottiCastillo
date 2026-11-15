@@ -21,13 +21,14 @@ from planta_contrato import OrdenSistema, Repuesto
 
 from analisis.catalogo import CatalogoManuales
 from analisis.cierre import (
+    MontoContractualInvalido,
     comparar_cierre,
     monto_de_la_orden,
     parsear_cierre,
     validar_decision_cierre,
 )
 from manuales import documentos
-from tools.precios import ListaPrecios, precios_desde_texto
+from tools.precios import ListaPrecios, PrecioContrato, precios_desde_texto
 
 # --------------------------------------------------------------- fixtures
 
@@ -457,9 +458,21 @@ def test_el_monto_no_sale_de_lo_que_declara_el_cierre(precios: ListaPrecios) -> 
     assert cierre_mentiroso.monto_habilita_usd != monto
 
 
-def test_las_tareas_sin_item_de_contrato_no_suman(precios: ListaPrecios) -> None:
-    """El trabajo propio no se factura con el contrato de la contratista."""
+def test_una_tarea_sin_item_de_contrato_hace_fallar_el_monto(
+    precios: ListaPrecios,
+) -> None:
+    """Una suma parcial nunca puede convertirse en un habilita."""
     orden = _orden(tareas=("T-F-CAR",))
-    monto, detalle = monto_de_la_orden(orden, precios)
-    assert monto == 0.0
-    assert detalle == []
+    with pytest.raises(MontoContractualInvalido, match="precio contractual"):
+        monto_de_la_orden(orden, precios)
+
+
+@pytest.mark.parametrize("precio", [0.0, -1.0, float("nan"), float("inf"), float("-inf")])
+def test_el_catalogo_rechaza_un_precio_no_positivo_o_no_finito(precio: float) -> None:
+    with pytest.raises(ValueError, match="positivo y finito"):
+        PrecioContrato(
+            codigo="SVP-INV",
+            descripcion="precio inválido",
+            unidad="precio cerrado",
+            precio_usd=precio,
+        )

@@ -41,6 +41,7 @@ logger = logging.getLogger("planta.cola")
 #: Qué contrato hay que validar según el tipo de mensaje de la cola.
 MODELOS: dict[str, Any] = {
     "radio": MensajeTablet,
+    "tablet": MensajeTablet,
     "evento": EventoSistema,
     "orden": OrdenSistema,
 }
