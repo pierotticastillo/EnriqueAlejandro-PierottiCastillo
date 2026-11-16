@@ -48,6 +48,10 @@ de órdenes.
       tools del MCP (esquema Pydantic estricto) y **propone** con citas; la
       decisión sigue en código. Corre en el hilo de redacción, así que no
       agrega latencia al camino crítico.
+- [x] Selección del LLM local — comparación controlada de cuatro modelos en el
+      agente real; se mantiene `Qwen2.5-3B-Instruct` por ser el único que
+      consultó las fuentes, produjo una propuesta válida y respetó el
+      presupuesto ([`docs/evaluacion_modelo_local.md`](docs/evaluacion_modelo_local.md)).
 - [x] Registro de la trayectoria — una fila por paso con el modelo, las tools
       y sus argumentos, los tokens, el costo y el tiempo (`registro_trayectoria`).
 - [x] Evidencia inmutable y provenance — manifiesto canónico por orden,
@@ -519,9 +523,10 @@ agente de LangChain (`create_agent`) que **consulta** y **propone**.
 
 ### El cierre de la propuesta
 
-El modelo local de 3B consulta bien pero **no llama a la herramienta de
-salida**: escribe la propuesta en prosa. Por eso, si la herramienta de salida
-no fue llamada, la conversación se le vuelve a pasar al modelo con el esquema
+El modelo local seleccionado (`Qwen2.5-3B-Instruct`) consulta bien pero **no
+llama a la herramienta de salida**: escribe la propuesta en prosa. Por eso, si
+la herramienta de salida no fue llamada, la conversación se le vuelve a pasar
+al modelo con el esquema
 y se le pide que complete la propuesta: es el **cierre estructurado**, con la
 salida estructurada nativa de Ollama (`format` con el JSON schema). No es un
 camino distinto —el mismo modelo, la misma conversación y los mismos
@@ -1067,6 +1072,28 @@ modelos: los comparan contra esa lista.
 | `llm` | `Qwen2.5-3B-Instruct` | Ollama (llama.cpp) | planta | Q4_K_M, ctx 2048, 2 hilos, `temperature=0`, `keep_alive=0`, timeout 90 s |
 | `vision` | `Nemotron 3 Nano Omni 30B A3B` | API de NVIDIA | nube | `temperature=0`, `max_tokens=800`, timeout 8 s, salida validada contra esquema |
 
+### Por qué se mantiene `Qwen2.5-3B-Instruct`
+
+El **2026-11-16** se compararon cuatro modelos locales en el agente real, con
+el mismo prompt, corpus, tools, contexto, semilla, presupuesto de 420 s y las
+mismas validaciones de esquema, falla y citas:
+
+| Modelo | Pesos | Consultó tools nativamente | Propuesta válida | Tiempo | Decisión |
+|---|---:|:---:|:---:|---:|---|
+| **`qwen2.5:3b-instruct`** | **1,9 GB** | **Sí** | **Sí** | **330,3 s** | **Se mantiene** |
+| `qwen3:4b` | 2,5 GB | No | Sí | 428,0 s | Descartado: superó el presupuesto y no consultó fuentes |
+| `phi4-mini` | 2,5 GB | No | Sí | 59,2 s | Descartado: escribió las llamadas como texto, sin tool calls nativos |
+| `llama3.2:3b` | 2,0 GB | No | No | 29,1 s | Descartado: inventó una falla y la propuesta fue descartada |
+
+`Qwen2.5-3B-Instruct` fue el único candidato que consultó realmente el manual
+y el historial, produjo una propuesta trazable y terminó dentro del
+presupuesto. Son tres llamadas porque, después de consultar, escribe la
+propuesta en prosa y usa el cierre estructurado ya contemplado por el agente.
+Los tres modelos alternativos se evaluaron fuera de la lista cerrada y no
+quedaron habilitados en runtime. El protocolo, los resultados y los límites
+del benchmark están en
+[`docs/evaluacion_modelo_local.md`](docs/evaluacion_modelo_local.md).
+
 La clave de NVIDIA está **cableada** (`NVIDIA_API_KEY` en el `.env` local, que
 Git ignora, y `NVIDIA_API_KEY` en el entorno del contenedor). La clave por sí
 sola **no habilita nada**: el modelo configurado tiene que ser el de la lista
@@ -1102,9 +1129,10 @@ docker compose exec sistema python scripts/medir_vision.py --fotos /datos --repe
 
 ### Qué hace el modelo de lenguaje (y qué no)
 
-`Qwen2.5-3B-Instruct` es un **auxiliar de redacción**: escribe la
-justificación técnica de la orden (por qué esas causas, qué evidencia hay) en
-un hilo aparte, después de que la orden ya se publicó. Eso es todo.
+`Qwen2.5-3B-Instruct` es un **auxiliar local**: redacta la justificación
+técnica de la orden (por qué esas causas, qué evidencia hay) y es el motor del
+núcleo de agentes, que consulta las tools antes de proponer. Ambos usos
+corren en un hilo aparte, después de que la orden ya se publicó; eso es todo.
 
 - **Las seis reglas de aprobación siguen en código** (`src/analisis/aprobacion.py`).
   El modelo no aprueba, no rechaza, no elige tareas ni repuestos, no escribe el

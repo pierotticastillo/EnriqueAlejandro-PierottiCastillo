@@ -1,6 +1,6 @@
 # Estado de implementación
 
-**Actualizado:** 2026-11-15
+**Actualizado:** 2026-11-16
 **Plan de referencia:** documento interno del curso (no se publica en este
 repositorio). La segunda entrega sigue el **Plan de implementación 2**; el detalle
 de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
@@ -13,7 +13,17 @@ El proyecto tiene las **Fases 0, 0.5, 1, 2, 3, 4 y 5 implementadas y verificadas
 
 La Fase 5 (análisis y borrador de orden) quedó cerrada con la prueba end-to-end contra la planta simulada: el catálogo de fallas sale de los manuales de la planta, las reglas de aprobación se evalúan en código y la orden se publica **una sola vez** con el estado ya decidido (`Aprobada` o `PendienteAprobacion`, nunca `Borrador`).
 
-La **restricción 04 (lista cerrada de modelos)** quedó atendida: el ASR pasó a `faster-whisper-base`, el embedder sigue siendo `paraphrase-multilingual-MiniLM-L12-v2` (384 dims), el LLM local `Qwen2.5-3B-Instruct` (Q4_K_M) entra como auxiliar de redacción acotado, y la lista quedó como fuente única de verdad con un verificador que corre al arrancar. El **modelo de nube con visión** quedó fijado en `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (Nemotron 3 Nano Omni 30B A3B), con la desviación documentada: la lista publicada no lo identifica y el que podía querer (`nvidia/nemotron-nano-12b-v2-vl`) fue **retirado por NVIDIA** (HTTP 410 Gone, fin de vida 2026-08-26).
+La **restricción 04 (lista cerrada de modelos)** quedó atendida: el ASR pasó a `faster-whisper-base`, el embedder sigue siendo `paraphrase-multilingual-MiniLM-L12-v2` (384 dims), el LLM local `Qwen2.5-3B-Instruct` (Q4_K_M) entra como auxiliar acotado de redacción y agente, y la lista quedó como fuente única de verdad con un verificador que corre al arrancar. El **modelo de nube con visión** quedó fijado en `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (Nemotron 3 Nano Omni 30B A3B), con la desviación documentada: la lista publicada no lo identifica y el que podía querer (`nvidia/nemotron-nano-12b-v2-vl`) fue **retirado por NVIDIA** (HTTP 410 Gone, fin de vida 2026-08-26).
+
+El **2026-11-16** se revalidó la elección del LLM local con una comparación
+controlada en el agente real: `qwen2.5:3b-instruct` (330,3 s) fue el único
+candidato que consultó las fuentes con tool calls nativos, produjo una propuesta
+válida y terminó dentro del presupuesto de 420 s. Se descartaron
+`qwen3:4b` por superar el presupuesto y no consultar tools, `phi4-mini` por no
+producir tool calls nativos y `llama3.2:3b` por no consultar las fuentes e
+inventar un código de falla. Se mantiene, por tanto, `Qwen2.5-3B-Instruct`,
+sin cambios en la lista cerrada ni en la configuración productiva. La
+evidencia está en [`docs/evaluacion_modelo_local.md`](evaluacion_modelo_local.md).
 
 La **conversación de tablet** quedó cerrada: la corrección del operador se aplica a la lectura que está corrigiendo (no a la última del equipo), al mover una lectura a otro equipo el valor se convierte, la negación saca una sola lectura y la conversación tiene tope (`PARTE_MAX_CORRECCIONES=5`): si no converge, la nota queda para revisión humana en vez de dar vueltas.
 
@@ -181,7 +191,7 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 | 8 — Alineación de Entrega 2 | En espera de información externa | Se registra la fecha, el alcance, los escenarios y la rúbrica cuando el usuario los comunique después de confirmarlos con la Academia. La implementación de los P0 independientes continúa sin esperar esta respuesta. |
 | 9 — Gobierno humano y seguridad | **Implementada y verificada tras auditoría** | P0-01: el cierre técnico deja `Ejecutada` y la decisión final la toma un `supervisor` o `inspector` autenticado, con motivo/evidencia auditados y habilita sólo tras certificación. La migración `0010` y las guardas de aplicación preservan estado, motivo, costo, tareas y repuestos frente a reprocesos; impiden cierres terminales duplicados y fijan un habilita por orden. P0-04 y P0-05 siguen verificados. |
 | 10 — Evidencia y provenance | **Implementada y verificada tras auditoría** | P0-02: una foto con daño estructural o un resultado indeterminado fuerza revisión humana en escalados ordinarios; una salida válida sin daño no agrega revisión y sin fotos no se activa el gate. P0-03: manifiesto canónico, ledger transaccional y reconstrucción autenticada. La migración `0010` completa el append-only de `decision_cierre`, manifiesto y ledger contra `UPDATE`, `DELETE` y `TRUNCATE`, y vincula decisión, cierre y orden con una FK compuesta restrictiva. |
-| 11 — Evaluación, red team y calidad | Pendiente | Benchmark del agente contra baseline, grounding, visión con fotos reales, trayectoria y red team con costo/latencia. |
+| 11 — Evaluación, red team y calidad | Pendiente | La comparación controlada para elegir el LLM local quedó cerrada (`docs/evaluacion_modelo_local.md`); faltan el benchmark del agente contra baseline, la evaluación ampliada de grounding, visión con fotos reales, trayectoria y red team con costo/latencia. |
 | 12 — Operación y cierre | **P0-06 cerrado; resto pendiente** | La corrida oficial reproducible, RAG, métricas, digest y evidencia auditable quedaron cerrados sobre `4eb00f5`. Restan outbox transaccional/PUBACK, observabilidad, CI/CD y cierre documental de las Fases 11–12. |
 
 ## Plan de implementación 2 — estado de brechas P0
@@ -225,6 +235,7 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 25. **Cortar es parte del diseño.** Los presupuestos (pasos, tokens y timeout global por nota) no son sólo límites: cuando se agotan, el motivo queda escrito en la trayectoria y el sistema sigue por el camino determinista. Un corte escrito es mejor que un proceso que se queda consultando.
 26. **El presupuesto se comprueba antes de cada vuelta.** El plazo global manda: una etapa que ya se pasó el plazo no arranca otra vuelta, y la comprobación va enganchada al agente siempre (haya bitácora o no). Por eso el timeout de cada llamada al modelo es el presupuesto entero y no el del redactor: con el modelo local una vuelta tarda entre 60 y 110 s, y con 90 s algunas morían por la red en vez de cortarse por el presupuesto.
 27. **La propuesta del agente tiene dos caminos de salida.** La herramienta de salida (`PropuestaAgente`) y el **cierre estructurado** (la conversación se le vuelve a pasar al modelo con el esquema, con la salida estructurada nativa de Ollama). El cierre hizo falta porque con el modelo local de 3B el agente consultaba bien pero escribía la propuesta en prosa y no llamaba a la herramienta de salida. Es el mismo modelo, la misma conversación y los mismos materiales, y queda registrado como un paso más del agente.
+28. **El LLM local se mantiene por evidencia, no por inercia.** La comparación del 2026-11-16 confirmó a `qwen2.5:3b-instruct` como el único candidato que consultó tools nativamente, produjo una propuesta válida y respetó el presupuesto de 420 s. Qwen3 lo superó por tiempo y sin consultar; Phi-4-mini no produjo tool calls nativos; Llama 3.2 inventó una falla. No se modifican la lista cerrada ni la configuración productiva mientras no cambie una condición de la evaluación.
 
 ## Lista cerrada de modelos — qué quedó hecho
 
@@ -260,8 +271,9 @@ Ollama respondiendo `qwen2.5:3b-instruct · Q4_K_M · 3.1B`.
 - **Configuración**: la de la lista, con `num_ctx=2048`, `num_thread=2`,
   `temperature=0`, semilla fija y `keep_alive=0` (el modelo se descarga de
   memoria al terminar: la planta tiene 8 GB).
-- **Qué hace**: la justificación técnica de la orden, en `aprobacion.reglas_evaluadas.redaccion`.
+- **Qué hace**: la justificación técnica de la orden, en `aprobacion.reglas_evaluadas.redaccion`, y el núcleo de agentes que consulta las tools antes de proponer.
 - **Qué no hace**: aprobar, rechazar, elegir tareas o repuestos, escribir el motivo o cambiar el estado.
+- **Selección**: la comparación controlada del 2026-11-16 mantuvo `Qwen2.5-3B-Instruct`; el protocolo y los motivos de descarte están en [`evaluacion_modelo_local.md`](evaluacion_modelo_local.md).
 - **Medición**: ~40 s por vuelta a través del proxy (el modelo se carga en cada llamada, ~9 s, y genera a ~8 tok/s); ~13 s cuando se lo llama directamente. Por eso el timeout quedó en 90 s y la redacción va en un hilo aparte, que no frena la cola de notas. **Medido en la corrida con carga**: una vuelta del *agente* tarda entre 60 y 110 s (el prompt es más largo y el modelo se descarga entre llamadas), así que la consulta completa —dos vueltas y el cierre— ronda los 250 s: el agente tiene timeout propio (`AGENTE_TIMEOUT_S=420`) y el cierre estructurado suma una vuelta más.
 - **Presupuesto**: los topes del compose bajaron (`postgres` 1,5 GB, `sistema` 3 GB, `mcp` 0,5 GB) para que el pico del modelo (~2,1 GB) entre en los 8 GB.
 
@@ -684,6 +696,19 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 8. Completar las Fases 11 y 12: benchmark y red team, outbox/PUBACK, observabilidad, CI/CD y cierre reproducible.
 
 ## Historial
+
+- **2026-11-16 (selección del LLM local):** se compararon
+  `qwen2.5:3b-instruct`, `qwen3:4b`, `phi4-mini` y `llama3.2:3b` en el agente
+  real, con el mismo prompt, corpus, tools, contexto, semilla, presupuesto de
+  420 s y validación estricta. Qwen2.5 fue el único que consultó las fuentes
+  con tool calls nativos, produjo una propuesta válida y terminó dentro del
+  presupuesto (330,3 s). Qwen3 lo superó por tiempo y sin consultar; Phi-4-mini
+  no produjo tool calls nativos; Llama 3.2 inventó una falla y su propuesta fue
+  descartada. **Se mantiene `Qwen2.5-3B-Instruct`**, sin cambios en la lista
+  cerrada ni en la configuración productiva. El verificador de modelos pasó y
+  la suite completa quedó en **637 pruebas: 559 aprobadas, 78 omitidas y 0
+  fallidas**. El protocolo y las mediciones están en
+  [`evaluacion_modelo_local.md`](evaluacion_modelo_local.md).
 
 - **2026-11-15 (Plan 2, integridad de los hashes publicados):** una auditoría
   independiente de la primera publicación de P0-06 detectó que Git

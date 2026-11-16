@@ -60,10 +60,10 @@ resto.
 La propuesta tiene dos caminos de salida, y el agente usa el que el modelo
 pueda: la **herramienta de salida** (`PropuestaAgente`) o el **cierre
 estructurado** (la conversación se le vuelve a pasar al modelo con el
-esquema). El cierre es necesario con los modelos pequeños: consultan bien,
-pero no llaman a la herramienta de salida y escriben la propuesta en prosa.
-Es el mismo modelo y la misma conversación, y queda registrado como un paso
-más del agente.
+esquema). El cierre es necesario con el modelo local seleccionado
+(`Qwen2.5-3B-Instruct`): consulta bien, pero no llama a la herramienta de
+salida y escribe la propuesta en prosa. Es el mismo modelo y la misma
+conversación, y queda registrado como un paso más del agente.
 
 ## 3. Condiciones de corte
 

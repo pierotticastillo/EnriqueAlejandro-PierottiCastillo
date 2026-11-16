@@ -3,7 +3,7 @@
 **Trabajo práctico:** Academia Novit 2026 — planta de inyección de agua PIA‑3
 **Repositorio de la solución:** `EnriqueAlejandro-PierottiCastillo`
 **Planta simulada:** [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
-**Fecha del informe:** 2026-11-14
+**Fecha del informe:** 2026-11-16
 **Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5, 6 y 7 implementadas y verificadas.
 Entrega 1 (núcleo de agentes, trayectoria, Central de mantenimiento y
 presupuesto) implementada y verificada. Del Plan de implementación 2 están
@@ -74,6 +74,13 @@ certificación no pasan por un LLM.
 aprobación siguen evaluándose en código y el prompt del agente nunca lleva
 texto libre del operador. La Central de mantenimiento **no es una tool**: el
 agente no tiene forma de aprobar nada.
+
+La elección del LLM local también quedó revalidada: la comparación controlada
+del 2026-11-16 mantuvo `Qwen2.5-3B-Instruct` porque fue el único candidato
+que consultó las fuentes con tool calls nativos, produjo una propuesta válida
+y respetó el presupuesto de 420 s. Los candidatos y los motivos de descarte
+están en §9.8 y en
+[`docs/evaluacion_modelo_local.md`](docs/evaluacion_modelo_local.md).
 
 ---
 
@@ -843,12 +850,14 @@ modelo que no esté se informa y el sistema sigue.
 más rápido en CPU; el costo es de finura en la transcripción, y por eso la
 nota se **volvió a medir** con el corrector oficial (§10).
 
-#### El modelo de lenguaje: redacta, no decide
+#### El modelo de lenguaje: auxiliar, no decide
 
 `Qwen2.5-3B-Instruct` entra al sistema por la interfaz que pedía el plan
 (`AnalysisModel.invoke(prompt, images) -> StructuredOutput`, `src/analisis/llm.py`)
-y con **un solo papel**: escribir la justificación técnica de la orden, en un
-hilo aparte, después de que la orden ya se publicó con su estado decidido.
+para redactar la justificación técnica de la orden. El mismo modelo es el
+motor del núcleo de agentes descrito en §12. En ambos casos su papel es
+**auxiliar**: el texto se genera en un hilo aparte, después de que la orden ya
+se publicó con su estado decidido.
 
 | Garantía | Cómo se consigue |
 |---|---|
@@ -875,6 +884,62 @@ llamada, ~9 s, y genera a ~8 tok/s), contra ~13 s cuando se lo llama
 directamente: por eso el timeout quedó en 90 s y la redacción va en un hilo
 aparte. En la PC de planta real, el Ollama corre en `localhost` y la llamada es
 directa (`OLLAMA_PROXY` vacío).
+
+#### Evaluación comparativa del LLM local (2026-11-16)
+
+Para confirmar que `Qwen2.5-3B-Instruct` seguía siendo la mejor alternativa
+local se compararon cuatro modelos en el **agente real**. La evaluación fue
+una consulta representativa de la planta —el escalado de B-102 y la falla
+`TX-T01`—, no un benchmark de calidad sobre todos los escenarios. Se
+mantuvieron iguales el prompt, el corpus, el catálogo, las ocho tools, el
+contexto, la semilla, el presupuesto de 420 s y las validaciones de esquema,
+falla, causas y citas.
+
+| Modelo | Pesos en disco | Consulta tools nativamente | Propuesta válida | Llamadas LLM | Tiempo | Dentro de 420 s |
+|---|---:|:---:|:---:|---:|---:|:---:|
+| **`qwen2.5:3b-instruct`** | **1,9 GB** | **Sí** | **Sí** | 3 | **330,274 s** | **Sí** |
+| `qwen3:4b` | 2,5 GB | No | Sí | 2 | 428,012 s | **No** |
+| `phi4-mini` | 2,5 GB | No | Sí | 2 | 59,184 s | Sí |
+| `llama3.2:3b` | 2,0 GB | No | **No** | 1 | 29,138 s | Sí |
+
+**Decisión: se mantiene `Qwen2.5-3B-Instruct`.** Fue el único candidato que
+consultó realmente las fuentes —`busqueda_rag` e `historial_sensores`—,
+propuso la falla existente `TX-T01`, dejó la cita `TX350-D §8.3` y terminó
+dentro del presupuesto. Hizo tres llamadas porque consultó, escribió la
+propuesta en prosa y después usó el cierre estructurado; ese camino ya está
+contemplado y registrado por el agente.
+
+Los otros modelos se descartaron por requisitos no negociables del agente:
+
+- **`qwen3:4b`:** su propuesta fue válida, pero no consultó ninguna tool y
+  tardó 428,012 s, por encima del presupuesto de 420 s. La primera vuelta
+  consumió los 700 tokens en razonamiento en prosa. `ChatOllama` sí envió
+  `think=false`, pero la metadata de la variante en Ollama 0.40.16 declara
+  `thinking.values=[true]` y `default=true`: esta variante no permite
+  desactivar de forma confiable el razonamiento.
+- **`phi4-mini`:** fue rápido y produjo una propuesta válida, pero no tuvo
+  tool calls nativos: escribió las llamadas como JSON en el contenido de la
+  respuesta. La API `/api/chat` de Ollama, probada directamente y sin
+  LangChain, confirmó que `message.tool_calls` quedaba vacío. No era un
+  problema de la integración del agente.
+- **`llama3.2:3b`:** fue el más rápido y sí llamó nativamente a
+  `PropuestaAgente`, pero no consultó las fuentes. Inventó la falla
+  `F02-B-102-4`, que no existe en el catálogo; la validación la detectó y
+  descartó la propuesta completa.
+
+La comparación favoreció a Qwen2.5 no sólo por ser el más liviano, sino por
+cumplir el ciclo completo: **consulta verificable, propuesta válida y plazo
+operativo**. La latencia se midió desde el contenedor hasta el Ollama del host
+para aislar el comportamiento de los modelos; no incluye el retardo del proxy
+del radioenlace. Después de la evaluación, el verificador de modelos pasó y
+la suite completa recogió **637 pruebas: 559 aprobadas, 78 omitidas y 0
+fallidas**.
+
+El protocolo, las observaciones por modelo y los límites de la evidencia están
+en [`docs/evaluacion_modelo_local.md`](docs/evaluacion_modelo_local.md). La
+decisión no cambia la lista cerrada: `Qwen2.5-3B-Instruct` sigue siendo el
+único LLM local habilitado y la fuente de verdad continúa en
+`src/modelos_lista.py`.
 
 #### El modelo de nube con visión
 
