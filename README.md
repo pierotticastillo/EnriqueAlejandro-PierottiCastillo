@@ -854,24 +854,64 @@ Las principales están documentadas en `.env.example`:
 
 ## Estructura
 
+Árbol de los **196 archivos versionados** de la rama pública `main` (actualizado
+al 2026-11-16). No incluye `.env` ni los directorios locales ignorados por Git.
+
 ```text
 .
+├── .dockerignore
+├── .env.example
+├── .gitattributes
+├── .gitignore
 ├── README.md
 ├── INFORME.md
 ├── LICENSE
 ├── docs/
 │   ├── estado_de_implementacion.md
-│   ├── spec-parte.md
+│   ├── evaluacion_modelo_local.md
 │   ├── evidencia_fase4_retrieval.json
 │   ├── evidencia_fase4_pgvector.json
+│   ├── evidencia_p0_06/
+│   │   ├── README.md
+│   │   ├── imagenes.json
+│   │   ├── manifest.json
+│   │   ├── oficial/
+│   │   │   ├── ataque.json
+│   │   │   ├── ataque.metricas.json
+│   │   │   ├── contratista.json
+│   │   │   ├── contratista.metricas.json
+│   │   │   ├── fuga-sin-enlace.json
+│   │   │   ├── fuga-sin-enlace.metricas.json
+│   │   │   ├── informe.md
+│   │   │   ├── integridad_correccion.json
+│   │   │   ├── libre.json
+│   │   │   ├── libre.metricas.json
+│   │   │   ├── martes-tranquilo.json
+│   │   │   ├── martes-tranquilo.metricas.json
+│   │   │   ├── meta.json
+│   │   │   ├── resultado.json
+│   │   │   ├── sin-luz.json
+│   │   │   ├── sin-luz.metricas.json
+│   │   │   ├── tormenta-perfecta.json
+│   │   │   └── tormenta-perfecta.metricas.json
+│   │   └── verificaciones/
+│   │       ├── g2_g3.txt
+│   │       ├── migracion.txt
+│   │       ├── pruebas-postgres.txt
+│   │       ├── pruebas-sin-base.txt
+│   │       ├── rag-indexar.txt
+│   │       ├── rag.memoria.json
+│   │       ├── rag.pgvector.json
+│   │       └── ruff.txt
+│   ├── spec-parte.md
 │   └── Lista_de_Modelos.md
 ├── docker-compose.yml
 ├── Dockerfile
-├── .env.example
 ├── pyproject.toml
 ├── alembic.ini
 ├── migrations/
 │   ├── env.py
+│   ├── script.py.mako
 │   └── versions/
 │       ├── 0001_esquema_inicial.py
 │       ├── 0002_nota_externa.py
@@ -901,13 +941,15 @@ Las principales están documentadas en `.env.example`:
 │   ├── modelos_lista.py
 │   ├── verificacion_modelos.py
 │   ├── agente/
+│   │   ├── __init__.py
 │   │   ├── formato.py
 │   │   ├── modelos.py
 │   │   ├── nucleo.py
 │   │   ├── presupuesto.py
-│   │   ├── trayectoria.py
-│   │   └── tools.py
+│   │   ├── tools.py
+│   │   └── trayectoria.py
 │   ├── analisis/
+│   │   ├── __init__.py
 │   │   ├── aprobacion.py
 │   │   ├── catalogo.py
 │   │   ├── causas.py
@@ -925,15 +967,19 @@ Las principales están documentadas en `.env.example`:
 │   │   ├── sintomas.py
 │   │   └── vision.py
 │   ├── db/
+│   │   ├── __init__.py
 │   │   ├── repositorio.py
 │   │   └── session.py
 │   ├── deteccion/
+│   │   ├── __init__.py
 │   │   ├── partes.py
 │   │   ├── seguridad.py
 │   │   └── sensores.py
 │   ├── mcp_server/
+│   │   ├── __init__.py
 │   │   └── server.py
 │   ├── rag/
+│   │   ├── __init__.py
 │   │   ├── cli.py
 │   │   ├── contexto.py
 │   │   ├── corpus.py
@@ -945,6 +991,7 @@ Las principales están documentadas en `.env.example`:
 │   │   ├── retriever.py
 │   │   └── texto.py
 │   ├── tools/
+│   │   ├── __init__.py
 │   │   ├── cliente.py
 │   │   ├── equipos.py
 │   │   ├── firma.py
@@ -957,6 +1004,7 @@ Las principales están documentadas en `.env.example`:
 │   │   ├── registro.py
 │   │   └── tareas.py
 │   └── planta/
+│       ├── __init__.py
 │       ├── almacenamiento.py
 │       ├── central.py
 │       ├── cierre.py
@@ -975,6 +1023,55 @@ Las principales están documentadas en `.env.example`:
 │       ├── transcriber.py
 │       └── unidades.py
 └── tests/
+    ├── conftest.py
+    ├── manuales.py
+    ├── test_agente.py
+    ├── test_analisis.py
+    ├── test_archivar_p0_06.py
+    ├── test_central.py
+    ├── test_central_auth.py
+    ├── test_cierre.py
+    ├── test_cierre_humano.py
+    ├── test_cola.py
+    ├── test_correr_correccion_oficial.py
+    ├── test_db_central.py
+    ├── test_db_cierre.py
+    ├── test_db_cola.py
+    ├── test_db_evidencia.py
+    ├── test_db_idempotencia.py
+    ├── test_db_ordenes.py
+    ├── test_db_rag.py
+    ├── test_deteccion_seguridad.py
+    ├── test_eventos_parte.py
+    ├── test_evidencia_orden.py
+    ├── test_heartbeat.py
+    ├── test_historial.py
+    ├── test_llm.py
+    ├── test_mcp_server.py
+    ├── test_migraciones.py
+    ├── test_modelos_lista.py
+    ├── test_mqtt_listener.py
+    ├── test_nombre_resolver.py
+    ├── test_numeros.py
+    ├── test_parte_extractor.py
+    ├── test_presupuesto.py
+    ├── test_rag.py
+    ├── test_rag_hilos.py
+    ├── test_salida_planta.py
+    ├── test_seguridad.py
+    ├── test_sensores.py
+    ├── test_servicio_cierre.py
+    ├── test_servicio_colas.py
+    ├── test_servicio_orden_vision.py
+    ├── test_servicio_parte.py
+    ├── test_servicio_seguridad.py
+    ├── test_servicio_tope.py
+    ├── test_tablet.py
+    ├── test_tablet_convergencia.py
+    ├── test_texto.py
+    ├── test_tools.py
+    ├── test_unidades.py
+    └── test_vision.py
 ```
 
 ## Pruebas
