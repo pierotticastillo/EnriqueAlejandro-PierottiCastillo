@@ -224,14 +224,22 @@ class Repositorio:
         evento: EventoSistema,
         *,
         nota_id: UUID | None = None,
+        correlation_id: str | None = None,
     ) -> bool:
-        """Persiste cualquier evento de forma idempotente y lo vincula a una nota."""
+        """Persiste cualquier evento de forma idempotente y lo vincula a una nota.
+
+        Si se entrega un ``correlation_id``, se incluye en el payload del
+        evento para que cualquier consulta pueda localizar la solicitud de
+        origen sin descargar el JSON completo de otras tablas.
+        """
         estados_db = {
             "SinNovedad": "Sin novedad",
             "Escalado": "Escalado",
             "AlertaSeguridad": "AlertaSeguridad",
         }
         payload = evento.model_dump(mode="json")
+        if correlation_id is not None:
+            payload["correlation_id"] = correlation_id
         with self._engine.begin() as conexion:
             id_insertado = conexion.execute(
                 text(
@@ -543,6 +551,7 @@ class Repositorio:
         manifiesto: dict[str, Any] | None = None,
         analisis: dict[str, Any] | None = None,
         propuesta: dict[str, Any] | None = None,
+        correlation_id: str | None = None,
     ) -> dict[str, Any]:
         """Persiste la orden y devuelve el snapshot realmente comprometido.
 
@@ -718,6 +727,7 @@ class Repositorio:
                 orden_id=orden.id,
                 parte_id=_parte_id_manifiesto(contenido_manifiesto),
                 contenido=contenido_manifiesto,
+                correlation_id=correlation_id,
             )
             metricas = _metricas_manifiesto(contenido_manifiesto)
             herramientas_contexto = (
@@ -733,6 +743,7 @@ class Repositorio:
                 orden_id=orden.id,
                 datos=payload_evento or {},
                 idempotencia=f"evento:{evento_id}:{orden.id}",
+                correlation_id=correlation_id,
             )
             self._insertar_ledger(
                 conexion,
@@ -751,6 +762,7 @@ class Repositorio:
                 costo_usd=metricas["costo_usd"],
                 segundos=metricas["segundos"],
                 idempotencia=f"evidencia:{evento_id}:{orden.id}",
+                correlation_id=correlation_id,
             )
             self._insertar_ledger(
                 conexion,
@@ -761,6 +773,7 @@ class Repositorio:
                 analisis=analisis or _analisis_desde_reglas(reglas),
                 herramientas=herramientas_contexto,
                 idempotencia=f"analisis:{evento_id}:{orden.id}",
+                correlation_id=correlation_id,
             )
             self._insertar_ledger(
                 conexion,
@@ -770,6 +783,7 @@ class Repositorio:
                 orden_id=orden.id,
                 propuesta=propuesta or _propuesta_desde_orden(orden, repuestos, costo_usd),
                 idempotencia=f"propuesta:{evento_id}:{orden.id}",
+                correlation_id=correlation_id,
             )
             self._insertar_ledger(
                 conexion,
@@ -783,6 +797,7 @@ class Repositorio:
                 estado=estado_efectivo,
                 herramientas=herramientas_contexto,
                 idempotencia=f"reglas:{evento_id}:{orden.id}",
+                correlation_id=correlation_id,
             )
         snapshot = self.obtener_orden_completa(orden.id)
         if snapshot is None:
@@ -799,6 +814,7 @@ class Repositorio:
         orden_id: str,
         parte_id: str | None,
         contenido: dict[str, Any],
+        correlation_id: str | None = None,
     ) -> tuple[str, str]:
         """Inserta un manifiesto sin permitir que una repeticion lo cambie."""
         serializado = json.dumps(contenido, ensure_ascii=False, default=str)
@@ -807,7 +823,7 @@ class Repositorio:
                 """
                 INSERT INTO manifiesto_evidencia (
                     tipo, referencia_id, evento_id, orden_id, parte_id,
-                    contenido, hash_sha256
+                    contenido, hash_sha256, correlation_id
                 )
                 SELECT
                     :tipo, :referencia, :evento, :orden, :parte,
@@ -815,7 +831,8 @@ class Repositorio:
                     encode(
                         sha256(convert_to(CAST(:contenido AS jsonb)::text, 'UTF8')),
                         'hex'
-                    )
+                    ),
+                    :correlation_id
                 ON CONFLICT (tipo, referencia_id) DO NOTHING
                 RETURNING id, hash_sha256
                 """
@@ -827,6 +844,7 @@ class Repositorio:
                 "orden": orden_id,
                 "parte": parte_id,
                 "contenido": serializado,
+                "correlation_id": correlation_id,
             },
         ).mappings().first()
         if fila is None:
@@ -864,6 +882,7 @@ class Repositorio:
         costo_usd: float = 0.0,
         segundos: float = 0.0,
         datos: dict[str, Any] | None = None,
+        correlation_id: str | None = None,
     ) -> None:
         """Agrega una entrada al ledger; la idempotencia evita duplicados."""
         conexion.execute(
@@ -874,7 +893,7 @@ class Repositorio:
                     evidencia, analisis, propuesta, reglas,
                     actor, rol, estado, modelo, herramientas,
                     tokens_prompt, tokens_completion, costo_usd, segundos,
-                    datos, idempotencia
+                    datos, idempotencia, correlation_id
                 )
                 VALUES (
                     :tipo, :referencia, :evento, :orden,
@@ -882,7 +901,7 @@ class Repositorio:
                     CAST(:propuesta AS jsonb), CAST(:reglas AS jsonb),
                     :actor, :rol, :estado, :modelo, CAST(:herramientas AS jsonb),
                     :tokens_prompt, :tokens_completion, :costo, :segundos,
-                    CAST(:datos AS jsonb), :idempotencia
+                    CAST(:datos AS jsonb), :idempotencia, :correlation_id
                 )
                 ON CONFLICT (idempotencia) DO NOTHING
                 """
@@ -907,6 +926,7 @@ class Repositorio:
                 "segundos": float(segundos or 0.0),
                 "datos": _json(contenido=datos or {}),
                 "idempotencia": idempotencia,
+                "correlation_id": correlation_id,
             },
         )
 

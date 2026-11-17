@@ -27,6 +27,7 @@ from analisis.provenance import hash_sha256_archivo, identificador_foto
 from analisis.servicio import ServicioAnalisis
 from analisis.vision import ClienteVision
 from config import Settings
+from db.checkpoint import crear_correlation_id
 from db.repositorio import Repositorio, filas_desde_json, orden_desde_fila
 from deteccion import seguridad
 from deteccion.partes import clasificar_partes, filas_anomalas, fuentes_tendencia_parte
@@ -375,6 +376,10 @@ class ServicioParteVoz:
         mientras transcribía, el corte queda escrito y el parte sale igual
         (el camino determinista no se interrumpe: el operador tiene que ver
         la nota).
+
+        Se genera el ``correlation_id`` de la solicitud: agrupa los eventos y
+        órdenes que esta nota origine, y se propaga a través de la
+        conversación, los eventos y las órdenes.
         """
         with self._candado_notas:
             self._notas_en_curso.discard(nota.id)
@@ -386,11 +391,18 @@ class ServicioParteVoz:
             estado="extraida",
             seguridad=extraccion.seguridad,
         )
+        correlation_id = crear_correlation_id()
         if extraccion.seguridad:
-            self._publicar_alerta_seguridad(nota_id, nota, extraccion, texto, fotos_locales)
+            self._publicar_alerta_seguridad(
+                nota_id, nota, extraccion, texto, fotos_locales,
+                correlation_id=correlation_id,
+            )
             self._cerrar_presupuesto(nota.id)
             return
-        self._iniciar_conversacion(nota_id, nota, extraccion, fotos_locales)
+        self._iniciar_conversacion(
+            nota_id, nota, extraccion, fotos_locales,
+            correlation_id=correlation_id,
+        )
         self._cerrar_presupuesto(nota.id)
 
     def _cerrar_presupuesto(self, nota_id: str) -> None:
@@ -419,6 +431,7 @@ class ServicioParteVoz:
         extraccion: Extraccion,
         evidencia_texto: str,
         fotos_locales: list[Path | None] | None = None,
+        correlation_id: str | None = None,
     ) -> None:
         """Alerta de seguridad: evento, aviso en tablet y aviso por radio.
 
@@ -468,6 +481,7 @@ class ServicioParteVoz:
             seguridad=True,
             fotos_urls=list(nota.fotos or []),
             evidencia_vision=evidencia_vision,
+            correlation_id=correlation_id,
         )
 
         # Aviso en la tablet del operador: qué hacer, sin esperar respuesta.
@@ -632,8 +646,13 @@ class ServicioParteVoz:
         nota: NotaRecorrida,
         extraccion: Extraccion,
         fotos_locales: list[Path | None],
+        *,
+        correlation_id: str | None = None,
     ) -> None:
-        datos = _datos_base(nota, extraccion.preguntas, fotos_locales)
+        datos = _datos_base(
+            nota, extraccion.preguntas, fotos_locales,
+            correlation_id=correlation_id,
+        )
         if extraccion.preguntas:
             self._enviar_pregunta(
                 nota_id,
@@ -741,6 +760,7 @@ class ServicioParteVoz:
                 fotos=len(datos.get("fotos_locales") or []),
                 fotos_locales=_rutas_de_fotos(datos),
                 fotos_urls=nota.fotos,
+                correlation_id=datos.get("correlation_id"),
             )
 
     def _reenviar(self, conversacion: dict[str, Any]) -> None:
@@ -763,11 +783,15 @@ class ServicioParteVoz:
         fotos: int,
         fotos_locales: list[Path | None] | None = None,
         fotos_urls: list[str] | None = None,
+        correlation_id: str | None = None,
     ) -> list[EventoSistema]:
         """Publica **un evento por equipo** del parte y lo deja registrado.
 
         Los eventos son idempotentes por id (``parte:<nota>:<equipo>``): si el
         mismo parte se publica dos veces no se duplica nada.
+
+        El ``correlation_id`` viaja en el payload de cada evento para que
+        cualquier consulta pueda localizar la solicitud de origen.
         """
         eventos = clasificar_partes(
             nota_id=nota.id,
@@ -793,7 +817,9 @@ class ServicioParteVoz:
                     unidad=unidad,
                     tendencia=tendencia,
                 )
-            self._repo.registrar_evento(evento, nota_id=nota_id)
+            self._repo.registrar_evento(
+                evento, nota_id=nota_id, correlation_id=correlation_id
+            )
             self._cliente.publicar_evento(evento)
             if evento.tipo is TipoEvento.escalado:
                 # Un escalado abre una orden de trabajo: el análisis del manual
@@ -806,6 +832,7 @@ class ServicioParteVoz:
                     fotos_locales=fotos_locales,
                     fotos_urls=fotos_urls,
                     tendencias=[tendencia] if tendencia is not None else None,
+                    correlation_id=correlation_id,
                 )
         return eventos
 
@@ -821,6 +848,7 @@ class ServicioParteVoz:
         fotos_urls: list[str] | None = None,
         evidencia_vision: tuple[EvidenciaVision, ...] | None = None,
         tendencias: list[TendenciaEvidencia] | None = None,
+        correlation_id: str | None = None,
     ) -> None:
         """Analiza el escalado y publica la orden que sale de ese análisis.
 
@@ -866,6 +894,7 @@ class ServicioParteVoz:
         try:
             snapshot = self._repo.guardar_orden(
                 orden,
+                correlation_id=correlation_id,
                 **self._analisis.datos_de_orden(analisis),
             )
         except Exception:  # noqa: BLE001 - sin evidencia no se publica una orden
@@ -1008,6 +1037,7 @@ class ServicioParteVoz:
                 fotos=fotos,
                 fotos_locales=_rutas_de_fotos(datos),
                 fotos_urls=nota.fotos,
+                correlation_id=datos.get("correlation_id"),
             )
             self._repo.marcar_conversacion(conversacion["nota_id"], "confirmada")
             logger.info(
@@ -1105,6 +1135,8 @@ def _datos_base(
     nota: NotaRecorrida,
     preguntas: list[Pregunta],
     fotos_locales: list[Path | None],
+    *,
+    correlation_id: str | None = None,
 ) -> dict[str, Any]:
     return {
         "nota": nota.model_dump(mode="json"),
@@ -1114,6 +1146,7 @@ def _datos_base(
         "correcciones": 0,
         "afirmados": [],
         "fotos_locales": [str(p) if p else None for p in fotos_locales],
+        "correlation_id": correlation_id,
     }
 
 

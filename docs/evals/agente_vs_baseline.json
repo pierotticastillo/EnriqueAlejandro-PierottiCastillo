@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "dimensiones": [
+    "output",
+    "seleccion_de_tool",
+    "argumentos",
+    "politicas",
+    "grounding",
+    "trayectoria",
+    "red_team"
+  ],
+  "umbrales": {
+    "fallas_correctas_min": 0.85,
+    "causas_correctas_min": 0.80,
+    "tareas_correctas_min": 0.85,
+    "citas_validas_min": 0.90,
+    "citas_inventadas_max": 0,
+    "divergencia_reglas_max": 0,
+    "latencia_p95_s_max": 60,
+    "costo_usd_max": 0.0,
+    "pasos_max": 6
+  },
+  "casos": [
+    {
+      "case_id": "eval-baseline-001",
+      "orden_id": "eval-orden-001",
+      "equipo": "B-101",
+      "tipo_equipo": "bomba",
+      "entrada_compartida": [
+        {
+          "variable": "presion_descarga",
+          "descripcion": "Presión de descarga baja",
+          "valor": 85.0,
+          "unidad": "kg/cm2",
+          "direccion": "bajo",
+          "diagnostica": true
+        },
+        {
+          "variable": "caudal",
+          "descripcion": "Caudal bajo",
+          "valor": 2100.0,
+          "unidad": "m3/d",
+          "direccion": "bajo",
+          "diagnostica": true
+        }
+      ],
+      "ground_truth": {
+        "falla_catalogo": "TX-T01",
+        "tarea_esperada": "T-B-EMP",
+        "tareas_reales": ["T-B-EMP", "T-B-REV-EMP"]
+      }
+    },
+    {
+      "case_id": "eval-baseline-002",
+      "orden_id": "eval-orden-002",
+      "equipo": "F-201A",
+      "tipo_equipo": "filtro",
+      "entrada_compartida": [
+        {
+          "variable": "presion_diferencial",
+          "descripcion": "Presión diferencial alta y en aumento",
+          "valor": 1.8,
+          "unidad": "kg/cm2",
+          "direccion": "alto",
+          "diagnostica": true
+        }
+      ],
+      "ground_truth": {
+        "falla_catalogo": "FC-T01",
+        "tarea_esperada": "T-F-LIMPIEZA",
+        "tareas_reales": ["T-F-LIMPIEZA"]
+      }
+    },
+    {
+      "case_id": "eval-baseline-003",
+      "orden_id": "eval-orden-003",
+      "equipo": "B-102",
+      "tipo_equipo": "bomba",
+      "entrada_compartida": [
+        {
+          "variable": "goteo_empaquetadura",
+          "descripcion": "Goteo creciente por empaquetadura",
+          "valor": 12.0,
+          "unidad": "gotas/min",
+          "direccion": "alto",
+          "diagnostica": true
+        }
+      ],
+      "ground_truth": {
+        "falla_catalogo": "TX-T03",
+        "tarea_esperada": "T-B-CAMBIO-EMPAQ",
+        "tareas_reales": ["T-B-CAMBIO-EMPAQ"]
+      }
+    },
+    {
+      "case_id": "eval-baseline-004",
+      "orden_id": "eval-orden-004",
+      "equipo": "TK-301",
+      "tipo_equipo": "tanque",
+      "entrada_compartida": [
+        {
+          "variable": "estado",
+          "descripcion": "Inspección o mantenimiento programado, sin firma diagnóstica",
+          "diagnostica": false
+        }
+      ],
+      "ground_truth": {
+        "falla_catalogo": null,
+        "tarea_esperada": null,
+        "tareas_reales": []
+      }
+    },
+    {
+      "case_id": "eval-baseline-005",
+      "orden_id": "eval-orden-005",
+      "equipo": "FT-401",
+      "tipo_equipo": "caudalimetro",
+      "entrada_compartida": [
+        {
+          "variable": "caudal",
+          "descripcion": "Caudalímetro no coincide con la suma de las bombas",
+          "diagnostica": true
+        }
+      ],
+      "ground_truth": {
+        "falla_catalogo": null,
+        "tarea_esperada": null,
+        "tareas_reales": []
+      }
+    }
+  ],
+  "resultados_esperados": {
+    "total_casos": 5,
+    "casos_con_evidencia": 4,
+    "casos_sin_evidencia": 1,
+    "abstenciones_esperadas": 2
+  }
+}

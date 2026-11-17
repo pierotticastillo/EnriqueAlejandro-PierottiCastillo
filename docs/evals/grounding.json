@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "dimensiones": [
+    "fidelidad",
+    "precision_citas",
+    "recall_citas",
+    "abstencion"
+  ],
+  "umbrales": {
+    "fidelidad_min": 1.0,
+    "precision_citas_min": 1.0,
+    "recall_citas_min": 1.0,
+    "abstencion_sin_evidencia_min": 1.0,
+    "citas_inventadas_max": 0
+  },
+  "casos": [
+    {
+      "case_id": "grounding-001",
+      "orden_id": "grounding-orden-001",
+      "descripcion": "Cita válida de manual existente",
+      "citas_propuesta": ["TX350-D §8.3"],
+      "citas_permitidas": ["TX350-D §8.3", "TX350-D §8.8", "TX350-D §8.9", "TX350-D §8.10"],
+      "citas_vistas_tool": ["TX350-D §8.3"],
+      "esperado": {
+        "fidelidad": true,
+        "precisión": 1.0,
+        "recall": 1.0,
+        "descartada": false
+      }
+    },
+    {
+      "case_id": "grounding-002",
+      "orden_id": "grounding-orden-002",
+      "descripcion": "Cita inventada (no en manuales)",
+      "citas_propuesta": ["TX999 §99.9"],
+      "citas_permitidas": ["TX350-D §8.3"],
+      "citas_vistas_tool": [],
+      "esperado": {
+        "fidelidad": false,
+        "precisión": 0.0,
+        "recall": 0.0,
+        "descartada": true
+      }
+    },
+    {
+      "case_id": "grounding-003",
+      "orden_id": "grounding-orden-003",
+      "descripcion": "Cita válida con título de sección (formato largo)",
+      "citas_propuesta": ["TX350-D §8.3: Límites de los sensores conectados"],
+      "citas_permitidas": ["TX350-D §8.3"],
+      "citas_vistas_tool": ["TX350-D §8.3"],
+      "esperado": {
+        "fidelidad": true,
+        "precisión": 1.0,
+        "recall": 1.0,
+        "descartada": false
+      }
+    },
+    {
+      "case_id": "grounding-004",
+      "orden_id": "grounding-orden-004",
+      "descripcion": "Sin evidencia diagnóstica: abstención esperada",
+      "citas_propuesta": [],
+      "citas_permitidas": [],
+      "citas_vistas_tool": [],
+      "esperado": {
+        "fidelidad": true,
+        "precisión": 1.0,
+        "recall": 1.0,
+        "abstencion": true,
+        "descartada": false
+      }
+    }
+  ]
+}

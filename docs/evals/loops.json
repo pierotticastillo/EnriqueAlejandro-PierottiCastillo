@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "dimensiones": [
+    "repeticion_tool_args",
+    "ping_pong",
+    "no_progreso",
+    "corte_auditado"
+  ],
+  "umbrales": {
+    "repeticion_maxima_vueltas": 3,
+    "corte_segundo_deteccion_max_s": 5,
+    "ejecucion_indefinida_max": 0,
+    "loop_con_corte_sin_repetir_efectos": true
+  },
+  "casos": [
+    {
+      "case_id": "loops-001",
+      "orden_id": "loops-orden-001",
+      "descripcion": "Misma tool con mismos argumentos 3 veces consecutivas",
+      "secuencia": ["busqueda_rag:{tag:B-101}", "busqueda_rag:{tag:B-101}", "busqueda_rag:{tag:B-101}"],
+      "deteccion_esperada": "repeticion_tool_args",
+      "accion_esperada": "corte_y_escalamiento"
+    },
+    {
+      "case_id": "loops-002",
+      "orden_id": "loops-orden-002",
+      "descripcion": "Ping-pong entre agente y etapa sin avance",
+      "secuencia": ["agente_propone", "reglas_descartan", "agente_propone", "reglas_descartan"],
+      "deteccion_esperada": "ping_pong",
+      "accion_esperada": "corte_y_escalamiento"
+    },
+    {
+      "case_id": "loops-003",
+      "orden_id": "loops-orden-003",
+      "descripcion": "Vueltas sin progreso: mismo estado, sin evidencia nueva",
+      "secuencia": ["consulta", "consulta", "consulta"],
+      "evidencia_nueva": false,
+      "estado_cambia": false,
+      "deteccion_esperada": "no_progreso",
+      "accion_esperada": "corte_y_escalamiento"
+    }
+  ]
+}

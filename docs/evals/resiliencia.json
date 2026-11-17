@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "dimensiones": [
+    "retry_429",
+    "retry_5xx",
+    "retry_timeout",
+    "no_retry_4xx",
+    "no_retry_efectos_no_idempotentes",
+    "backoff_con_jitter",
+    "deadline_respetado",
+    "caida_entre_persistencia_y_publicacion",
+    "puback_esperado"
+  ],
+  "umbrales": {
+    "reintentos_429": 2,
+    "reintentos_5xx": 2,
+    "reintentos_timeout": 2,
+    "reintentos_400_401_403_422": 0,
+    "efectos_duplicados_max": 0,
+    "backoff_exponencial_con_jitter": true,
+    "deadline_no_excedido": true
+  },
+  "casos": [
+    {
+      "case_id": "resiliencia-001",
+      "orden_id": "resiliencia-orden-001",
+      "descripcion": "Modelo devuelve 429 (rate limit): reintenta con backoff+jitter",
+      "error_inyectado": "429",
+      "intentos_esperados": 2,
+      "backoff_esperado": true,
+      "jitter_esperado": true
+    },
+    {
+      "case_id": "resiliencia-002",
+      "orden_id": "resiliencia-orden-002",
+      "descripcion": "Modelo devuelve 503: reintenta con backoff+jitter",
+      "error_inyectado": "503",
+      "intentos_esperados": 2,
+      "backoff_esperado": true,
+      "jitter_esperado": true
+    },
+    {
+      "case_id": "resiliencia-003",
+      "orden_id": "resiliencia-orden-003",
+      "descripcion": "Modelo devuelve 400: no reintenta",
+      "error_inyectado": "400",
+      "intentos_esperados": 1,
+      "reintenta": false
+    },
+    {
+      "case_id": "resiliencia-004",
+      "orden_id": "resiliencia-orden-004",
+      "descripcion": "Caída de red entre persistencia y publicación: no duplica efecto",
+      "error_inyectado": "caida_despues_de_persistir",
+      "idempotente": true,
+      "efectos_duplicados_esperados": 0
+    },
+    {
+      "case_id": "resiliencia-005",
+      "orden_id": "resiliencia-orden-005",
+      "descripcion": "Timeout de red respeta deadline global",
+      "error_inyectado": "timeout_red",
+      "deadline_respetado": true,
+      "corte_escrito": true
+    }
+  ]
+}

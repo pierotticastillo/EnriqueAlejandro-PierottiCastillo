@@ -103,3 +103,27 @@ class PropuestaValidada:
     def vacia(self) -> bool:
         """True si el agente no proposes nada útil."""
         return not self.falla and not self.causas and not self.citas
+
+
+@dataclass(frozen=True)
+class ResultadoConsultaAgente:
+    """El resultado completo de una consulta, incluida la提案 descartada.
+
+    ``consultar`` sigue devolviendo sólo la propuesta válida para no cambiar el
+    camino productivo.  El benchmark necesita además saber **por qué** una
+    propuesta no se usó: una cita o una falla inventada no es lo mismo que un
+    corte de presupuesto o una caída del modelo.
+
+    ``estado`` es:
+
+    * ``aceptada``: la propuesta atravesó la validación;
+    * ``descartada``: el modelo respondió, pero la propuesta no se pudo respaldar;
+    * ``sin_propuesta``: el modelo no devolvió una salida con el esquema esperado;
+    * ``cortada``: se agotó el presupuesto;
+    * ``error``: falló la consulta al modelo.
+    """
+
+    estado: Literal["aceptada", "descartada", "sin_propuesta", "cortada", "error"]
+    propuesta: PropuestaValidada | None = None
+    propuesta_cruda: PropuestaAgente | None = None
+    motivo: str | None = None

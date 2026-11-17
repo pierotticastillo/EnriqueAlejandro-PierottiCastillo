@@ -28,7 +28,6 @@ import time
 from contextvars import ContextVar
 from typing import Any
 
-import httpx
 from langchain.agents import create_agent
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
@@ -36,9 +35,21 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from pydantic import ValidationError
 
-from agente.modelos import MAX_CARACTERES, MAX_ITEMS, PropuestaAgente, PropuestaValidada
+from agente.deteccion_loops import (
+    CallbackDetectarLoops,
+    DetectorLoops,
+    LoopDetectado,
+)
+from agente.modelos import (
+    MAX_CARACTERES,
+    MAX_ITEMS,
+    PropuestaAgente,
+    PropuestaValidada,
+    ResultadoConsultaAgente,
+)
 from agente.presupuesto import Presupuesto, PresupuestoAgotado
 from agente.tools import construir_tools
+from tools.politica_reintento import PoliticaReintento
 
 logger = logging.getLogger("agente.nucleo")
 
@@ -65,7 +76,7 @@ class _GuardaPresupuesto(BaseCallbackHandler):
 
 
 class _ModeloConReintentos(ChatOllama):
-    """El modelo local, con un reintento para las llamadas que se caen.
+    """El modelo local, con reintentos para las llamadas que se caen.
 
     En la planta simulada el **radioenlace** se cae: el proxy de la planta
     cierra los túneles y el cliente ve «Server disconnected without sending a
@@ -76,105 +87,56 @@ class _ModeloConReintentos(ChatOllama):
     cubre **todas** las vueltas (la consulta y el cierre) sin repetir las
     consultas a las herramientas, que ya se hicieron.
 
-    Sólo se reintenta lo que es **transitorio** (la red se cayó). Un error
-    del modelo (un esquema inválido, say) no se reintenta: se propaga.
+    Sólo se reintenta lo que es **transitorio** (la red se cayó, ``429``,
+    ``5xx``). Un error del modelo (un esquema inválido, say) no se reintenta:
+    se propaga.
 
     El reintento **respeta el presupuesto**: el plazo de la consulta llega
     al modelo por el contexto de la llamada, así que si ya no queda tiempo
     el reintento no arranca y el corte queda anotado como condición de
     corte.
+
+    Usa la política unificada de ``tools.politica_reintento``: backoff
+    exponencial con jitter, reintenta ``429`` y ``5xx``, no reintenta
+    ``400/401/403/422``.
     """
 
     #: Cuántos intentos tiene cada llamada (1 = sin reintento).
-    max_intentos: int = 2
-    #: Cuánto espera entre intento e intento.
-    espera_reintento_s: float = 15.0
+    max_intentos: int = 3
+    #: Tiempo base de espera entre intentos (backoff exponencial con jitter).
+    espera_reintento_s: float = 1.0
 
     def _generate(self, *args: Any, **kwargs: Any) -> Any:
         # El ``super()`` sin argumentos se resuelve acá, en el método: dentro
         # de la lambda ya no encuentra la clase y revienta.
         llamar = super()._generate
-        return _con_reintento(
-            lambda: llamar(*args, **kwargs),
-            intentos=self.max_intentos,
-            espera_s=self.espera_reintento_s,
-            restante=_restante,
+        politica = PoliticaReintento(
+            max_intentos=self.max_intentos,
+            espera_base_s=self.espera_reintento_s,
         )
-
-
-def _con_reintento(
-    accion: Any,
-    *,
-    intentos: int,
-    espera_s: float,
-    restante: Any = None,
-) -> Any:
-    """Ejecuta la acción y reintenta si lo que falló fue **la red**.
-
-    Un error del modelo (un esquema inválido, say) no se reintenta: se
-    propaga. Un corte del enlace sí: el radioenlace se cae y la planta
-    simulada cierra los túneles, así que la llamada se pierde sin que el
-    modelo haya hecho nada malo.
-
-    El reintento **respeta el presupuesto**: si ya no queda tiempo para la
-    consulta, no se reintenta y el corte queda anotado como tal. Un reintento
-    que se pasa del plazo global rompería el timeout que el anexo pide.
-    """
-    ultimo: Exception | None = None
-    total = max(1, intentos)
-    for intento in range(total):
-        if restante is not None and restante() <= 0:
-            raise PresupuestoAgotado(
-                "se agotó el timeout global antes de reintentar la llamada al modelo"
-            )
         try:
-            return accion()
-        except Exception as exc:  # noqa: BLE001 - se decide más abajo
-            ultimo = exc
-            if not _es_transitorio(exc) or intento + 1 >= total:
-                raise
-            logger.warning(
-                "La llamada al modelo se cayó (%s): se reintenta en %.0f s",
-                exc,
-                espera_s,
+            return politica.ejecutar(
+                lambda: llamar(*args, **kwargs),
+                idempotente=True,
+                restante_s=_restante,
             )
-            _esperar(espera_s, restante)
-    raise ultimo if ultimo is not None else RuntimeError("la llamada al modelo falló")
-
-
-def _esperar(espera_s: float, restante: Any = None) -> None:
-    """Espera entre intento e intento, sin pasarse del plazo."""
-    if restante is not None:
-        espera_s = min(espera_s, max(0.0, restante()))
-    if espera_s > 0:
-        time.sleep(espera_s)
+        except TimeoutError as exc:
+            # El deadline del presupuesto se agotó: traducir a
+            # PresupuestoAgotado para que el agente lo anote como corte.
+            raise PresupuestoAgotado(
+                "se agotó el timeout global antes de completar la llamada al modelo"
+            ) from exc
 
 
 def _es_transitorio(exc: BaseException) -> bool:
     """Si el error es de la red (y conviene reintentar).
 
-    Se mira la cadena de excepciones: el cliente de Ollama envuelve el error
-    de ``httpx`` y el que llega al callback no siempre es el de red. Por eso
-    se busca también en el mensaje: la planta simulada corta la conexión y
-    el texto es el del corte.
+    Se mantiene para retrocompatibilidad; la clasificación real ahora vive en
+    ``tools.politica_reintento.PoliticaReintento.es_error_transitorio``.
     """
-    candidato: BaseException | None = exc
-    while candidato is not None:
-        if isinstance(candidato, httpx.TransportError):
-            return True
-        candidato = candidato.__cause__ or candidato.__context__
-    texto = str(exc).lower()
-    return any(
-        marca in texto
-        for marca in (
-            "server disconnected",
-            "connection reset",
-            "connection aborted",
-            "connection refused",
-            "remote protocol error",
-            "incomplete read",
-        )
-    )
+    from tools.politica_reintento import PoliticaReintento
+
+    return PoliticaReintento().es_error_transitorio(exc)
 
 
 #: El plazo (monotónico) de la consulta en curso. Vive en el **contexto** y
@@ -304,11 +266,43 @@ class AgenteAnalisis:
         agota, el corte es una condición prevista (no un fallo) y la
         justificación determinista sigue estando.
         """
+        return self.consultar_detallado(
+            prompt,
+            permitidas=permitidas,
+            callbacks=callbacks,
+            presupuesto=presupuesto,
+        ).propuesta
+
+    def consultar_detallado(
+        self,
+        prompt: str,
+        *,
+        permitidas: tuple[str, ...],
+        callbacks: list[Any] | None = None,
+        presupuesto: Presupuesto | None = None,
+        detector_loops: DetectorLoops | None = None,
+    ) -> ResultadoConsultaAgente:
+        """Consulta al agente y conserva también el motivo de un descarte.
+
+        El camino productivo usa :meth:`consultar`.  El arnés de evaluación usa
+        este método para distinguir una propuesta descartada de una consulta
+        cortada o caída, y para registrar la propuesta cruda sin usarla.
+
+        Si se entrega un ``detector_loops``, el agente corta ante la primera
+        firma de loop (repetición, ping-pong o no-progreso) y devuelve un
+        resultado ``cortada`` en vez de seguir iterando indefinidamente.
+        """
         handlers = list(self._callbacks) + list(callbacks or [])
         if presupuesto is not None:
             # La guarda va siempre: el presupuesto es el que corta, haya
             # bitácora o no.
             handlers.insert(0, _GuardaPresupuesto(presupuesto))
+        detector = detector_loops or DetectorLoops()
+        callback_loops = CallbackDetectarLoops(
+            detector,
+            registrador=None,
+        )
+        handlers.append(callback_loops)
         # El plazo de la consulta queda a la vista del modelo: el reintento
         # no puede pasarse del timeout global.
         token = _deadline.set(
@@ -338,19 +332,50 @@ class AgenteAnalisis:
                 logger.warning("La consulta al agente se cortó: %s", exc)
                 if presupuesto is not None:
                     presupuesto.anotar_corte(str(exc))
-                return None
+                return ResultadoConsultaAgente(
+                    estado="cortada",
+                    motivo=str(exc),
+                )
+            except LoopDetectado as exc:
+                # Condición de corte: el agente entró en un loop. Se corta
+                # antes de repetir la misma herramienta con los mismos
+                # argumentos y se deja el motivo escrito.
+                logger.warning("La consulta al agente se cortó por loop: %s", exc)
+                if presupuesto is not None:
+                    presupuesto.anotar_corte(f"loop detectado: {exc}")
+                return ResultadoConsultaAgente(
+                    estado="cortada",
+                    motivo=f"loop detectado: {exc}",
+                )
             except Exception as exc:  # noqa: BLE001 - el agente no puede tumbar el análisis
                 logger.warning("El agente no pudo consultarse: %s", exc)
                 if presupuesto is not None:
                     presupuesto.anotar_corte(f"el modelo falló: {exc}")
-                return None
+                return ResultadoConsultaAgente(
+                    estado="error",
+                    motivo=str(exc),
+                )
             if not isinstance(propuesta, PropuestaAgente):
                 logger.warning("El agente no devolvió una propuesta válida")
-                return None
-            return self.validar(
+                return ResultadoConsultaAgente(
+                    estado="sin_propuesta",
+                    motivo="el modelo no devolvió una salida con el esquema esperado",
+                )
+            validada, motivo = self._validar_detallado(
                 propuesta,
                 permitidas=permitidas,
                 vistas=_citas_vistas(mensajes),
+            )
+            if validada is None:
+                return ResultadoConsultaAgente(
+                    estado="descartada",
+                    propuesta_cruda=propuesta,
+                    motivo=motivo,
+                )
+            return ResultadoConsultaAgente(
+                estado="aceptada",
+                propuesta=validada,
+                propuesta_cruda=propuesta,
             )
         finally:
             _deadline.reset(token)
@@ -438,11 +463,26 @@ class AgenteAnalisis:
         Una cita que no está en la lista de permitidas descarta la propuesta
         entera: es el mismo control que hay en la redacción.
 
-        Las citas **vistas** son las que le devolvieron las herramientas al
+        Las citas **vistas** son las que le devuelven las herramientas al
         agente: si el manual le mostró una sección, puede citarla. Lo que no
         está ni en la lista de permitidas ni entre lo que consultó es
         inventado, y la propuesta se descarta entera.
         """
+        validada, _ = self._validar_detallado(
+            propuesta,
+            permitidas=permitidas,
+            vistas=vistas,
+        )
+        return validada
+
+    def _validar_detallado(
+        self,
+        propuesta: PropuestaAgente,
+        *,
+        permitidas: tuple[str, ...],
+        vistas: tuple[str, ...] = (),
+    ) -> tuple[PropuestaValidada | None, str | None]:
+        """Valida la propuesta y explica por qué fue descartada."""
         conocidas = {_normalizar(cita) for cita in permitidas}
         conocidas |= {_normalizar(cita) for cita in vistas}
         citas_ok: list[str] = []
@@ -454,7 +494,7 @@ class AgenteAnalisis:
                 "El agente citó documentos desconocidos (%s): se descarta su propuesta",
                 ", ".join(descartadas),
             )
-            return None
+            return None, "cita desconocida: " + ", ".join(descartadas)
 
         falla = None
         if propuesta.falla:
@@ -465,7 +505,7 @@ class AgenteAnalisis:
                     "se descarta su propuesta",
                     propuesta.falla,
                 )
-                return None
+                return None, f"falla fuera del catálogo: {propuesta.falla}"
 
         causas_ok: list[str] = []
         causas_mal: list[str] = []
@@ -478,15 +518,18 @@ class AgenteAnalisis:
 
         # Las tareas que propone el agente son un dato de control: las tareas
         # que salen en la orden son las que ya decidió el código.
-        return PropuestaValidada(
-            falla=propuesta.falla,
-            causas=tuple(causas_ok),
-            citas=tuple(citas_ok),
-            tareas=tuple(propuesta.tareas),
-            justificacion=propuesta.justificacion,
-            confianza=propuesta.confianza,
-            citas_descartadas=tuple(descartadas),
-            causas_descartadas=tuple(causas_mal),
+        return (
+            PropuestaValidada(
+                falla=propuesta.falla,
+                causas=tuple(causas_ok),
+                citas=tuple(citas_ok),
+                tareas=tuple(propuesta.tareas),
+                justificacion=propuesta.justificacion,
+                confianza=propuesta.confianza,
+                citas_descartadas=tuple(descartadas),
+                causas_descartadas=tuple(causas_mal),
+            ),
+            None,
         )
 
     def _falla_de(self, codigo: str) -> Any:
