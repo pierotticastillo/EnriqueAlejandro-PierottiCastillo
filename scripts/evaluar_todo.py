@@ -22,10 +22,28 @@ from typing import Any
 sys.path.insert(0, "src")
 sys.stdout.reconfigure(encoding="utf-8")
 
+from agente.deteccion_loops import DetectorLoops  # noqa: E402
 from agente.modelos import PropuestaAgente  # noqa: E402
 from agente.nucleo import _cita_conocida, _normalizar  # noqa: E402
 
 EVALS_DIR = Path("docs/evals")
+
+# Tipos de detección de loops compatibles entre sí.
+# "repeticion_tool_args" y "repeticion" son sinónimos.
+# "repeticion" (3 vueltas iguales) también es compatible con "no_progreso"
+# porque no hay progreso entre vueltas.
+TIPOS_COMPATIBLES_BUCLE: dict[str, set[str]] = {
+    "repeticion_tool_args": {"repeticion_tool_args", "repeticion", "no_progreso"},
+    "repeticion": {"repeticion_tool_args", "repeticion", "no_progreso"},
+    "no_progreso": {"no_progreso", "repeticion", "repeticion_tool_args"},
+    "ping_pong": {"ping_pong"},
+}
+
+
+def _tipos_compatibles_bucle(tipo: str | None) -> set[str]:
+    if tipo is None:
+        return set()
+    return TIPOS_COMPATIBLES_BUCLE.get(tipo, {tipo})
 
 
 def _cargar_evals(nombre: str | None = None) -> list[tuple[str, dict[str, Any]]]:
@@ -159,6 +177,101 @@ def _ejecutar_grounding(datos: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ------------------------------------------------------------------ loops
+
+
+def _ejecutar_loops(datos: dict[str, Any]) -> dict[str, Any]:
+    """Ejecuta la batería de detección de loops usando el validador real.
+
+    Reutiliza ``DetectorLoops`` de ``agente.deteccion_loops`` para comprobar
+    que cada secuencia descrita en el JSON produce la firma de loop esperada.
+    """
+    casos = datos.get("casos", [])
+    umbrales = datos.get("umbrales", {})
+    dimensiones = datos.get("dimensiones", [])
+
+    inicio = time.monotonic()
+    resultados: list[dict[str, Any]] = []
+    aprobados = 0
+
+    max_repeticiones = int(umbrales.get("repeticion_maxima_vueltas", 3))
+
+    for caso in casos:
+        caso_inicio = time.monotonic()
+        case_id = caso.get("case_id")
+        orden_id = caso.get("orden_id")
+        secuencia = list(caso.get("secuencia", []))
+        deteccion_esperada = caso.get("deteccion_esperada", "")
+        accion_esperada = caso.get("accion_esperada", "")
+
+        detector = DetectorLoops(max_repeticiones=max_repeticiones)
+        firma_detectada: str | None = None
+        paso_deteccion: int | None = None
+
+        for indice, llamada in enumerate(secuencia, start=1):
+            # Cada entrada de la secuencia tiene el formato "herramienta:{args}"
+            # o simplemente "herramienta".
+            if "{" in llamada:
+                nombre, _, argumentos = llamada.partition("{")
+                argumentos = "{" + argumentos
+            else:
+                nombre = llamada
+                argumentos = "{}"
+
+            firma = detector.registrar_llamada(nombre, argumentos, indice)
+            if firma is not None:
+                firma_detectada = firma.tipo
+                paso_deteccion = indice
+                break
+
+        # Un caso está aprobado si:
+        #  - Se esperaba detección y se detectó un tipo compatible.
+        #  - O no se esperaba detección y no se detectó nada (no hay falso positivo).
+        espera_deteccion = bool(deteccion_esperada)
+        detecto_algo = firma_detectada is not None
+        coincide_tipo = (
+            firma_detectada in _tipos_compatibles_bucle(deteccion_esperada)
+            if espera_deteccion
+            else True
+        )
+
+        estado = "aprobado" if (espera_deteccion == detecto_algo and coincide_tipo) else "fallido"
+
+        if estado == "aprobado":
+            aprobados += 1
+
+        resultados.append(
+            {
+                "case_id": case_id,
+                "orden_id": orden_id,
+                "estado": estado,
+                "motivo": (
+                    f"detectado '{firma_detectada}' en paso {paso_deteccion}"
+                    if detecto_algo
+                    else "sin bucle detectado"
+                ),
+                "deteccion_esperada": deteccion_esperada,
+                "deteccion_obtenida": firma_detectada,
+                "accion_esperada": accion_esperada,
+                "paso_deteccion": paso_deteccion,
+                "segundos": round(time.monotonic() - caso_inicio, 3),
+            }
+        )
+
+    total_segundos = round(time.monotonic() - inicio, 3)
+    return {
+        "bateria": "loops",
+        "version": datos.get("version", 1),
+        "dimensiones": dimensiones,
+        "umbrales": umbrales,
+        "total_casos": len(casos),
+        "aprobados": aprobados,
+        "pendientes": len(casos) - aprobados,
+        "segundos_totales": total_segundos,
+        "resultados": resultados,
+    }
+
+
 def _ejecutar_bateria_estructural(nombre: str, datos: dict[str, Any]) -> dict[str, Any]:
     """Ejecuta una batería sin implementación real (validación estructural)."""
     casos = datos.get("casos", [])
@@ -203,6 +316,8 @@ def _ejecutar_bateria(nombre: str, datos: dict[str, Any]) -> dict[str, Any]:
     """Ejecuta una batería de evaluación y devuelve su reporte."""
     if nombre == "grounding":
         return _ejecutar_grounding(datos)
+    if nombre == "loops":
+        return _ejecutar_loops(datos)
     return _ejecutar_bateria_estructural(nombre, datos)
 
 
@@ -248,6 +363,9 @@ def main() -> int:
         extra = ""
         if nombre == "grounding":
             extra = f" | citas inventadas: {resultado.get('citas_inventadas', 0)}"
+        elif nombre == "loops":
+            detectados = sum(1 for r in resultado["resultados"] if r["deteccion_obtenida"])
+            extra = f" | bucles detectados: {detectados}"
         print(
             f"  Casos: {resultado['total_casos']} | "
             f"Aprobados: {resultado['aprobados']} | "
