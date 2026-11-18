@@ -89,6 +89,17 @@ leía diez veces mayor (3,0 kg/cm² en vez de 0,3), así que el filtro se
 **escalaba donde no había novedad**. Ya está corregido con su test; el detalle
 está en el [`INFORME.md`](INFORME.md), §14.
 
+## Mejoras de la Segunda Entrega (Plan de Implementación 2)
+
+Además de las Fases 0-7, el Plan de Implementación 2 agrega las siguientes capacidades:
+
+- **Checkpoint duradero y reanudación** (`src/db/checkpoint.py`): permite reanudar una tarea tras un reinicio sin repetir efectos, persistiendo el estado en PostgreSQL.
+- **Correlation ID de extremo a extremo**: identifica una solicitud completa desde su origen hasta su final, propagándose por eventos, órdenes, ledger, manifiesto y outbox.
+- **Detección de loops** (`src/agente/deteccion_loops.py`): detecta repetición de tool con mismos argumentos, ping-pong entre etapas y ausencia de progreso, cortando el agente antes de entrar en bucle indefinido.
+- **Retry/backoff con jitter** (`src/tools/politica_reintento.py`): política única para reintentar errores transitorios (429, 5xx, red) con backoff exponencial y jitter; no reintenta errores 4xx (excepto 429).
+- **Handoff HITL con vencimiento** (`src/planta/handoff.py`): el handoff humano tiene payload estructurado, acuse de recepción, vencimiento configurable y escalamiento automático si vence; nunca se autoaprueba.
+- **Suite de evaluación** (`scripts/evaluar_todo.py`): baterías de pruebas para agente vs baseline, grounding, visión, loops, red team y consistencia multimodal, con aciertos, costo y latencia por caso.
+
 ## Arquitectura: workflow fijo y agente
 
 El Anexo de Entrega 2 pide un workflow explícito con el LLM usado en la
