@@ -522,7 +522,6 @@ def main() -> None:
     servicio = ServicioParteVoz(
         settings,
         repositorio,
-        engine,
         almacenamiento,
         transcriptor,
         cliente,
@@ -532,6 +531,7 @@ def main() -> None:
         vision=vision,
         registrador=registrador,
         crear_handoff_fn=_crear_handoff_para_orden,
+        engine=engine,
     )
     referencia["servicio"] = servicio
     parar = threading.Event()
