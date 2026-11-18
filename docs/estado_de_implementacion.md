@@ -42,7 +42,7 @@ criterios restantes dependen del audio regenerado por la planta. La corrida
 diagnóstica anterior (`a13d7cb`, 93,1/100) queda sólo como antecedente porque
 la auditoría posterior encontró bloqueadores de integridad financiera y
 trazabilidad. El manifiesto y los artefactos auditables están en
-[`docs/evidencia_p0_06/`](evidencia_p0_06/README.md).
+[`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/README.md).
 
 La **Fase 6 (operación sin enlace y cola)** quedó cerrada: la cola
 (`outbox_cola`) pasó a ser **la salida de la planta** — eventos, órdenes y
@@ -160,7 +160,7 @@ Ruff y `compileall` también pasan. RAG se repitió en memoria y pgvector sobre
 las 71 preguntas oficiales. `scripts/archivar_p0_06.py` generó el manifiesto
 con hashes, criterios, eliminatorias, mensajes inválidos, modelos, corpus,
 dataset, digest de imágenes, tokens, costo y latencia en
-[`docs/evidencia_p0_06/`](evidencia_p0_06/README.md). Una auditoría de
+[`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/README.md). Una auditoría de
 publicación detectó que Git normalizaba los CRLF locales a LF y por eso los
 hashes del primer archivo no coincidían con los blobs públicos. El archivador
 ahora calcula los SHA-256 sobre bytes canónicos UTF-8/LF y `.gitattributes`
@@ -193,7 +193,7 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 | 8 — Alineación de Entrega 2 | Pendiente de información oficial | Se solicitó al usuario la fecha, alcance, escenarios y rúbrica de Entrega 2; pendiente de confirmación por la Academia. |
 | 9 — Gobierno humano y seguridad | **Implementada y verificada tras auditoría** | P0-01: el cierre técnico deja `Ejecutada` y la decisión final la toma un `supervisor` o `inspector` autenticado, con motivo/evidencia auditados y habilita sólo tras certificación. La migración `0010` y las guardas de aplicación preservan estado, motivo, costo, tareas y repuestos frente a reprocesos; impiden cierres terminales duplicados y fijan un habilita por orden. P0-04 y P0-05 siguen verificados. |
 | 10 — Evidencia y provenance | **Implementada y verificada tras auditoría** | P0-02: una foto con daño estructural o un resultado indeterminado fuerza revisión humana en escalados ordinarios; una salida válida sin daño no agrega revisión y sin fotos no se activa el gate. P0-03: manifiesto canónico, ledger transaccional y reconstrucción autenticada. La migración `0010` completa el append-only de `decision_cierre`, manifiesto y ledger contra `UPDATE`, `DELETE` y `TRUNCATE`, y vincula decisión, cierre y orden con una FK compuesta restrictiva. |
-| 11 — Evaluación, red team y calidad | **Parcialmente implementada** | `docs/evals/` con 6 baterías (agente_vs_baseline, grounding, vision, multimodal, loops, resiliencia) y `scripts/evaluar_todo.py`. Grounding conectado y verificado (4/4 casos); loops conectado y verificado (3/3 casos). Falta conectar visión, red team y trayectoria completa. |
+| 11 — Evaluación, red team y calidad | **Parcialmente implementada** | `docs/evaluaciones/baterias/` con 6 baterías (agente_vs_baseline, grounding, vision, multimodal, loops, resiliencia) y `scripts/evaluar_todo.py`. Grounding conectado y verificado (4/4 casos); loops conectado y verificado (3/3 casos). Falta conectar visión, red team y trayectoria completa. |
 | 12 — Operación y cierre | **P0-06 cerrado; P1-15 a P1-21 implementados en lógica** | La corrida oficial reproducible, RAG, métricas, digest y evidencia auditable quedaron cerrados sobre `4eb00f5`. P1-15 (checkpoint duradero), P1-16 (correlation ID), P1-17 (retry/backoff con jitter), P1-18 (detección de loops), P1-19 (cancelación y recuperación), P1-20 (handoff HITL con vencimiento), P1-21 (validación multimodal adversarial) implementados en lógica; integración completa en camino productivo en progreso. Restan outbox transaccional/PUBACK, observabilidad, CI/CD y cierre documental de las Fases 11–12. |
 
 ## Plan de implementación 2 — estado de brechas P0
@@ -205,14 +205,14 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 | P0-03 — Evidencia y provenance | **Implementado y verificado tras corrección** | Manifiesto canónico para orden, cierre y decisión, separado del JSON mutable de reglas; `construir_contexto` participa del análisis productivo; ledger transaccional con nueve tipos y reconstrucción autenticada. `decision_cierre`, manifiesto y ledger bloquean `UPDATE`, `DELETE` y `TRUNCATE`; la FK compuesta garantiza que decisión, cierre y orden sean el mismo caso. |
 | P0-04 — Autenticación y RBAC | **Implementado y verificado** | La Central exige un token Bearer opaco, uno por persona. Roles: `planificador`, `supervisor`, `inspector` y `lectura`. Sin credencial válida: 401; operación fuera del rol: 403. `usuario`/`rol` del cuerpo se ignoran; la identidad sale sólo del token. |
 | P0-05 — XSS y CSP | **Implementado y verificado** | `src/planta/central.py`: construcción DOM con `textContent`/`replaceChildren`, CSP con nonce por respuesta y cabeceras defensivas. Sigue integrado con P0-01/P0-04 y verificado por la suite completa. |
-| P0-06 — Corrida sobre el commit final | **Cerrado y verificado** | La corrida oficial final está anclada al commit `4eb00f54b5861c6c3c922aad060de266064012ef`, al corrector `ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic `0011`: **92,6/100 — APRUEBA**, 0 eliminatorias, 467 mensajes válidos y 0 inválidos en los siete escenarios. G2/G3 se verifican además con 77 pruebas autenticadas. El manifiesto incluye hashes, criterios, eliminatorias, mensajes inválidos, modelos, corpus/dataset, digest de cuatro imágenes, tokens, costo y latencia; está archivado en [`docs/evidencia_p0_06/`](evidencia_p0_06/README.md). Los digest usan bytes canónicos UTF-8/LF fijados por `.gitattributes` y se verifican contra los blobs publicados. |
+| P0-06 — Corrida sobre el commit final | **Cerrado y verificado** | La corrida oficial final está anclada al commit `4eb00f54b5861c6c3c922aad060de266064012ef`, al corrector `ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic `0011`: **92,6/100 — APRUEBA**, 0 eliminatorias, 467 mensajes válidos y 0 inválidos en los siete escenarios. G2/G3 se verifican además con 77 pruebas autenticadas. El manifiesto incluye hashes, criterios, eliminatorias, mensajes inválidos, modelos, corpus/dataset, digest de cuatro imágenes, tokens, costo y latencia; está archivado en [`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/README.md). Los digest usan bytes canónicos UTF-8/LF fijados por `.gitattributes` y se verifican contra los blobs publicados. |
 | P0-07 — Alcance y rúbrica oficiales | **Cerrado** | Información disponible en `Plan_de_implementación/Enunciados/Academia _2026_Anexo_Entrega_2.pdf`: fecha 20/11/2026, módulos 3.1 a 3.4, escenarios tormenta-perfecta/sin-luz/contratista/fuga-sin-enlace, eliminación `aprobacion_indebida`, G2/G3 revisados a mano (inactivos en rúbrica). |
 
 ## Plan de implementación 2 — estado de brechas P1
 
 | ID | Estado actual | Evidencia o próximo paso |
 |----|---------------|--------------------------|
-| P1-01 — Suite agente vs baseline | **Parcialmente implementada** | `docs/evals/agente_vs_baseline.json` definida (5 casos) y conectada en `scripts/evaluar_todo.py`. Batería `grounding` conectada y verificada (4/4 casos); `loops` conectada y verificada (3/3 casos). Falta conectar visión, red team y trayectoria completa. |
+| P1-01 — Suite agente vs baseline | **Parcialmente implementada** | `docs/evaluaciones/baterias/agente_vs_baseline.json` definida (5 casos) y conectada en `scripts/evaluar_todo.py`. Batería `grounding` conectada y verificada (4/4 casos); `loops` conectada y verificada (3/3 casos). Falta conectar visión, red team y trayectoria completa. |
 | P1-02 — Trayectoria completa | Parcial | `registro_trayectoria` existe con modelo, tools, argumentos, tokens, costo, tiempo; falta ledger completo que conecte evidencia→análisis→propuesta→reglas→actor→estado. |
 | P1-03 — Outbox transaccional | Pendiente | No implementado todavía. |
 | P1-04 — Cola PUBACK | Pendiente | No implementado todavía. |
@@ -232,7 +232,7 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 | P1-18 — Detección de loops | **Implementado** | `src/agente/deteccion_loops.py` (repetición, ping-pong, no-progreso); integrado en `agente/nucleo.py` como callback de LangChain; 14 tests pasando. |
 | P1-19 — Cancelación y recuperación | Pendiente | Lógica no integrada en camino productivo. |
 | P1-20 — Handoff HITL con vencimiento | **Implementado en lógica** | `src/planta/handoff.py` con `GestorHandoff`, `PayloadHandoff`, `AcuseHandoff`, `DecisionHandoff`; integrado en `Central` y `ServicioParteVoz` (crea handoff cuando orden queda pendiente). |
-| P1-21 — Validación multimodal adversarial | Pendiente | Batería `docs/evals/multimodal.json` definida (4 casos); no conectada aún al agente. |
+| P1-21 — Validación multimodal adversarial | Pendiente | Batería `docs/evaluaciones/baterias/multimodal.json` definida (4 casos); no conectada aún al agente. |
 
 ## Decisiones que conviene no perder de vista
 
@@ -454,7 +454,7 @@ Suite oficial de la planta: 71 preguntas (`evaluacion/retrieval.json`) con sus r
 | Híbrido en memoria (Fase 4) | 0,845 | 0,695 | 0,687 | **0,000** | **0** |
 | **Híbrido pgvector (producción)** | **0,873** | **0,711** | 0,659 | **0,000** | **0** |
 
-La ruta de producción mejora la referencia en `hit@5` (+0,028), `recall@5` (+0,047) y deja el distractor en cero. Evidencia guardada en [`evidencia_fase4_retrieval.json`](evidencia_fase4_retrieval.json) (índice en memoria) y [`evidencia_fase4_pgvector.json`](evidencia_fase4_pgvector.json) (índice real de PostgreSQL).
+La ruta de producción mejora la referencia en `hit@5` (+0,028), `recall@5` (+0,047) y deja el distractor en cero. Evidencia guardada en [`docs/evaluaciones/evidencia_fase4_retrieval.json`](docs/evaluaciones/evidencia_fase4_retrieval.json) (índice en memoria) y [`docs/evaluaciones/evidencia_fase4_pgvector.json`](docs/evaluaciones/evidencia_fase4_pgvector.json) (índice real de PostgreSQL).
 
 Comandos:
 
@@ -723,6 +723,101 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 7. **Confirmar con la Academia** fecha, alcance, rúbrica, escenarios y datos externos de la Entrega 2; registrarlos en P0-07.
 8. Completar las Fases 11 y 12: benchmark y red team, outbox/PUBACK, observabilidad, CI/CD y cierre reproducible.
 
+## Brechas de la tabla de enunciados — pendientes de cumplir
+
+Constatación contra el Anexo de Entregas (cronograma de la Academia Novit 2026):
+
+| Entrega | Fecha | Escenarios que pide el enunciado | Criterios medidos | Estado |
+|---------|-------|----------------------------------|-------------------|--------|
+| 1 | 10/11 | `martes-tranquilo`, `fuga-sin-enlace` | A1–A4b, B1, B2, F1, F2 | **Cumple** — 92,6/100 — APRUEBA (corrida oficial), 0 eliminatorias, 467 mensajes válidos / 0 inválidos |
+| 2 | 20/11 | `tormenta-perfecta`, `sin-luz`, `contratista`, `fuga-sin-enlace` (daño estructural) | D1, D2, F3, G1 | **Cumple** — D1 100 %, D2 100 %, F3 100 %, G1 100 % |
+
+**7 escenarios del corrector oficial** (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`, `contratista`, `ataque`, `libre`): ejecutados contra el repositorio de la Academia local con **93,4/100 — APRUEBA** (mínimo 60), **0 faltas eliminatorias**, 0 mensajes inválidos en todos los escenarios. El modelo ASR `faster-whisper-base` se descargó en `datos/modelos/models--Systran--faster-whisper-base/` para que funcione sin internet en entorno local.
+
+**Resultado detallado por etapa del corrector oficial:**
+
+| Etapa | Nombre | Criterios | Peso total | Puntaje |
+|-------|--------|-----------|------------|---------|
+| **A** | Parte por voz | A1, A2, A3, A4a, A4b | 30 | 24.80 |
+| **B** | Detección en planta | B1, B2 | 20 | 19.87 |
+| **D** | Órdenes de trabajo | D1, D2 | 25 | 25.00 |
+| **E** | Operación sin enlace | E1, E2, E3 | 10 | 9.20 |
+| **F** | Robustez | F1, F2, F3 | 5 | 5.00 |
+| **G** | Cierre y certificación | G1, G2, G3 | 10 | 3.00 |
+| **Total** | | | **100** | **93.4** |
+
+---
+
+**Detalle por criterio dentro de cada etapa:**
+
+**A — Parte por voz (30 puntos — 24.80 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| A1 Cobertura | 5 | 99 % | 4.97 |
+| A2 Borrador al primer intento | 10 | 62 % | 6.22 |
+| A3 Parte final correcto | 8 | 83 % | 6.61 |
+| A4a Pregunta cuando hace falta | 4 | 100 % | 4.0 |
+| A4b No pregunta de más | 3 | 100 % | 3.0 |
+
+**B — Detección en planta (20 puntos — 19.87 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| B1 Sin novedad / Escalado | 10 | 99 % | 9.87 |
+| B2 Alerta de seguridad | 10 | 100 % | 10.0 |
+
+**D — Órdenes de trabajo (25 puntos — 25.00 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| D1 Reglas de aprobación | 15 | 100 % | 15.0 |
+| D2 Orden adecuada a la falla | 10 | 100 % | 10.0 |
+
+**E — Operación sin enlace (10 puntos — 9.20 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| E1 Sigue andando sin enlace | 3 | 100 % | 3.0 |
+| E2 Pendientes visibles | 3 | 75 % | 2.25 |
+| E3 Sin duplicados | 4 | 99 % | 3.95 |
+
+**F — Robustez (5 puntos — 5.00 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| F1 Mensajes válidos | 2 | 100 % | 2.0 |
+| F2 Latido | 1 | 100 % | 1.0 |
+| F3 Sobrevive al corte de luz | 2 | 100 % | 2.0 |
+
+**G — Cierre y certificación (10 puntos — 3.00 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| G1 Orden ejecutada | 3 | 100 % | 3.0 |
+| G2 Cierre propio | 2 | inactivo | – |
+| G3 Certificación de la contratista | 5 | inactivo | – |
+
+---
+
+**Detalle por escenario (casos con margen de mejora):**
+
+| Criterio | martes-tranquilo | tormenta-perfecta | fuga-sin-enlace | sin-luz | contratista | ataque | libre |
+|----------|------------------|-------------------|-----------------|---------|-------------|--------|-------|
+| A2 Borrador al primer intento | 67 % | 46 % | 50 % | 89 % | 84 % | 20 % | 79 % |
+| A3 Parte final correcto | 89 % | 77 % | 50 % | — | 95 % | 80 % | 88 % |
+| B1 Sin novedad / Escalado | — | 96 % | — | — | — | — | 95 % |
+| E2 Pendientes visibles | — | 50 % | — | — | — | — | — |
+| E3 Sin duplicados | — | — | — | — | — | 92 % | — |
+
+Detalle completo de la corrida: `academia2026-tp/correccion/corridas/EnriqueAlejandro-PierottiCastillo/`. La corrida oficial anterior en el entorno de producción obtuvo **92,6/100 — APRUEBA** (commit `4eb00f54b5861c6c3c922aad060de266064012ef`, corrector `ab65b95e911731351dba395817a74a8cc60da2b2`, Alembic `0011`). Evidencia en `docs/evaluaciones/correccion-oficial/`.
+
+**Lo que falta por cumplir** (brechas del Plan de Implementación 2, no de la Entrega 1):
+
+- **Batería `agente_vs_baseline`** (`docs/evaluaciones/baterias/agente_vs_baseline.json`): 5 casos pendientes — el agente aún no está conectado como servicio invocable desde el script de evaluación.
+- **Batería `vision`** (`docs/evaluaciones/baterias/vision.json`): 4 casos pendientes — las imágenes de referencia (`fotos/campo/*.jpg`) no se encuentran en el repositorio; sólo se midió tráfico, formato, tiempo y tokens con placeholders del simulador.
+- **Batería `resiliencia`**: 1 de 5 casos sin completar.
+- **Fase 11 — Evaluación, red team y calidad**: parcialmente implementada (grounding 4/4, loops 3/3 conectados; falta conectar visión, red team y trayectoria completa).
+- **Fase 12 — Operación y cierre**: P0-06 cerrado; restan outbox transaccional/PUBACK, observabilidad, CI/CD y cierre documental.
+- **P1 pendientes**: P1-03 (outbox transaccional), P1-04 (cola PUBACK), P1-07 (CI/CD), P1-08 (observabilidad), P1-09 (seguridad MCP/PostgreSQL), P1-10 (redes y presupuesto), P1-11 (calidad de visión), P1-12 (habilita → facturación), P1-13 (registro ingreso/egreso), P1-19 (cancelación y recuperación), P1-21 (validación multimodal adversarial).
+- **P0-07**: cerrado con información del Anexo Entrega 2 (fecha 20/11, módulos 3.1 a 3.4, escenarios tormenta-perfecta/sin-luz/contratista/fuga-sin-enlace, eliminación `aprobacion_indebida`, G2/G3 revisados a mano e inactivos en la rúbrica).
+
+Nota: para volver a correr los 7 escenarios del corrector oficial se necesita el repositorio de la Academia (`NovitSoftware/academia2026-tp`) con el corrector (`corregir.py`, `puntuar.py`, `rubrica.yaml`) y la planta simulada levantada en la red `planta-lan`, además de Ollama con `qwen2.5:3b-instruct`. El wrapper es `scripts/correr_correccion_oficial.py --correccion-dir <academia/repo> --repo . --salida <salida>`.
+
 ## Historial
 
 - **2026-11-16 (selección del LLM local):** se compararon
@@ -755,7 +850,7 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
   en los siete escenarios. Las 77 pruebas autenticadas de G2/G3, la suite
   completa (631 con PostgreSQL; 553 + 78 omitidas sin base), Ruff y
   `compileall` pasan. RAG se repitió en memoria y pgvector sobre las 71
-  preguntas oficiales. El archivador generó `docs/evidencia_p0_06/` con hashes,
+  preguntas oficiales. El archivador generó `docs/evaluaciones/correccion-oficial/` con hashes,
   criterios, eliminatorias, mensajes inválidos, modelos, corpus/dataset, digest
   de cuatro imágenes, tokens, costo y latencia, sin credenciales.
 

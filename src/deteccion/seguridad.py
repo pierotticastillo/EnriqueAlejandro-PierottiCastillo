@@ -115,15 +115,20 @@ PELIGRO = (
 
 # S1 — pérdida con proyección de agua a presión. La proyección es lo que
 # distingue S1 de un goteo: "agua a presión" sola no alcanza.
+# El ASR puede omitir artículos ("agua presion" en vez de "agua a presion")
+# o transcribir con errores, por lo que se incluyen variantes sin la "a"
+# y patrones más cortos que capturen la idea central (agua + presion + proyección).
 _S1 = re.compile(
     r"(?:sale|salio|saliendo|salta|saltando|chorro|niebla|proyeccion|proyecta|"
     r"proyectando|con fuerza|a borbotones|bombea)"
-    r"[^.;!?]{0,60}?agua a presion"
-    r"|agua a presion[^.;!?]{0,60}?(?:sale|saliendo|salta|chorro|niebla|proyeccion|"
-    r"con fuerza|para todos lados|a borbotones)"
+    r"[^.;!?]{0,60}?(?:agua a presion|agua presion)"
+    r"|(?:agua a presion|agua presion)[^.;!?]{0,60}?(?:sale|saliendo|salta|"
+    r"chorro|niebla|proyeccion|con fuerza|para todos lados|a borbotones)"
     r"|chorro de agua"
     r"|(?:se rompio|se revienta|revento|ruptura|explota|exploto)"
     r"[^.;!?]{0,60}?(?:descarga|presion)"
+    r"|(?:rompio|rompe|se rompio algo|se salio)[^.;!?]{0,60}?(?:agua|presion|descarga)"
+    r"[^.;!?]{0,60}?(?:agua|presion|descarga)"
 )
 
 # S2 — olor a gas. Solo nota de voz.

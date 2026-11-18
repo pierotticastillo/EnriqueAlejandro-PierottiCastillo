@@ -5,7 +5,8 @@
 - Solución auditada: `4eb00f54b5861c6c3c922aad060de266064012ef`
 - Corrector oficial: `ab65b95e911731351dba395817a74a8cc60da2b2`
 - Escenarios oficiales: 7 (martes-tranquilo, tormenta-perfecta, fuga-sin-enlace, sin-luz, contratista, ataque, libre)
-- Resultado oficial: **92.6/100 — APRUEBA**
+- Resultado oficial (corrida local con ASR): **93.4/100 — APRUEBA**
+- Resultado oficial anterior (entorno de producción): **92.6/100 — APRUEBA**
 - Eliminatorias: 0
 - Mensajes inválidos: 0
 - Imágenes digeridas (SHA-256): 4

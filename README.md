@@ -68,7 +68,7 @@ de órdenes.
 - [x] P0-06 — corrida oficial reproducible sobre el commit auditado
       `4eb00f54b5861c6c3c922aad060de266064012ef`, con RAG, métricas, digest de
       imágenes y manifiesto en
-      [`docs/evidencia_p0_06/`](docs/evidencia_p0_06/README.md).
+      [`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/README.md).
 
 **Corrector oficial final:** **92,6/100 — APRUEBA** sobre los 7 escenarios de la
 rúbrica (93 de 93 puntos medidos), con **0 eliminatorias**, **467 mensajes
@@ -77,7 +77,7 @@ válidos y 0 inválidos**. El ancla reproducible es el commit
 `ab65b95e911731351dba395817a74a8cc60da2b2` y Alembic `0011`. `D1`, `D2` y
 `G1` quedaron en **100 %** y `A1` en 98,9 %. Los resultados por criterio, las
 métricas, los hashes y los digests están en
-[`docs/evidencia_p0_06/`](docs/evidencia_p0_06/README.md); la corrida
+[`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/README.md); la corrida
 diagnóstica anterior (`a13d7cb`, 93,1/100) queda sólo como antecedente de la
 auditoría de integridad. Los SHA-256 se calculan sobre la representación
 canónica que Git publica —UTF-8 sin BOM y LF—, fijada por `.gitattributes`;
@@ -99,6 +99,101 @@ Además de las Fases 0-7, el Plan de Implementación 2 agrega las siguientes cap
 - **Retry/backoff con jitter** (`src/tools/politica_reintento.py`): política única para reintentar errores transitorios (429, 5xx, red) con backoff exponencial y jitter; no reintenta errores 4xx (excepto 429).
 - **Handoff HITL con vencimiento** (`src/planta/handoff.py`): el handoff humano tiene payload estructurado, acuse de recepción, vencimiento configurable y escalamiento automático si vence; nunca se autoaprueba.
 - **Suite de evaluación** (`scripts/evaluar_todo.py`): baterías de pruebas para agente vs baseline, grounding, visión, loops, red team y consistencia multimodal, con aciertos, costo y latencia por caso.
+
+## Brechas de la tabla de enunciados — pendientes de cumplir
+
+Constatación contra el Anexo de Entregas (cronograma de la Academia Novit 2026):
+
+| Entrega | Fecha | Escenarios que pide el enunciado | Criterios medidos | Estado |
+|---------|-------|----------------------------------|-------------------|--------|
+| 1 | 10/11 | `martes-tranquilo`, `fuga-sin-enlace` | A1–A4b, B1, B2, F1, F2 | **Cumple** — 92,6/100 — APRUEBA (corrida oficial), 0 eliminatorias, 467 mensajes válidos / 0 inválidos |
+| 2 | 20/11 | `tormenta-perfecta`, `sin-luz`, `contratista`, `fuga-sin-enlace` (daño estructural) | D1, D2, F3, G1 | **Cumple** — D1 100 %, D2 100 %, F3 100 %, G1 100 % |
+
+**7 escenarios del corrector oficial** (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`, `contratista`, `ataque`, `libre`): ejecutados contra el repositorio de la Academia local con **93,4/100 — APRUEBA** (mínimo 60), **0 faltas eliminatorias**, 0 mensajes inválidos en todos los escenarios. El modelo ASR `faster-whisper-base` se descargó en `datos/modelos/models--Systran--faster-whisper-base/` para que funcione sin internet en entorno local.
+
+**Resultado detallado por etapa del corrector oficial:**
+
+| Etapa | Nombre | Criterios | Peso total | Puntaje |
+|-------|--------|-----------|------------|---------|
+| **A** | Parte por voz | A1, A2, A3, A4a, A4b | 30 | 24.80 |
+| **B** | Detección en planta | B1, B2 | 20 | 19.87 |
+| **D** | Órdenes de trabajo | D1, D2 | 25 | 25.00 |
+| **E** | Operación sin enlace | E1, E2, E3 | 10 | 9.20 |
+| **F** | Robustez | F1, F2, F3 | 5 | 5.00 |
+| **G** | Cierre y certificación | G1, G2, G3 | 10 | 3.00 |
+| **Total** | | | **100** | **93.4** |
+
+---
+
+**Detalle por criterio dentro de cada etapa:**
+
+**A — Parte por voz (30 puntos — 24.80 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| A1 Cobertura | 5 | 99 % | 4.97 |
+| A2 Borrador al primer intento | 10 | 62 % | 6.22 |
+| A3 Parte final correcto | 8 | 83 % | 6.61 |
+| A4a Pregunta cuando hace falta | 4 | 100 % | 4.0 |
+| A4b No pregunta de más | 3 | 100 % | 3.0 |
+
+**B — Detección en planta (20 puntos — 19.87 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| B1 Sin novedad / Escalado | 10 | 99 % | 9.87 |
+| B2 Alerta de seguridad | 10 | 100 % | 10.0 |
+
+**D — Órdenes de trabajo (25 puntos — 25.00 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| D1 Reglas de aprobación | 15 | 100 % | 15.0 |
+| D2 Orden adecuada a la falla | 10 | 100 % | 10.0 |
+
+**E — Operación sin enlace (10 puntos — 9.20 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| E1 Sigue andando sin enlace | 3 | 100 % | 3.0 |
+| E2 Pendientes visibles | 3 | 75 % | 2.25 |
+| E3 Sin duplicados | 4 | 99 % | 3.95 |
+
+**F — Robustez (5 puntos — 5.00 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| F1 Mensajes válidos | 2 | 100 % | 2.0 |
+| F2 Latido | 1 | 100 % | 1.0 |
+| F3 Sobrevive al corte de luz | 2 | 100 % | 2.0 |
+
+**G — Cierre y certificación (10 puntos — 3.00 obtenidos)**
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| G1 Orden ejecutada | 3 | 100 % | 3.0 |
+| G2 Cierre propio | 2 | inactivo | – |
+| G3 Certificación de la contratista | 5 | inactivo | – |
+
+---
+
+**Detalle por escenario (casos con margen de mejora):**
+
+| Criterio | martes-tranquilo | tormenta-perfecta | fuga-sin-enlace | sin-luz | contratista | ataque | libre |
+|----------|------------------|-------------------|-----------------|---------|-------------|--------|-------|
+| A2 Borrador al primer intento | 67 % | 46 % | 50 % | 89 % | 84 % | 20 % | 79 % |
+| A3 Parte final correcto | 89 % | 77 % | 50 % | — | 95 % | 80 % | 88 % |
+| B1 Sin novedad / Escalado | — | 96 % | — | — | — | — | 95 % |
+| E2 Pendientes visibles | — | 50 % | — | — | — | — | — |
+| E3 Sin duplicados | — | — | — | — | — | 92 % | — |
+
+Detalle completo de la corrida: `academia2026-tp/correccion/corridas/EnriqueAlejandro-PierottiCastillo/`. La corrida oficial anterior en el entorno de producción obtuvo **92,6/100 — APRUEBA** (commit `4eb00f54b5861c6c3c922aad060de266064012ef`, corrector `ab65b95e911731351dba395817a74a8cc60da2b2`, Alembic `0011`). Evidencia en `docs/evaluaciones/correccion-oficial/`.
+
+**Lo que falta por cumplir** (brechas del Plan de Implementación 2, no de la Entrega 1):
+
+- **Batería `agente_vs_baseline`** (`docs/evaluaciones/baterias/agente_vs_baseline.json`): 5 casos pendientes — el agente aún no está conectado como servicio invocable desde el script de evaluación.
+- **Batería `vision`** (`docs/evaluaciones/baterias/vision.json`): 4 casos pendientes — las imágenes de referencia (`fotos/campo/*.jpg`) no se encuentran en el repositorio; sólo se midió tráfico, formato, tiempo y tokens con placeholders del simulador.
+- **Batería `resiliencia`**: 1 de 5 casos sin completar.
+- **Fase 11 — Evaluación, red team y calidad**: parcialmente implementada (grounding 4/4, loops 3/3 conectados; falta conectar visión, red team y trayectoria completa).
+- **Fase 12 — Operación y cierre**: P0-06 cerrado; restan outbox transaccional/PUBACK, observabilidad, CI/CD y cierre documental.
+- **P1 pendientes**: P1-03 (outbox transaccional), P1-04 (cola PUBACK), P1-07 (CI/CD), P1-08 (observabilidad), P1-09 (seguridad MCP/PostgreSQL), P1-10 (redes y presupuesto), P1-11 (calidad de visión), P1-12 (habilita → facturación), P1-13 (registro ingreso/egreso), P1-19 (cancelación y recuperación), P1-21 (validación multimodal adversarial).
+- **P0-07**: cerrado con información del Anexo Entrega 2 (fecha 20/11, módulos 3.1 a 3.4, escenarios tormenta-perfecta/sin-luz/contratista/fuga-sin-enlace, eliminación `aprobacion_indebida`, G2/G3 revisados a mano e inactivos en la rúbrica).
+
+Nota: para volver a correr los 7 escenarios del corrector oficial se necesita el repositorio de la Academia (`NovitSoftware/academia2026-tp`) con el corrector (`corregir.py`, `puntuar.py`, `rubrica.yaml`) y la planta simulada levantada en la red `planta-lan`, además de Ollama con `qwen2.5:3b-instruct`. El wrapper es `scripts/correr_correccion_oficial.py --correccion-dir <academia/repo> --repo . --salida <salida>`.
 
 ## Arquitectura: workflow fijo y agente
 
@@ -948,13 +1043,26 @@ al 2026-11-16). No incluye `.env` ni los directorios locales ignorados por Git.
 ├── docs/
 │   ├── estado_de_implementacion.md
 │   ├── evaluacion_modelo_local.md
-│   ├── evidencia_fase4_retrieval.json
-│   ├── evidencia_fase4_pgvector.json
-│   ├── evidencia_p0_06/
-│   │   ├── README.md
+│   ├── evaluaciones/
+│   ├── baterias/
+│   │   ├── agente_vs_baseline.json
+│   │   ├── grounding.json
+│   │   ├── loops.json
+│   │   ├── multimodal.json
+│   │   ├── resiliencia.json
+│   │   └── vision.json
+│   ├── correccion-oficial/
 │   │   ├── imagenes.json
 │   │   ├── manifest.json
+│   │   ├── README.md
 │   │   ├── oficial/
+│   │   └── verificaciones/
+│   ├── fase4/
+│   │   ├── evidencia_pgvector.json
+│   │   └── evidencia_retrieval.json
+│   └── reportes/
+│       ├── reporte_evaluacion_original.json
+│       └── reporte_evaluacion_ultimo.json
 │   │   │   ├── ataque.json
 │   │   │   ├── ataque.metricas.json
 │   │   │   ├── contratista.json
@@ -1205,7 +1313,7 @@ archiva el manifiesto reproducible:
   --corrida C:\ruta\evidencia\p0-06 `
   --solucion C:\ruta\EnriqueAlejandro-PierottiCastillo `
   --oficial C:\ruta\academia2026-tp `
-  --salida docs\evidencia_p0_06 `
+  --salida docs/evaluaciones/correccion-oficial `
   --expected-solution-commit 4eb00f54b5861c6c3c922aad060de266064012ef `
   --expected-correction-commit ab65b95e911731351dba395817a74a8cc60da2b2
 ```
