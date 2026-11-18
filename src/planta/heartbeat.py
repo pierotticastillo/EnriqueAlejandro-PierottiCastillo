@@ -101,7 +101,7 @@ class Heartbeat:
         self._aviso_cola = False
         self._ultimo_enlace: bool | None = None
         self._ultimo_pendientes: int | None = None
-        self._ultimo_latido = 0.0
+        self._ultimo_latido: float | None = None
 
     def construir(self) -> Latido:
         """Arma el latido a partir del enlace y de la cola persistente."""
@@ -163,7 +163,8 @@ class Heartbeat:
             and latido.pendientes_sincronizar != self._ultimo_pendientes
         )
         if (
-            ahora - self._ultimo_latido >= self._settings.latido_intervalo_s
+            self._ultimo_latido is None
+            or ahora - self._ultimo_latido >= self._settings.latido_intervalo_s
             or cambio_enlace
             or cambio_pendientes
         ):
