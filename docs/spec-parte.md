@@ -4,6 +4,8 @@
 pasar, con qué presupuesto y con qué condiciones de corte. El código la
 implementa; los tests la fijan.
 
+**Fecha:** 2026-11-18
+
 - **Alcance**: la nota de voz del técnico → el parte en la tablet → el
   escalado → la orden de trabajo → la decisión del planificador.
 - **Fuera de alcance**: el flujo principal del cierre por voz (Fase 7), que

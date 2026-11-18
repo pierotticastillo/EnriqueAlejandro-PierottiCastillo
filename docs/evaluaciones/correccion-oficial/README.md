@@ -10,6 +10,7 @@
 - Eliminatorias: 0
 - Mensajes inválidos: 0
 - Imágenes digeridas (SHA-256): 4
+- **Fecha de la corrida:** 2026-11-18
 
 ## Verificaciones del proyecto
 

@@ -1,6 +1,6 @@
 # Evaluación del modelo local de la planta
 
-- **Fecha de la evaluación:** 2026-11-16
+- **Fecha de la evaluación:** 2026-11-18
 - **Decisión:** mantener `qwen2.5:3b-instruct` (`Qwen2.5-3B-Instruct`, Q4_K_M).
 
 ## 1. Decisión
