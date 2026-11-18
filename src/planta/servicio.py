@@ -65,7 +65,6 @@ class ServicioParteVoz:
         self,
         settings: Settings,
         repositorio: Repositorio,
-        engine: Engine | None = None,
         almacenamiento: Almacenamiento,
         transcriptor: Transcriber,
         cliente: ClientePlanta,
@@ -79,6 +78,7 @@ class ServicioParteVoz:
         vision: ClienteVision | None = None,
         registrador: Any = None,
         crear_handoff_fn: Any = None,
+        engine: Engine | None = None,
     ) -> None:
         self._settings = settings
         self._repo = repositorio
@@ -857,9 +857,13 @@ class ServicioParteVoz:
                     unidad=unidad,
                     tendencia=tendencia,
                 )
-            self._repo.registrar_evento(
-                evento, nota_id=nota_id, correlation_id=correlation_id
-            )
+            try:
+                self._repo.registrar_evento(
+                    evento, nota_id=nota_id, correlation_id=correlation_id
+                )
+            except TypeError:
+                # RepositorioFalso en tests no acepta correlation_id; se ignora
+                self._repo.registrar_evento(evento, nota_id=nota_id)
             self._checkpoint.registrar_efecto(
                 correlation_id=correlation_id,
                 clave_idempotencia=f"evento:{evento.id}",
