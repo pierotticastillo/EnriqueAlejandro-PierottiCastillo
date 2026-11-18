@@ -7,7 +7,7 @@
 
 ## Decisión de selección del LLM de planta
 
-**Actualizado:** 2026-11-16. Se mantiene `Qwen2.5-3B-Instruct`; esta decisión no
+**Actualizado:** 2026-11-18. Se mantiene `Qwen2.5-3B-Instruct`; esta decisión no
 agrega modelos ni modifica la configuración productiva.
 
 La evaluación comparativa se hizo en el agente real, con el mismo prompt,

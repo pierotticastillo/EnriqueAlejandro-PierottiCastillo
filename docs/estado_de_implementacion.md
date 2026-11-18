@@ -1,13 +1,13 @@
 # Estado de implementación
 
-**Actualizado:** 2026-11-17
+**Actualizado:** 2026-11-18
 **Plan de referencia:** documento interno del curso (no se publica en este
 repositorio). La segunda entrega sigue el **Plan de implementación 2**; el detalle
 de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
 
 Este archivo registra el avance del repositorio y distingue entre código implementado y comportamiento validado contra la planta simulada.
 
-> **Nota:** Las fases 8–12 del Plan de implementación 2 fueron iniciadas el 2026-11-14 y se implementaron parcialmente hasta el 2026-11-17. No reabren las Fases 0–7.
+> **Nota:** Las fases 8–12 del Plan de implementación 2 fueron iniciadas el 2026-11-14 y se implementaron parcialmente hasta el 2026-11-18. No reabren las Fases 0–7.
 
 ## Resumen
 
