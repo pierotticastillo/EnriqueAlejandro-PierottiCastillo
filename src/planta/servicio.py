@@ -65,7 +65,7 @@ class ServicioParteVoz:
         self,
         settings: Settings,
         repositorio: Repositorio,
-        engine: Engine,
+        engine: Engine | None = None,
         almacenamiento: Almacenamiento,
         transcriptor: Transcriber,
         cliente: ClientePlanta,

@@ -83,7 +83,7 @@ class Checkpoint:
 class RepositorioCheckpoint:
     """Operaciones duraderas sobre checkpoint_ejecucion."""
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine | None = None) -> None:
         self._engine = engine
 
     def guardar(
