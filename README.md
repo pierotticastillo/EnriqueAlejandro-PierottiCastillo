@@ -89,6 +89,74 @@ leía diez veces mayor (3,0 kg/cm² en vez de 0,3), así que el filtro se
 **escalaba donde no había novedad**. Ya está corregido con su test; el detalle
 está en el [`INFORME.md`](INFORME.md), §14.
 
+## Arquitectura: workflow fijo y agente
+
+El Anexo de Entrega 2 pide un workflow explícito con el LLM usado en la
+entrega anterior. El sistema separa estrictamente lo que es **código
+determinista** (workflow fijo, nunca cambia) de lo que el **agente propone**
+(LLM, acotado y sin poder de decisión).
+
+```mermaid
+flowchart TD
+    %% Entrada
+    A[Nota de voz / Evento sensor / Cierre] --> B{Tipo de mensaje}
+    
+    %% Ruteo por tipo de mensaje
+    B -->|Seguridad| C[Alerta S1-S4<br/>Procedimiento MBP-4]
+    B -->|Parte| D[Extracción determinista<br/>FilaParte]
+    B -->|Sensor| E[Evento por equipo]
+    B -->|Respuesta tablet| F[Procesar respuesta]
+    B -->|Cierre| G[Transcripción + comparación vs orden]
+
+    %% Workflow fijo (código, nunca el LLM decide)
+    C --> H[Reglas de aprobación en código<br/>5 reglas + daño estructural]
+    D --> I[Análisis determinista<br/>Catálogo de fallas + causas]
+    E --> I
+    F --> I
+    G --> J[Comparar cierre vs orden<br/>Tareas, repuestos, horas]
+
+    %% Agente (LLM consulta y propone, no decide)
+    I --> K[Agente LangChain<br/>Consulta RAG + tools MCP<br/>Propone falla/causas/tareas con citas]
+    K --> L[Paso revisor<br/>Verifica citas vigentes + repuestos en lista]
+    
+    %% Reglas de aprobación
+    H --> M{¿Cumple las 5 reglas?}
+    L --> M
+    J --> M
+    
+    M -->|Sí| N[Aprobada]
+    M -->|No| O[Pendiente de aprobación]
+    
+    %% Central de mantenimiento (decisión humana)
+    O --> P[Central de mantenimiento<br/>Planificador / Supervisor / Inspector]
+    P -->|Aprobar| Q[Orden aprobada]
+    P -->|Rechazar| R[Orden rechazada]
+    P -->|Cerrar/Certificar/Observar| S[Decisión humana auditada]
+
+    %% Estilo
+    classDef fijo fill:#e1f5e1,stroke:#2e7d32,stroke-width:2px
+    classDef agente fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    classDef humano fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    
+    class C,D,E,F,G,H,I,J,M,Q,R,S fijo
+    class K,L agente
+    class P,O humano
+```
+
+**Workflow fijo (código determinista):** la detección S1-S4, las reglas de aprobación en código, el paso revisor de citas y repuestos, el checkpoint duradero en PostgreSQL, la propagación del correlation ID y la Central de mantenimiento.
+
+**Parte del agente (LLM acotado):** consulta los manuales por RAG, propone una falla con causas y citas, valida contra el catálogo. El agente **nunca** aprueba, rechaza ni cambia el estado de una orden.
+
+### Ruteo por tipo de mensaje
+
+| Tipo | Tópico | Qué hace el sistema |
+|---|---|---|
+| Seguridad | `planta/seguridad` | Alerta S1-S4, procedimiento MBP-4, aviso por radio canal 1 |
+| Parte | `planta/partes` | Extracción determinista, borrador en tablet, evento por equipo |
+| Sensor | `planta/sensores/#` | Un evento por equipo, detección sostenida de límites |
+| Respuesta tablet | `planta/respuestas` | Procesar correcciones, preguntas, confirmaciones |
+| Cierre | `planta/cierres` | Transcribir, comparar vs orden, dejar para decisión humana |
+
 ## Requisitos
 
 - Docker Engine + Docker Compose v2.
