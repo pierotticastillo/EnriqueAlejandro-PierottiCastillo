@@ -404,9 +404,37 @@ class ServicioParteVoz:
         correlation_id = crear_correlation_id()
         # Checkpoint inicial: la nota entró al sistema y se guardó. Desde aquí
         # se puede reanudar tras un reinicio sin repetir efectos (P1-15).
-        with self._engine.begin() as conexion:
+        if self._engine is not None:
+            with self._engine.begin() as conexion:
+                self._checkpoint.guardar(
+                    conexion,
+                    correlation_id=correlation_id,
+                    case_id=f"nota:{nota.id}",
+                    tipo_tarea="parte",
+                    paso_actual="parte_extraido",
+                    estado="en_curso",
+                    propietario="servicio_parte_voz",
+                    datos_confirmados={
+                        "nota_id": nota.id,
+                        "texto": texto,
+                        "seguridad": extraccion.seguridad,
+                    },
+                    acciones_hechas=[
+                        {
+                            "clave_idempotencia": f"nota:{nota.id}",
+                            "efecto": {
+                                "tipo": "nota_guardada",
+                                "nota_id": str(nota_id),
+                                "estado": "extraida",
+                            },
+                        }
+                    ],
+                    intentos=1,
+                    proxima_accion="enviar_borrador_o_pregunta",
+                    version=1,
+                )
+        else:
             self._checkpoint.guardar(
-                conexion,
                 correlation_id=correlation_id,
                 case_id=f"nota:{nota.id}",
                 tipo_tarea="parte",
