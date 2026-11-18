@@ -88,7 +88,7 @@ class RepositorioCheckpoint:
 
     def guardar(
         self,
-        conexion: Connection,
+        conexion: Connection | None = None,
         *,
         correlation_id: str,
         case_id: str,
@@ -101,14 +101,19 @@ class RepositorioCheckpoint:
         intentos: int = 0,
         proxima_accion: str | None = None,
         version: int = 1,
-    ) -> Checkpoint:
+    ) -> Checkpoint | None:
         """Inserta o actualiza el checkpoint dentro de la transacción activa.
 
         Si ya existe un registro para el correlation_id, se actualiza sólo
         cuando la versión coincide (control de concurrencia optimista). Si la
         versión no coincide, se lanza ``CheckpointObsoleto``: otro componente
         ya avanzó y este no debe competir.
+
+        Si ``conexion`` es ``None`` (modo sin base de datos), no hace nada y
+        devuelve ``None``.
         """
+        if conexion is None:
+            return None
         ahora = datetime.now(UTC)
         fila = conexion.execute(
             text(
@@ -273,9 +278,10 @@ class RepositorioCheckpoint:
 
         if conexion is not None:
             _ejecutar(conexion)
-        else:
+        elif self._engine is not None:
             with self._engine.begin() as conexion_nueva:
                 _ejecutar(conexion_nueva)
+        # Si no hay conexión ni engine, se ignora silenciosamente (modo sin base de datos)
 
     def avanzar(
         self,
