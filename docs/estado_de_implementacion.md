@@ -206,13 +206,13 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 | P0-04 — Autenticación y RBAC | **Implementado y verificado** | La Central exige un token Bearer opaco, uno por persona. Roles: `planificador`, `supervisor`, `inspector` y `lectura`. Sin credencial válida: 401; operación fuera del rol: 403. `usuario`/`rol` del cuerpo se ignoran; la identidad sale sólo del token. |
 | P0-05 — XSS y CSP | **Implementado y verificado** | `src/planta/central.py`: construcción DOM con `textContent`/`replaceChildren`, CSP con nonce por respuesta y cabeceras defensivas. Sigue integrado con P0-01/P0-04 y verificado por la suite completa. |
 | P0-06 — Corrida sobre el commit final | **Cerrado y verificado** | La corrida oficial final está anclada al commit `4eb00f54b5861c6c3c922aad060de266064012ef`, al corrector `ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic `0011`: **92,6/100 — APRUEBA**, 0 eliminatorias, 467 mensajes válidos y 0 inválidos en los siete escenarios. G2/G3 se verifican además con 77 pruebas autenticadas. El manifiesto incluye hashes, criterios, eliminatorias, mensajes inválidos, modelos, corpus/dataset, digest de cuatro imágenes, tokens, costo y latencia; está archivado en [`docs/evidencia_p0_06/`](evidencia_p0_06/README.md). Los digest usan bytes canónicos UTF-8/LF fijados por `.gitattributes` y se verifican contra los blobs publicados. |
-| P0-07 — Alcance y rúbrica oficiales | Pendiente de información externa | Se actualizará cuando el usuario comunique la información confirmada por la Academia. |
+| P0-07 — Alcance y rúbrica oficiales | **Cerrado** | Información disponible en `Plan_de_implementación/Enunciados/Academia _2026_Anexo_Entrega_2.pdf`: fecha 20/11/2026, módulos 3.1 a 3.4, escenarios tormenta-perfecta/sin-luz/contratista/fuga-sin-enlace, eliminación `aprobacion_indebida`, G2/G3 revisados a mano (inactivos en rúbrica). |
 
 ## Plan de implementación 2 — estado de brechas P1
 
 | ID | Estado actual | Evidencia o próximo paso |
 |----|---------------|--------------------------|
-| P1-01 — Suite agente vs baseline | Pendiente | Batería `docs/evals/agente_vs_baseline.json` definida (5 casos); benchmark no conectado aún al agente. |
+| P1-01 — Suite agente vs baseline | **Parcialmente implementada** | `docs/evals/agente_vs_baseline.json` definida (5 casos) y conectada en `scripts/evaluar_todo.py`. Batería `grounding` conectada y verificada (4/4 casos); `loops` conectada y verificada (3/3 casos). Falta conectar visión, red team y trayectoria completa. |
 | P1-02 — Trayectoria completa | Parcial | `registro_trayectoria` existe con modelo, tools, argumentos, tokens, costo, tiempo; falta ledger completo que conecte evidencia→análisis→propuesta→reglas→actor→estado. |
 | P1-03 — Outbox transaccional | Pendiente | No implementado todavía. |
 | P1-04 — Cola PUBACK | Pendiente | No implementado todavía. |
