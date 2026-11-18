@@ -161,12 +161,8 @@ def test_texto_asr_sin_puntuacion_y_con_digitos(planta: dict) -> None:
 
 def test_texto_asr_con_decimal_en_digitos(planta: dict) -> None:
     """El ASR también puede devolver el decimal con punto (``0.9``)."""
-    extraccion = ExtractorParte(planta).extraer(
-        "el filtro B medio 0.9 de diferencial"
-    )
-    assert _filas(extraccion) == [
-        ("F-201B", "presion_diferencial", 0.9, "kg/cm2", None)
-    ]
+    extraccion = ExtractorParte(planta).extraer("el filtro B medio 0.9 de diferencial")
+    assert _filas(extraccion) == [("F-201B", "presion_diferencial", 0.9, "kg/cm2", None)]
     assert extraccion.preguntas == []
 
 
@@ -177,20 +173,14 @@ def test_diferencial_con_el_cero_del_asr(planta: dict) -> None:
     catálogo (1,5), así que lo que se oyó fue 0,9.
     """
     extraccion = ExtractorParte(planta).extraer("El de la derecha me dio 09 de diferencial.")
-    assert _filas(extraccion) == [
-        ("F-201B", "presion_diferencial", 0.9, "kg/cm2", None)
-    ]
+    assert _filas(extraccion) == [("F-201B", "presion_diferencial", 0.9, "kg/cm2", None)]
     assert extraccion.preguntas == []
 
 
 def test_unidad_psi_partida_por_el_asr(planta: dict) -> None:
     """El ASR a veces separa las letras de la unidad: "1600 PS y de descarga"."""
-    extraccion = ExtractorParte(planta).extraer(
-        "la del medio está en 1600 PS y de descarga"
-    )
-    assert _filas(extraccion) == [
-        ("B-102", "presion_descarga_local", 1600.0, "psi", None)
-    ]
+    extraccion = ExtractorParte(planta).extraer("la del medio está en 1600 PS y de descarga")
+    assert _filas(extraccion) == [("B-102", "presion_descarga_local", 1600.0, "psi", None)]
 
 
 def test_reserva_escuchada_como_reservoir(planta: dict) -> None:
@@ -203,7 +193,7 @@ def test_reserva_escuchada_como_reservoir(planta: dict) -> None:
 
 
 def test_equipo_disparado_que_no_arranca(planta: dict) -> None:
-    """"La 1 está disparada, no arranca" es una falla, no una bomba parada.
+    """ "La 1 está disparada, no arranca" es una falla, no una bomba parada.
 
     La coma de la frase no separa dos ideas y "parada" está dentro de
     "disparada": sin cuidado, el equipo quedaba como una bomba parada (que no
@@ -222,14 +212,14 @@ def test_equipo_disparado_sin_coma(planta: dict) -> None:
 
 
 def test_equipo_parado_en_reserva_no_es_falla(planta: dict) -> None:
-    """"Parada, en reserva" se queda en una sola observación."""
+    """ "Parada, en reserva" se queda en una sola observación."""
     extraccion = ExtractorParte(planta).extraer("La 3 está parada, en reserva.")
     assert _filas(extraccion) == [("B-103", "estado", None, None, "parada, en reserva")]
     assert extraccion.preguntas == []
 
 
 def test_ruido_de_rodamiento_es_ruido_y_no_temperatura(planta: dict) -> None:
-    """"Un ruido raro de rodamiento" es un síntoma, no una temperatura.
+    """ "Un ruido raro de rodamiento" es un síntoma, no una temperatura.
 
     El "un" del enunciado no es un número: es un artículo. Con él, la frase
     caía en la variable del rodamiento y el síntoma se perdía (la fila queda
@@ -247,9 +237,7 @@ def test_ruido_de_rodamiento_es_ruido_y_no_temperatura(planta: dict) -> None:
 def test_filtro_sin_la_palabra_diferencial(planta: dict) -> None:
     """Si el filtro tiene una sola variable en el catálogo, esa es la que se oyó."""
     extraccion = ExtractorParte(planta).extraer("el filtro a medio 1,3 de")
-    assert _filas(extraccion) == [
-        ("F-201A", "presion_diferencial", 1.3, "kg/cm2", None)
-    ]
+    assert _filas(extraccion) == [("F-201A", "presion_diferencial", 1.3, "kg/cm2", None)]
     assert extraccion.preguntas == []
 
 
@@ -311,7 +299,7 @@ def test_fotos_se_asocian_a_la_fila_correcta(planta: dict) -> None:
 
 
 def test_la_foto_no_se_traga_la_medicion_de_la_misma_clausula(planta: dict) -> None:
-    """"Le saqué foto, el rodamiento me dio 52 grados" son dos cosas.
+    """ "Le saqué foto, el rodamiento me dio 52 grados" son dos cosas.
 
     La foto y la medición llegan en la misma cláusula (el ASR mete la coma
     entre las dos). Si la foto se come la cláusula entera, la temperatura del
@@ -349,7 +337,7 @@ def test_la_observacion_del_texto_no_se_recalcula_en_una_fila_sin_valor() -> Non
 
 
 def test_el_manometro_no_es_un_nivel(planta: dict) -> None:
-    """"Le saqué foto al manómetro" no es una altura del tanque.
+    """ "Le saqué foto al manómetro" no es una altura del tanque.
 
     "manómetro" contiene "metro": con la búsqueda por parte de palabra, la
     foto al manómetro se tomaba como una medición de nivel del tanque.
@@ -417,7 +405,7 @@ def test_el_sintoma_garblado_no_se_pierde(
 
 
 def test_las_correas_no_se_confunden_con_el_goteo(planta: dict) -> None:
-    """"Correas" y "chorrea" se parecen, pero son dos cosas distintas.
+    """ "Correas" y "chorrea" se parecen, pero son dos cosas distintas.
 
     La búsqueda aproximada por garblado no puede convertir una correa floja
     en un goteo por empaquetadura: si lo hace, se escala una bomba que no

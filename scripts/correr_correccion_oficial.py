@@ -266,8 +266,7 @@ def _capturar_metricas(database_url: str, destino: Path, escenario: str) -> None
             "modelo": "filas de registro_trayectoria con tipo=modelo",
             "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
             "costo": (
-                "valor registrado con la tarifa configurada; "
-                "la visión no tiene tarifa configurada"
+                "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada"
             ),
             "redaccion": (
                 "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
@@ -299,9 +298,7 @@ def _verificar_ancla(
     if not commit:
         raise RuntimeError(f"El checkout de la solución no es un repositorio Git: {repo}")
     if expected_commit and commit != expected_commit:
-        raise RuntimeError(
-            f"El checkout de la solución está en {commit}, no en {expected_commit}"
-        )
+        raise RuntimeError(f"El checkout de la solución está en {commit}, no en {expected_commit}")
     estado = _git(repo, "status", "--porcelain=v1", "--untracked-files=all")
     if (expected_commit or require_clean) and estado:
         raise RuntimeError(
@@ -323,22 +320,16 @@ def _verificar_ancla(
             correccion.parent, "status", "--porcelain=v1", "--untracked-files=all"
         )
         if correccion_estado:
-            raise RuntimeError(
-                "El repositorio de la Academia tiene cambios sin confirmar"
-            )
+            raise RuntimeError("El repositorio de la Academia tiene cambios sin confirmar")
 
     motor = create_engine(database_url, pool_pre_ping=True)
     try:
         with motor.connect() as conexion:
-            version = conexion.execute(
-                text("SELECT version_num FROM alembic_version")
-            ).scalar_one()
+            version = conexion.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
     finally:
         motor.dispose()
     if expected_alembic and version != expected_alembic:
-        raise RuntimeError(
-            f"La base está en Alembic {version}, no en {expected_alembic}"
-        )
+        raise RuntimeError(f"La base está en Alembic {version}, no en {expected_alembic}")
     return {
         "commit": commit,
         "arbol_limpio": not bool(estado),

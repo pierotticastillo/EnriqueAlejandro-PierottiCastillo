@@ -115,9 +115,10 @@ class RepositorioCheckpoint:
         if conexion is None:
             return None
         ahora = datetime.now(UTC)
-        fila = conexion.execute(
-            text(
-                """
+        fila = (
+            conexion.execute(
+                text(
+                    """
                 INSERT INTO checkpoint_ejecucion (
                     correlation_id, case_id, tipo_tarea, paso_actual, estado,
                     propietario, datos_confirmados, acciones_hechas, intentos,
@@ -144,23 +145,26 @@ class RepositorioCheckpoint:
                 WHERE checkpoint_ejecucion.version = :version_esperada
                 RETURNING id, version
                 """
-            ),
-            {
-                "correlation_id": correlation_id,
-                "case_id": case_id,
-                "tipo_tarea": tipo_tarea,
-                "paso_actual": paso_actual,
-                "estado": estado,
-                "propietario": propietario,
-                "datos_confirmados": _json(datos_confirmados or {}),
-                "acciones_hechas": _json(acciones_hechas or []),
-                "intentos": int(intentos),
-                "proxima_accion": proxima_accion,
-                "version": int(version),
-                "version_esperada": int(version) - 1,
-                "ahora": ahora,
-            },
-        ).mappings().first()
+                ),
+                {
+                    "correlation_id": correlation_id,
+                    "case_id": case_id,
+                    "tipo_tarea": tipo_tarea,
+                    "paso_actual": paso_actual,
+                    "estado": estado,
+                    "propietario": propietario,
+                    "datos_confirmados": _json(datos_confirmados or {}),
+                    "acciones_hechas": _json(acciones_hechas or []),
+                    "intentos": int(intentos),
+                    "proxima_accion": proxima_accion,
+                    "version": int(version),
+                    "version_esperada": int(version) - 1,
+                    "ahora": ahora,
+                },
+            )
+            .mappings()
+            .first()
+        )
         if fila is None:
             raise CheckpointObsoleto(
                 f"El checkpoint {correlation_id} ya fue avanzado por otro componente"
@@ -191,9 +195,10 @@ class RepositorioCheckpoint:
         """Carga el último checkpoint válido para una solicitud (y caso)."""
         if case_id is not None:
             fila = (
-                conexion.execute(
-                    text(
-                        """
+                (
+                    conexion.execute(
+                        text(
+                            """
                         SELECT id, correlation_id, case_id, tipo_tarea,
                                paso_actual, estado, propietario,
                                datos_confirmados, acciones_hechas, intentos,
@@ -203,15 +208,19 @@ class RepositorioCheckpoint:
                         ORDER BY version DESC, actualizada_en DESC
                         LIMIT 1
                         """
-                    ),
-                    {"cid": correlation_id, "case": case_id},
+                        ),
+                        {"cid": correlation_id, "case": case_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         else:
             fila = (
-                conexion.execute(
-                    text(
-                        """
+                (
+                    conexion.execute(
+                        text(
+                            """
                         SELECT id, correlation_id, case_id, tipo_tarea,
                                paso_actual, estado, propietario,
                                datos_confirmados, acciones_hechas, intentos,
@@ -221,10 +230,13 @@ class RepositorioCheckpoint:
                         ORDER BY version DESC, actualizada_en DESC
                         LIMIT 1
                         """
-                    ),
-                    {"cid": correlation_id},
+                        ),
+                        {"cid": correlation_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         if fila is None:
             return None
         return Checkpoint(
@@ -256,6 +268,7 @@ class RepositorioCheckpoint:
         Si se entrega una conexión, se usa dentro de esa transacción. Si no,
         se abre una transacción nueva.
         """
+
         def _ejecutar(con: Connection) -> None:
             con.execute(
                 text(
@@ -270,9 +283,7 @@ class RepositorioCheckpoint:
                 ),
                 {
                     "cid": correlation_id,
-                    "nuevo": _json(
-                        [{"clave_idempotencia": clave_idempotencia, "efecto": efecto}]
-                    ),
+                    "nuevo": _json([{"clave_idempotencia": clave_idempotencia, "efecto": efecto}]),
                 },
             )
 
@@ -304,9 +315,7 @@ class RepositorioCheckpoint:
         """
         existente = self.cargar_ultimo(conexion, correlation_id=correlation_id)
         if existente is None:
-            raise CheckpointNoEncontrado(
-                f"No hay checkpoint para reanudar: {correlation_id}"
-            )
+            raise CheckpointNoEncontrado(f"No hay checkpoint para reanudar: {correlation_id}")
         nueva_version = version if version is not None else existente.version + 1
         return self.guardar(
             conexion,

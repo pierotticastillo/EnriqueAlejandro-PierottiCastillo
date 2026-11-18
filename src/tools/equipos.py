@@ -47,9 +47,7 @@ def equipos(cliente: ClientePlanta, consulta: ConsultaEquipos) -> list[Equipo]:
                 modelo=_texto(item.get("modelo")),
                 nombres=[str(n) for n in item.get("nombres") or []],
                 caudal_nominal_m3d=_numero(item.get("caudal_nominal_m3d")),
-                manometro_local=ManometroLocal(
-                    unidad=_texto((manometro or {}).get("unidad"))
-                )
+                manometro_local=ManometroLocal(unidad=_texto((manometro or {}).get("unidad")))
                 if isinstance(manometro, dict)
                 else None,
                 rol_inicial=_texto(item.get("rol_inicial")),

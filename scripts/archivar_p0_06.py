@@ -269,9 +269,7 @@ def main() -> int:
     # nota ni el repositorio de la Academia. La corrida automática no ejecuta
     # decisiones humanas; las pruebas autenticadas de G2/G3 se archivan aparte.
     scorer = load_module("puntuar_p0_06", oficial / "correccion" / "puntuar.py")
-    rubrica = yaml.safe_load(
-        (oficial / "correccion" / "rubrica.yaml").read_text(encoding="utf-8")
-    )
+    rubrica = yaml.safe_load((oficial / "correccion" / "rubrica.yaml").read_text(encoding="utf-8"))
     g2_parametros = rubrica["bloques"]["G"]["criterios"]["G2"].get("parametros", {})
     g3_parametros = rubrica["bloques"]["G"]["criterios"]["G3"].get("parametros", {})
     g2_g3: dict[str, Any] = {
@@ -425,9 +423,7 @@ def main() -> int:
     pruebas_sin_base = (corrida / "pruebas-sin-base.txt").read_text(
         encoding="utf-8-sig", errors="replace"
     )
-    pruebas_g2_g3 = (corrida / "g2_g3.txt").read_text(
-        encoding="utf-8-sig", errors="replace"
-    )
+    pruebas_g2_g3 = (corrida / "g2_g3.txt").read_text(encoding="utf-8-sig", errors="replace")
     resumen_postgres = resumen_pytest(pruebas_postgres)
     resumen_sin_base = resumen_pytest(pruebas_sin_base)
     resumen_g2_g3 = resumen_pytest(pruebas_g2_g3)
@@ -511,9 +507,12 @@ def main() -> int:
         origen = corrida / nombre
         if not origen.exists():
             raise RuntimeError(f"Falta el artefacto de la corrida: {nombre}")
-        carpeta = "oficial" if nombre.endswith((".json", ".md")) and not nombre.startswith(
-            ("pruebas-", "g2_g3", "ruff", "migracion", "rag.")
-        ) else "verificaciones"
+        carpeta = (
+            "oficial"
+            if nombre.endswith((".json", ".md"))
+            and not nombre.startswith(("pruebas-", "g2_g3", "ruff", "migracion", "rag."))
+            else "verificaciones"
+        )
         destino = salida / carpeta / nombre
         copiar_canonico(origen, destino)
         artefactos_archivados.append(
@@ -614,17 +613,17 @@ def main() -> int:
 
 - Solución auditada: `{hash_solucion}`
 - Corrector oficial: `{hash_corrector}`
-- Escenarios oficiales: {len(nombres_escenarios)} ({', '.join(nombres_escenarios)})
-- Resultado oficial: **{resultado.get('nota')}/100 — {resultado_oficial}**
-- Eliminatorias: {len(resultado.get('eliminatorias') or {})}
+- Escenarios oficiales: {len(nombres_escenarios)} ({", ".join(nombres_escenarios)})
+- Resultado oficial: **{resultado.get("nota")}/100 — {resultado_oficial}**
+- Eliminatorias: {len(resultado.get("eliminatorias") or {})}
 - Mensajes inválidos: {len(mensajes_invalidos)}
 - Imágenes digeridas (SHA-256): {len(fotos)}
 
 ## Verificaciones del proyecto
 
-- PostgreSQL: `{resumen_postgres['linea']}`
-- Sin base: `{resumen_sin_base['linea']}`
-- G2/G3 autenticados: `{resumen_g2_g3['linea']}`
+- PostgreSQL: `{resumen_postgres["linea"]}`
+- Sin base: `{resumen_sin_base["linea"]}`
+- G2/G3 autenticados: `{resumen_g2_g3["linea"]}`
 - RAG en memoria (hit@5 / recall@5): {rag_memoria_hit5} / {rag_memoria_recall5}
 - RAG pgvector (hit@5 / recall@5): {rag_pgvector_hit5} / {rag_pgvector_recall5}
 
@@ -649,14 +648,20 @@ línea LF. La regla queda fijada en `.gitattributes`, de modo que cada digest
 del manifiesto puede reproducirse descargando el blob correspondiente de Git.
 """
     escribir_utf8_lf(salida / "README.md", evidencia_readme)
-    print(json.dumps({
-        "hash_solucion": manifest["p0_06"]["hash_solucion"],
-        "nota": manifest["resultado_oficial"]["nota"],
-        "aprueba": manifest["resultado_oficial"]["aprueba"],
-        "mensajes_invalidos": len(mensajes_invalidos),
-        "imagenes": len(fotos),
-        "salida": str(salida),
-    }, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {
+                "hash_solucion": manifest["p0_06"]["hash_solucion"],
+                "nota": manifest["resultado_oficial"]["nota"],
+                "aprueba": manifest["resultado_oficial"]["aprueba"],
+                "mensajes_invalidos": len(mensajes_invalidos),
+                "imagenes": len(fotos),
+                "salida": str(salida),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 

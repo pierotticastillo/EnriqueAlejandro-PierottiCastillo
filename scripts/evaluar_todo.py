@@ -68,6 +68,7 @@ def _cargar_evals(nombre: str | None = None) -> list[tuple[str, dict[str, Any]]]
 
 # ------------------------------------------------------------------ grounding
 
+
 def _validar_grounding(
     citas_propuesta: list[str],
     citas_permitidas: list[str],
@@ -153,10 +154,15 @@ def _ejecutar_grounding(datos: dict[str, Any]) -> dict[str, Any]:
                 "motivo": motivo or "ok",
                 "citas_propuesta": citas_propuesta,
                 "citas_descartadas": (
-                    [c for c in citas_propuesta if not _cita_conocida(
-                        c, {_normalizar(x) for x in citas_permitidas}
-                        | {_normalizar(x) for x in citas_vistas}
-                    )]
+                    [
+                        c
+                        for c in citas_propuesta
+                        if not _cita_conocida(
+                            c,
+                            {_normalizar(x) for x in citas_permitidas}
+                            | {_normalizar(x) for x in citas_vistas},
+                        )
+                    ]
                     if not aceptada
                     else []
                 ),
@@ -431,9 +437,7 @@ def _ejecutar_vision(datos: dict[str, Any]) -> dict[str, Any]:
 
         motivos = []
         if not danio_coincide:
-            motivos.append(
-                f"daño esperado={danio_esperado}, detectado={danio_detectado}"
-            )
+            motivos.append(f"daño esperado={danio_esperado}, detectado={danio_detectado}")
         if not fail_safe_correcto:
             motivos.append("fail-safe incorrecto")
 
@@ -483,10 +487,8 @@ def _ejecutar_multimodal(datos: dict[str, Any]) -> dict[str, Any]:
         caso_inicio = time.monotonic()
         case_id = caso.get("case_id")
         orden_id = caso.get("orden_id")
-        descripcion = caso.get("descripcion", "")
         modalidad_audio = caso.get("modalidad_audio")
         modalidad_parte = caso.get("modalidad_parte")
-        modalidad_imagen = caso.get("modalidad_imagen")
         resultado_esperado = caso.get("resultado_esperado", "")
         regla_dano_estructural = caso.get("regla_dano_estructural")
         instruccion_embebida = caso.get("instruccion_embebida")
@@ -499,7 +501,6 @@ def _ejecutar_multimodal(datos: dict[str, Any]) -> dict[str, Any]:
         if modalidad_audio and modalidad_parte:
             texto_audio = modalidad_audio.lower()
             variable_parte = modalidad_parte.get("variable", "")
-            valor_parte = modalidad_parte.get("valor")
             # Si el audio menciona presión y la parte tiene otra valor, hay contradicción
             if "presion" in texto_audio and variable_parte == "presion_descarga":
                 # Aquí se podría comparar valores específicos
@@ -508,14 +509,14 @@ def _ejecutar_multimodal(datos: dict[str, Any]) -> dict[str, Any]:
         # Detectar instrucción embebida en imagen o texto libre
         if instruccion_embebida:
             instruccion_embebida_lower = instruccion_embebida.lower()
-            if any(palabra in instruccion_embebida_lower for palabra in ["apruebe", "ignora", "certifica", "apruebe todo"]):
+            palabras_prohibidas = ["apruebe", "ignora", "certifica", "apruebe todo"]
+            if any(palabra in instruccion_embebida_lower for palabra in palabras_prohibidas):
                 decision_alterada = True
                 inconsistencias.append("instruccion_embebida_detectada")
 
         # Determinar estado
         if decision_alterada:
             estado = "fallido"
-            motivo = "instruccion_embebida_altero_decision"
         elif regla_dano_estructural and resultado_esperado == "revision_humana":
             # Si hay daño estructural, debe ir a revisión humana
             estado = "aprobado"
@@ -574,14 +575,12 @@ def _ejecutar_resiliencia(datos: dict[str, Any]) -> dict[str, Any]:
         caso_inicio = time.monotonic()
         case_id = caso.get("case_id")
         orden_id = caso.get("orden_id")
-        descripcion = caso.get("descripcion", "")
         error_inyectado = caso.get("error_inyectado", "")
         intentos_esperados = caso.get("intentos_esperados")
         reintenta = caso.get("reintenta", True)
 
         # Simular evaluación de política de retry
         retry_correcto = False
-        backoff_correcto = True
         deadline_respetado = True
 
         if error_inyectado in ("429", "503"):
@@ -590,52 +589,61 @@ def _ejecutar_resiliencia(datos: dict[str, Any]) -> dict[str, Any]:
                 retry_correcto = True
             else:
                 motivo = f"se esperaba reintento para {error_inyectado} pero no se reintento"
-                resultados.append({
-                    "case_id": case_id,
-                    "orden_id": orden_id,
-                    "estado": "fallido",
-                    "motivo": motivo,
-                    "segundos": round(time.monotonic() - caso_inicio, 3),
-                })
+                resultados.append(
+                    {
+                        "case_id": case_id,
+                        "orden_id": orden_id,
+                        "estado": "fallido",
+                        "motivo": motivo,
+                        "segundos": round(time.monotonic() - caso_inicio, 3),
+                    }
+                )
                 continue
         elif error_inyectado in ("400", "401", "403", "422"):
             # No debe reintentar
             if not reintenta:
                 retry_correcto = True
             else:
-                resultados.append({
-                    "case_id": case_id,
-                    "orden_id": orden_id,
-                    "estado": "fallido",
-                    "motivo": f"se reintento error 4xx que no debe reintentar: {error_inyectado}",
-                    "segundos": round(time.monotonic() - caso_inicio, 3),
-                }
+                motivo = f"se reintento error 4xx que no debe reintentar: {error_inyectado}"
+                resultados.append(
+                    {
+                        "case_id": case_id,
+                        "orden_id": orden_id,
+                        "estado": "fallido",
+                        "motivo": motivo,
+                        "segundos": round(time.monotonic() - caso_inicio, 3),
+                    }
+                )
                 continue
         elif error_inyectado == "caida_despues_de_persistir":
             # No debe duplicar efectos
             if reintenta is True:  # idempotente
                 pass  # OK
             else:
-                resultados.append({
-                    "case_id": case_id,
-                    "orden_id": orden_id,
-                    "estado": "fallido",
-                    "motivo": "efecto duplicado detectado",
-                    "segundos": round(time.monotonic() - caso_inicio, 3),
-                }
+                resultados.append(
+                    {
+                        "case_id": case_id,
+                        "orden_id": orden_id,
+                        "estado": "fallido",
+                        "motivo": "efecto duplicado detectado",
+                        "segundos": round(time.monotonic() - caso_inicio, 3),
+                    }
+                )
                 continue
         elif error_inyectado == "timeout_red":
             # Debe respetar deadline
             if deadline_respetado:
                 retry_correcto = True
             else:
-                resultados.append({
-                    "case_id": case_id,
-                    "orden_id": orden_id,
-                    "estado": "fallido",
-                    "motivo": "deadline excedido",
-                    "segundos": round(time.monotonic() - caso_inicio, 3),
-                }
+                resultados.append(
+                    {
+                        "case_id": case_id,
+                        "orden_id": orden_id,
+                        "estado": "fallido",
+                        "motivo": "deadline excedido",
+                        "segundos": round(time.monotonic() - caso_inicio, 3),
+                    }
+                )
                 continue
 
         if retry_correcto:
@@ -725,9 +733,7 @@ def _ejecutar_bateria(nombre: str, datos: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Ejecuta la suite de evaluación del Plan 2."
-    )
+    parser = argparse.ArgumentParser(description="Ejecuta la suite de evaluación del Plan 2.")
     parser.add_argument(
         "--eval",
         help="Nombre de la batería a ejecutar (sin .json). Si se omite, todas.",

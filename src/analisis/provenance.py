@@ -239,11 +239,7 @@ def _fotos_de_analisis(analisis: Any) -> list[dict[str, Any]]:
         hash_foto = getattr(item, "hash_sha256", None) if item is not None else None
         fotos.append(
             {
-                "id": (
-                    getattr(item, "foto_id", None)
-                    if item is not None
-                    else None
-                )
+                "id": (getattr(item, "foto_id", None) if item is not None else None)
                 or identificador_foto(url, ruta_local, hash_foto),
                 "url": str(url) if url else NO_DISPONIBLE,
                 "ruta_local": str(ruta_local) if ruta_local else NO_DISPONIBLE,
@@ -264,8 +260,7 @@ def _fotos_desde_evidencia_vision(evidencias: list[dict[str, Any]]) -> list[dict
         hash_foto = item.get("hash_sha256") or None
         fotos.append(
             {
-                "id": item.get("foto_id")
-                or identificador_foto(url, ruta_local, hash_foto),
+                "id": item.get("foto_id") or identificador_foto(url, ruta_local, hash_foto),
                 "url": str(url) if url else NO_DISPONIBLE,
                 "ruta_local": str(ruta_local) if ruta_local else NO_DISPONIBLE,
                 "hash_sha256": str(hash_foto) if hash_foto else NO_DISPONIBLE,
@@ -340,7 +335,4 @@ def _fragmento_legado(cita: str) -> dict[str, Any]:
 
 
 def _dato_o_no_disponible(datos: dict[str, Any]) -> dict[str, Any]:
-    return {
-        clave: valor if valor is not None else NO_DISPONIBLE
-        for clave, valor in datos.items()
-    }
+    return {clave: valor if valor is not None else NO_DISPONIBLE for clave, valor in datos.items()}

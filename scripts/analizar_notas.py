@@ -118,10 +118,7 @@ def _cerca(a: float | None, b: float | None, ua: str | None, ub: str | None) -> 
 
 def _esperados(nota: dict) -> dict[str, str]:
     """Tipo que el corrector espera para cada equipo de la nota."""
-    limites = {
-        (sensor["tag"], sensor["variable"]): sensor
-        for sensor in PLANTA["sensores"]
-    }
+    limites = {(sensor["tag"], sensor["variable"]): sensor for sensor in PLANTA["sensores"]}
     salida: dict[str, bool] = {}
     for item in nota.get("items", []):
         anomalo = False
@@ -250,10 +247,7 @@ def main() -> int:
             publicado = {evento.equipo: evento.tipo.value for evento in eventos}
             esperado = _esperados(nota)
             ok = all(publicado.get(tag) == tipo for tag, tipo in esperado.items())
-            print(
-                f"      B1: {'ok' if ok else 'MAL'}  esperado={esperado} "
-                f"publicado={publicado}"
-            )
+            print(f"      B1: {'ok' if ok else 'MAL'}  esperado={esperado} publicado={publicado}")
     return 0
 
 

@@ -102,11 +102,7 @@ class RepositorioFalso:
 
     def obtener_cierre_de_orden(self, orden_id: str) -> dict[str, Any] | None:
         return next(
-            (
-                cierre
-                for cierre in self.cierres.values()
-                if cierre["orden_id"] == orden_id
-            ),
+            (cierre for cierre in self.cierres.values() if cierre["orden_id"] == orden_id),
             None,
         )
 
@@ -207,9 +203,7 @@ def _fila_orden(
         "actualizada_en": datetime(2026, 11, 8, 12, 0, tzinfo=UTC),
         "tareas": tareas if tareas is not None else ["T-F-CAR"],
         "repuestos": (
-            repuestos
-            if repuestos is not None
-            else [{"codigo": "FC-CART-25", "cantidad": 48.0}]
+            repuestos if repuestos is not None else [{"codigo": "FC-CART-25", "cantidad": 48.0}]
         ),
     }
 
@@ -250,9 +244,7 @@ def _servicio(
 # ------------------------------------------------------------------- los tests
 
 
-def test_el_cierre_propio_deja_la_orden_esperando_al_supervisor(
-    catalogo, precios
-) -> None:
+def test_el_cierre_propio_deja_la_orden_esperando_al_supervisor(catalogo, precios) -> None:
     repositorio = RepositorioFalso(_fila_orden())
     cliente = ClienteFalso()
     servicio, _ = _servicio(repositorio, cliente, catalogo, precios)
@@ -296,9 +288,7 @@ def test_el_cierre_queda_escrito_con_sus_diferencias(catalogo, precios) -> None:
     assert "decision" not in registro
 
 
-def test_la_contratista_con_diferencias_queda_esperando_al_inspector(
-    catalogo, precios
-) -> None:
+def test_la_contratista_con_diferencias_queda_esperando_al_inspector(catalogo, precios) -> None:
     repositorio = RepositorioFalso(
         _fila_orden(tareas=["T-B-ROD"], repuestos=[], ejecutor="Servipat")
     )
@@ -318,9 +308,7 @@ def test_la_contratista_con_diferencias_queda_esperando_al_inspector(
     assert repositorio.registros[0]["diferencias"][0]["tipo"] == "repuesto_extra"
 
 
-def test_la_contratista_sin_diferencias_se_certifica_con_habilita_humano(
-    catalogo, precios
-) -> None:
+def test_la_contratista_sin_diferencias_se_certifica_con_habilita_humano(catalogo, precios) -> None:
     repositorio = RepositorioFalso(
         _fila_orden(tareas=["T-B-ROD"], repuestos=[], ejecutor="Servipat")
     )

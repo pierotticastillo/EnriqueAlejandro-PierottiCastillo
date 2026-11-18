@@ -298,8 +298,7 @@ def main() -> None:
                     if p["id"].startswith(f"ORD-PRUEBA-{marca}")
                 }
                 if len(estados) == len(plantillas) and all(
-                    estado in ("Cerrada", "Observada", "Certificada")
-                    for estado in estados.values()
+                    estado in ("Cerrada", "Observada", "Certificada") for estado in estados.values()
                 ):
                     break
                 time.sleep(2)

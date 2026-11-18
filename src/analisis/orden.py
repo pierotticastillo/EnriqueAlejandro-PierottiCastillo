@@ -125,9 +125,7 @@ def _reduce_inyeccion(
         return False
     if estado_bombas.get(equipo) != "marcha":
         return False
-    return not any(
-        tag != equipo and estado == "parada" for tag, estado in estado_bombas.items()
-    )
+    return not any(tag != equipo and estado == "parada" for tag, estado in estado_bombas.items())
 
 
 def _repuestos(

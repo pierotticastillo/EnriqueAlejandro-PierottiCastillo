@@ -203,9 +203,7 @@ def _repuestos(texto: str) -> tuple[RepuestoFicha, ...]:
         if cantidad is None or cantidad <= 0:
             # Sin número explícito el manual deja la cantidad a criterio.
             cantidad = 1.0
-        salida.append(
-            RepuestoFicha(codigo=codigo, cantidad=cantidad, texto=detalle or codigo)
-        )
+        salida.append(RepuestoFicha(codigo=codigo, cantidad=cantidad, texto=detalle or codigo))
     return tuple(salida)
 
 

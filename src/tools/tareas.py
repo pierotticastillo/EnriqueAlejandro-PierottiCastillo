@@ -31,7 +31,8 @@ def catalogo_tareas(
     if consulta.incluir_no_estandar:
         salida.extend(_tareas_no_estandar(corpus, procedimientos))
 
-    salida = [        tarea
+    salida = [
+        tarea
         for tarea in salida
         if (not consulta.codigo or tarea.codigo == consulta.codigo)
         and (not consulta.equipo or consulta.equipo in tarea.equipos)
@@ -121,9 +122,7 @@ def _repuestos(celda: str) -> list[RepuestoTarea]:
             continue
         if " x " in texto:
             codigo, cantidad = texto.rsplit(" x ", 1)
-            salida.append(
-                RepuestoTarea(codigo=codigo.strip(), cantidad=numero(cantidad) or 0.0)
-            )
+            salida.append(RepuestoTarea(codigo=codigo.strip(), cantidad=numero(cantidad) or 0.0))
         else:
             salida.append(RepuestoTarea(codigo=texto, cantidad=1.0))
     return salida

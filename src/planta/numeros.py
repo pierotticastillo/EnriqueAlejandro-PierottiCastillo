@@ -237,9 +237,7 @@ def parsear_numero(texto: str, *, articulos: bool = True) -> NumeroDicho | None:
                             decimal=True,
                             dijo=" ".join(tokens[i:fin]),
                         )
-            return NumeroDicho(
-                valor, decimal="," in compacto or "." in compacto, dijo=token
-            )
+            return NumeroDicho(valor, decimal="," in compacto or "." in compacto, dijo=token)
 
         # "cero nueve", "uno ocho", "uno dos": decimal dígito a dígito.
         if i + 1 < len(tokens) and token in DIGITOS and tokens[i + 1] in DIGITOS:

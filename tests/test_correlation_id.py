@@ -121,18 +121,22 @@ def test_correlation_id_propaga_a_ledger(engine):
 
     with engine.connect() as conexion:
         filas = (
-            conexion.execute(
-                text(
-                    """
+            (
+                conexion.execute(
+                    text(
+                        """
                     SELECT idempotencia, correlation_id
                     FROM ledger_decisiones
                     WHERE correlation_id = :cid
                     ORDER BY idempotencia
                     """
-                ),
-                {"cid": correlation_id},
+                    ),
+                    {"cid": correlation_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
 
     assert len(filas) == 2
     claves = {fila["idempotencia"] for fila in filas}
@@ -172,18 +176,22 @@ def test_evento_id_y_orden_id_identifican_caso_no_solicitud(engine):
 
     with engine.connect() as conexion:
         filas = (
-            conexion.execute(
-                text(
-                    """
+            (
+                conexion.execute(
+                    text(
+                        """
                     SELECT evento_id, orden_id
                     FROM ledger_decisiones
                     WHERE correlation_id = :cid
                     ORDER BY evento_id
                     """
-                ),
-                {"cid": correlation_id},
+                    ),
+                    {"cid": correlation_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
 
     assert len(filas) == 2
     assert filas[0]["evento_id"] == evento_a

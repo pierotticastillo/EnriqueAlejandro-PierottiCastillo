@@ -199,9 +199,7 @@ def _causa_de_inspeccion(
         falla="",
         causa=conclusion,
         evidencia=evidencia.descripciones,
-        falta_confirmar=(
-            "Revisar el equipo en campo antes de pedir la intervención."
-        ),
+        falta_confirmar=("Revisar el equipo en campo antes de pedir la intervención."),
         cita=cita,
         puntaje=round(puntaje, 4),
         es_inspeccion=True,

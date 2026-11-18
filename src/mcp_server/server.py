@@ -68,9 +68,7 @@ def _exponer(servidor: FastMCP, nombre: str, tool: Any, cliente: Any, corpus: An
         except ErrorHerramienta:
             raise
         except Exception as exc:  # noqa: BLE001 - la tool no debe tumbar el servidor
-            raise ErrorHerramienta(
-                f"La tool {nombre} falló: {exc}", herramienta=nombre
-            ) from exc
+            raise ErrorHerramienta(f"La tool {nombre} falló: {exc}", herramienta=nombre) from exc
 
     llamador = armar_llamador(entrada, _correr, tool.salida)
     llamador.__name__ = nombre
@@ -99,9 +97,7 @@ def main() -> None:
     )
     transporte = os.environ.get("MCP_TRANSPORTE", "stdio")
     servidor = crear_servidor()
-    logger.info(
-        "Servidor MCP PIA-3 con %d tools; transporte=%s", len(REGISTRO), transporte
-    )
+    logger.info("Servidor MCP PIA-3 con %d tools; transporte=%s", len(REGISTRO), transporte)
     if transporte == "streamable-http":
         servidor.run(transport="streamable-http")
     else:

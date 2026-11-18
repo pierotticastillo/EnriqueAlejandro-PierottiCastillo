@@ -121,7 +121,7 @@ class DetectorLoops:
         """Detecta repetición o ping-pong tras registrar una llamada."""
         # 1. Repetición: misma clave en las últimas N llamadas consecutivas.
         if len(self._llamadas) >= self._max_repeticiones:
-            claves_ultimas = [ll.clave for ll in self._llamadas[-self._max_repeticiones:]]
+            claves_ultimas = [ll.clave for ll in self._llamadas[-self._max_repeticiones :]]
             if all(clave == llamada.clave for clave in claves_ultimas):
                 return FirmaLoop(
                     tipo="repeticion",
@@ -263,4 +263,3 @@ __all__ = [
     "LoopDetectado",
     "CallbackDetectarLoops",
 ]
-

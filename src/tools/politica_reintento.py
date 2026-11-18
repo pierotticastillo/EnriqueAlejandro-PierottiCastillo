@@ -95,7 +95,7 @@ class PoliticaReintento:
         Backoff exponencial con jitter: ``base * 2^intento`` más un jitter
         aleatorio de hasta el 25% del valor, acotado al máximo configurado.
         """
-        base = self.espera_base_s * (2 ** intento)
+        base = self.espera_base_s * (2**intento)
         if self.jitter:
             base *= 1.0 + random.random() * 0.25
         return min(base, self.espera_maxima_s)

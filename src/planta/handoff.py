@@ -26,11 +26,11 @@ from typing import Any
 class EstadoHandoff(Enum):
     """Estados de vida de un handoff humano."""
 
-    PENDIENTE = "pendiente"      # Creado, esperando acuse del destinatario
-    ACEUSADO = "acusado"         # El destinatario recibió el caso
-    DECIDIDO = "decidido"        # El destinatario tomó una decisión
-    VENCIDO = "vencido"          # Se pasó el SLA sin decisión
-    ESCALADO = "escalado"        # Se escaló a otro actor por vencimiento
+    PENDIENTE = "pendiente"  # Creado, esperando acuse del destinatario
+    ACEUSADO = "acusado"  # El destinatario recibió el caso
+    DECIDIDO = "decidido"  # El destinatario tomó una decisión
+    VENCIDO = "vencido"  # Se pasó el SLA sin decisión
+    ESCALADO = "escalado"  # Se escaló a otro actor por vencimiento
 
 
 @dataclass(frozen=True)
@@ -117,9 +117,7 @@ class GestorHandoff:
         self._guardar = guardar_handoff or (lambda _payload: None)
         self._guardar_acuse = guardar_acuse or (lambda _acuse: None)
         self._guardar_decision = guardar_decision or (lambda _decision: None)
-        self._obtener_siguiente = (
-            obtener_actor_siguiente or (lambda _rol, _actor: None)
-        )
+        self._obtener_siguiente = obtener_actor_siguiente or (lambda _rol, _actor: None)
 
     # ------------------------------------------------------------------ creación
 
@@ -288,9 +286,8 @@ class GestorHandoff:
             actor_destinatario=siguiente["actor"],
             rol_destinatario=siguiente["rol"],
             creado_en=payload.creado_en,
-            vence_en=referencia + timedelta(
-                minutes=payload.vence_en.minute - payload.creado_en.minute
-            ),
+            vence_en=referencia
+            + timedelta(minutes=payload.vence_en.minute - payload.creado_en.minute),
             estado_entrega=EstadoHandoff.ESCALADO.value,
         )
         self._guardar(nuevo_payload)
@@ -313,10 +310,7 @@ class GestorHandoff:
         payload = self._obtener(handoff_id)
         if payload is None:
             return False
-        return (
-            payload.puede_decidir()
-            and not payload.esta_vencido(referencia)
-        )
+        return payload.puede_decidir() and not payload.esta_vencido(referencia)
 
 
 __all__ = [

@@ -18,8 +18,7 @@ NOTA_S1 = (
 NOTA_S2 = "Hay olor a gas fuerte del lado del portón, viene del lado del separador."
 NOTA_S3 = "Sale humo del motor de la dos, hay olor a quemado."
 NOTA_S4 = (
-    "Mi compañero se golpeó la mano con la llave en el skid de filtros, está "
-    "sangrando bastante."
+    "Mi compañero se golpeó la mano con la llave en el skid de filtros, está sangrando bastante."
 )
 
 

@@ -24,9 +24,7 @@ def historial_sensores(
         params["desde"] = consulta.desde.isoformat()
     if consulta.hasta:
         params["hasta"] = consulta.hasta.isoformat()
-    datos = cliente.get(
-        f"/api/historian/{consulta.tag}/{consulta.variable}", params=params or None
-    )
+    datos = cliente.get(f"/api/historian/{consulta.tag}/{consulta.variable}", params=params or None)
 
     muestras: list[MuestraSensor] = []
     valores: list[float] = []

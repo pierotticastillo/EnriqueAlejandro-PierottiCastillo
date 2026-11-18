@@ -236,9 +236,7 @@ def _menciona_aproximada(norm: str, cues: tuple[str, ...]) -> bool:
     for cue in cues:
         if " " in cue or len(cue) < 6:
             continue
-        maximo = (
-            _MAX_DISTANCIA if len(cue) >= _LONGITUD_LARGA else _MAX_DISTANCIA_CORTA
-        )
+        maximo = _MAX_DISTANCIA if len(cue) >= _LONGITUD_LARGA else _MAX_DISTANCIA_CORTA
         for token in tokens:
             if len(token) != len(cue):
                 continue
@@ -270,16 +268,12 @@ def _distancia(uno: str, otro: str) -> int:
                 anterior[j] + 1,
                 anterior[j - 1] + coste,
             )
-            if (
-                i > 1
-                and j > 1
-                and letra == otro[j - 2]
-                and uno[i - 2] == otra
-            ):
+            if i > 1 and j > 1 and letra == otro[j - 2] and uno[i - 2] == otra:
                 valor = min(valor, anterior[j - 2] + 1)
             actual.append(valor)
         anterior = actual
     return anterior[-1]
+
 
 # Observaciones que se derivan del VALOR de la fila y no de lo que dijo el
 # operador. Viven en una tabla para que la regla sea una sola: si el operador
@@ -554,9 +548,7 @@ class ExtractorParte:
         # frase se tomaba como una temperatura y el síntoma se perdía. Si la
         # misma frase trae la temperatura ("60 grados con la pistola"), la
         # temperatura es lo que se midió y manda ella.
-        if sintoma == "ruido" and not (
-            "grado" in norm or "pistola" in norm
-        ):
+        if sintoma == "ruido" and not ("grado" in norm or "pistola" in norm):
             return "ruido"
         if _menciona(norm, _CUE_RODAMIENTO) and (
             "grado" in norm or "pistola" in norm or numero is not None
@@ -576,9 +568,7 @@ class ExtractorParte:
             return "ruido"
         if _menciona(norm, _CUE_ESTADO):
             return "estado"
-        if _menciona(norm, _CUE_NIVEL) or (
-            self._tipo == "tanque" and numero is not None
-        ):
+        if _menciona(norm, _CUE_NIVEL) or (self._tipo == "tanque" and numero is not None):
             return "nivel"
 
         # Formas abreviadas: "la uno está en ciento quince", "el filtro me dio uno".
@@ -698,9 +688,7 @@ class ExtractorParte:
         observacion: str | None,
         fuente: str,
     ) -> Hallazgo | None:
-        if tag is None and (
-            self._pendiente is None or not self._pendiente_admite(variable)
-        ):
+        if tag is None and (self._pendiente is None or not self._pendiente_admite(variable)):
             return None
         for fila in self.filas:
             if fila.tag == tag and fila.variable == variable:

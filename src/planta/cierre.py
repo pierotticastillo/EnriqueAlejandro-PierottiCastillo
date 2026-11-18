@@ -258,8 +258,7 @@ class ServicioCierre:
                 return {
                     "ok": False,
                     "error": (
-                        "El inspector sólo puede certificar u observar "
-                        "trabajo de contratista"
+                        "El inspector sólo puede certificar u observar trabajo de contratista"
                     ),
                     "codigo": 403,
                 }
@@ -287,11 +286,7 @@ class ServicioCierre:
                 monto, detalle = monto_de_la_orden(
                     orden,
                     self._precios,
-                    horas=(
-                        float(cierre["horas"])
-                        if cierre.get("horas") is not None
-                        else None
-                    ),
+                    horas=(float(cierre["horas"]) if cierre.get("horas") is not None else None),
                 )
             except MontoContractualInvalido as exc:
                 return {

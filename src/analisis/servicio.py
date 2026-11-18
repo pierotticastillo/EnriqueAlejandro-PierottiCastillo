@@ -229,8 +229,7 @@ class ServicioAnalisis:
         if evidencia_vision:
             borrador = replace(
                 borrador,
-                evidencia=borrador.evidencia
-                + tuple(item.texto for item in evidencia_vision),
+                evidencia=borrador.evidencia + tuple(item.texto for item in evidencia_vision),
             )
         evaluacion = evaluar(
             borrador,
@@ -285,11 +284,7 @@ class ServicioAnalisis:
     def orden_sistema(self, analisis: Analisis) -> OrdenSistema:
         """El borrador, en el formato que viaja por MQTT."""
         borrador = analisis.borrador
-        estado = (
-            EstadoOrden.aprobada
-            if analisis.evaluacion.cumple
-            else EstadoOrden.pendiente
-        )
+        estado = EstadoOrden.aprobada if analisis.evaluacion.cumple else EstadoOrden.pendiente
         return OrdenSistema(
             id=borrador.id,
             ts=analisis.ts or datetime.now().astimezone(),
@@ -698,10 +693,7 @@ def _motivo_revision_vision(evidencia: tuple[EvidenciaVision, ...]) -> str | Non
     if not evidencia:
         return None
     if any(item.danio_estructural is True for item in evidencia):
-        return (
-            "la evidencia fotográfica muestra daño estructural: "
-            "la orden no se aprueba sola"
-        )
+        return "la evidencia fotográfica muestra daño estructural: la orden no se aprueba sola"
     if any(item.estado != "ok" for item in evidencia):
         return (
             "no se pudo descartar daño estructural en la evidencia fotográfica: "

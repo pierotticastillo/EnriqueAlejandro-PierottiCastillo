@@ -77,8 +77,7 @@ class ContextoAnalisis(ModeloContexto):
         if self.tendencia:
             lineas.append("Tendencia:")
             lineas.extend(
-                f"- {sensor.tag}/{sensor.variable}: {sensor.tendencia}"
-                for sensor in self.tendencia
+                f"- {sensor.tag}/{sensor.variable}: {sensor.tendencia}" for sensor in self.tendencia
             )
         if self.fragmentos:
             lineas.append("Manual:")
@@ -104,9 +103,7 @@ def construir_contexto(
     max_caracteres: int = 6000,
 ) -> ContextoAnalisis:
     """Arma el contexto de un escalado con fragmentos citables."""
-    fragmentos = recuperador.buscar(
-        ConsultaManuales(consulta=consulta, top_k=max_fragmentos)
-    )
+    fragmentos = recuperador.buscar(ConsultaManuales(consulta=consulta, top_k=max_fragmentos))
     seleccionados: list[FragmentoManual] = []
     citas_vistas: set[str] = set()
     caracteres = 0

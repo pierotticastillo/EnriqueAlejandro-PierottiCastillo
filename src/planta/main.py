@@ -139,9 +139,7 @@ def _cargar_recuperador(
 
         prioridad = _bajar_prioridad_cpu()
         logger.info("Indexando el manual en segundo plano (prioridad CPU %s)", prioridad)
-        recuperador.definir(
-            crear_recuperador(cliente, settings=settings, engine=engine)
-        )
+        recuperador.definir(crear_recuperador(cliente, settings=settings, engine=engine))
         logger.info("Recuperador del manual listo")
     except Exception:  # noqa: BLE001 - el RAG no puede impedir el arranque
         logger.warning("No se pudo preparar el índice del manual", exc_info=True)
@@ -226,8 +224,7 @@ def _verificar_lista_cerrada(settings: Settings) -> None:
         "Modelos en uso (lista cerrada de %s modelos):\n%s",
         len(LISTA_CERRADA),
         "\n".join(
-            f"  {modelo.clave}: {modelo.nombre} ({modelo.motor})"
-            for modelo in LISTA_CERRADA
+            f"  {modelo.clave}: {modelo.nombre} ({modelo.motor})" for modelo in LISTA_CERRADA
         ),
     )
 
@@ -281,9 +278,7 @@ def main() -> None:
     # habilita sale de la orden y de esta lista, nunca de lo que declara el
     # cierre de la contratista (§3.2).
     try:
-        precios = ListaPrecios(
-            precios_contrato(cliente_api, corpus=CorpusManuales(cliente_api))
-        )
+        precios = ListaPrecios(precios_contrato(cliente_api, corpus=CorpusManuales(cliente_api)))
     except Exception:  # noqa: BLE001 - sin precios no se certifica, pero la planta sigue
         logger.exception("No se pudo cargar la lista de precios del contrato")
         precios = ListaPrecios()
@@ -486,9 +481,7 @@ def main() -> None:
 
     autenticador = AutenticadorToken(settings.central_credenciales)
     if not autenticador.habilitado:
-        logger.warning(
-            "La Central no tiene credenciales configuradas: sus APIs responderán 401"
-        )
+        logger.warning("La Central no tiene credenciales configuradas: sus APIs responderán 401")
     central = Central(
         repositorio,
         publicar_orden=_publicar_orden_decidida,

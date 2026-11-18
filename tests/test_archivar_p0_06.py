@@ -14,11 +14,7 @@ from scripts.archivar_p0_06 import (
 
 
 def test_el_resumen_de_pytest_se_deriva_de_la_salida_real() -> None:
-    resumen = resumen_pytest(
-        "commit=abc\n"
-        "....\n"
-        "77 passed, 1 skipped in 11.54s\n"
-    )
+    resumen = resumen_pytest("commit=abc\n....\n77 passed, 1 skipped in 11.54s\n")
 
     assert resumen["linea"] == "77 passed, 1 skipped in 11.54s"
     assert resumen["conteos"] == {"passed": 77, "skipped": 1}

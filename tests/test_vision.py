@@ -256,9 +256,7 @@ def test_el_modelo_retirado_no_hay_cliente() -> None:
 
 def test_el_esquema_rechaza_campos_de_mas() -> None:
     with pytest.raises(ValidationError):
-        SalidaVision.model_validate(
-            {"danio_estructural": True, "descripcion": "x", "extra": 1}
-        )
+        SalidaVision.model_validate({"danio_estructural": True, "descripcion": "x", "extra": 1})
 
 
 def test_el_esquema_exige_la_descripcion() -> None:

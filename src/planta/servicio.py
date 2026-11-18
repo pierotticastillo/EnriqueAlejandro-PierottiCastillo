@@ -462,13 +462,20 @@ class ServicioParteVoz:
             )
         if extraccion.seguridad:
             self._publicar_alerta_seguridad(
-                nota_id, nota, extraccion, texto, fotos_locales,
+                nota_id,
+                nota,
+                extraccion,
+                texto,
+                fotos_locales,
                 correlation_id=correlation_id,
             )
             self._cerrar_presupuesto(nota.id)
             return
         self._iniciar_conversacion(
-            nota_id, nota, extraccion, fotos_locales,
+            nota_id,
+            nota,
+            extraccion,
+            fotos_locales,
             correlation_id=correlation_id,
         )
         self._cerrar_presupuesto(nota.id)
@@ -518,9 +525,7 @@ class ServicioParteVoz:
             ts=nota.ts,
             equipo=equipo,
         )
-        evento_id = self._repo.registrar_alerta_seguridad(
-            nota_id, nota.id, tipo, evidencia
-        )
+        evento_id = self._repo.registrar_alerta_seguridad(nota_id, nota.id, tipo, evidencia)
         evento_seguridad = EventoSistema(
             id=evento_id,
             ts=nota.ts,
@@ -534,9 +539,7 @@ class ServicioParteVoz:
                 f"{evidencia_texto[:240]}. Procedimiento: {proc.que_hacer}"
             ),
         )
-        self._cliente.publicar_evento(
-            evento_seguridad
-        )
+        self._cliente.publicar_evento(evento_seguridad)
         # La evidencia fotográfica se evalúa una sola vez. Su resultado no
         # aprueba la orden: sólo puede activar el gate de revisión humana y
         # deja una descripción para quien recibe el aviso.
@@ -718,7 +721,9 @@ class ServicioParteVoz:
         correlation_id: str | None = None,
     ) -> None:
         datos = _datos_base(
-            nota, extraccion.preguntas, fotos_locales,
+            nota,
+            extraccion.preguntas,
+            fotos_locales,
             correlation_id=correlation_id,
         )
         if extraccion.preguntas:
@@ -886,9 +891,7 @@ class ServicioParteVoz:
                     tendencia=tendencia,
                 )
             try:
-                self._repo.registrar_evento(
-                    evento, nota_id=nota_id, correlation_id=correlation_id
-                )
+                self._repo.registrar_evento(evento, nota_id=nota_id, correlation_id=correlation_id)
             except TypeError:
                 # RepositorioFalso en tests no acepta correlation_id; se ignora
                 self._repo.registrar_evento(evento, nota_id=nota_id)
@@ -956,9 +959,7 @@ class ServicioParteVoz:
             else:
                 # La evidencia es lo que motivó el escalado: las filas
                 # anómalas del parte de ese equipo.
-                anomalas = filas_anomalas(
-                    filas or [], self._planta, evento.equipo or ""
-                )
+                anomalas = filas_anomalas(filas or [], self._planta, evento.equipo or "")
                 analisis = self._analisis.analizar_evento(
                     evento,
                     filas=anomalas,

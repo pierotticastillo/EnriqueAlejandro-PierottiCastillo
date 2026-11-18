@@ -104,13 +104,9 @@ class ClientePlanta:
                 f"No se pudo consultar la planta (HTTP {status})", url=url
             ) from exc
         except (httpx.TransportError, httpx.TimeoutException) as exc:
-            raise ErrorHerramienta(
-                f"No se pudo consultar la planta: {exc}", url=url
-            ) from exc
+            raise ErrorHerramienta(f"No se pudo consultar la planta: {exc}", url=url) from exc
         except (TimeoutError, RuntimeError) as exc:
-            raise ErrorHerramienta(
-                f"No se pudo consultar la planta: {exc}", url=url
-            ) from exc
+            raise ErrorHerramienta(f"No se pudo consultar la planta: {exc}", url=url) from exc
         except ValueError as exc:
             raise ErrorHerramienta(
                 "La planta devolvió una respuesta que no es JSON", url=url

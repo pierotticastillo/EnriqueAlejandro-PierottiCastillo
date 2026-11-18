@@ -76,8 +76,7 @@ def evaluar(
 
     metricas = [metrica for metrica in filas[0] if "@" in metrica or metrica == "mrr"]
     total = {
-        metrica: round(sum(fila[metrica] for fila in filas) / len(filas), 3)
-        for metrica in metricas
+        metrica: round(sum(fila[metrica] for fila in filas) / len(filas), 3) for metrica in metricas
     }
     por_tipo: dict[str, dict[str, Any]] = {}
     for tipo in sorted({fila["tipo"] for fila in filas}):

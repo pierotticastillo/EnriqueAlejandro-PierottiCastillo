@@ -405,11 +405,14 @@ def test_la_consulta_se_corta_si_el_plazo_ya_se_paso() -> None:
     presupuesto = Presupuesto(max_pasos=6, max_tokens=12000, timeout_s=0.01)
     _tiempo.sleep(0.02)
     agente = _agente()
-    assert agente.consultar(
-        "probá",
-        permitidas=("TX350-D §8.3",),
-        presupuesto=presupuesto,
-    ) is None
+    assert (
+        agente.consultar(
+            "probá",
+            permitidas=("TX350-D §8.3",),
+            presupuesto=presupuesto,
+        )
+        is None
+    )
     assert presupuesto.corte is not None
     assert "timeout global" in presupuesto.corte
 
@@ -567,9 +570,7 @@ def test_el_reintento_deja_la_consulta_standing(monkeypatch) -> None:
     def _generate(self: Any, *args: Any, **kwargs: Any) -> Any:
         llamadas.append(1)
         if len(llamadas) == 1:
-            raise httpx.RemoteProtocolError(
-                "Server disconnected without sending a response."
-            )
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
         return respuesta
 
     monkeypatch.setattr(ChatOllama, "_generate", _generate)
@@ -704,9 +705,7 @@ def test_el_agente_recoge_las_citas_de_las_herramientas() -> None:
 
     mensajes = [
         ToolMessage(
-            content=json.dumps(
-                [{"documento": "TX350-D", "cita": "TX350-D §8.3", "texto": "..."}]
-            ),
+            content=json.dumps([{"documento": "TX350-D", "cita": "TX350-D §8.3", "texto": "..."}]),
             tool_call_id="llamada-1",
         ),
         ToolMessage(content="[]", tool_call_id="llamada-2"),

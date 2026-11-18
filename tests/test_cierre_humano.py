@@ -126,11 +126,7 @@ class RepositorioFalso:
 
     def obtener_cierre_de_orden(self, orden_id: str) -> dict[str, Any] | None:
         return next(
-            (
-                cierre
-                for cierre in self.cierres.values()
-                if cierre["orden_id"] == orden_id
-            ),
+            (cierre for cierre in self.cierres.values() if cierre["orden_id"] == orden_id),
             None,
         )
 

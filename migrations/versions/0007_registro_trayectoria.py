@@ -48,8 +48,7 @@ DDL_UP: list[str] = [
     "CREATE INDEX IF NOT EXISTS ix_registro_trayectoria_orden "
     "ON registro_trayectoria(orden_id, ts)",
     # Y por etapa, para ver el gasto de un tipo de paso.
-    "CREATE INDEX IF NOT EXISTS ix_registro_trayectoria_etapa "
-    "ON registro_trayectoria(etapa, ts)",
+    "CREATE INDEX IF NOT EXISTS ix_registro_trayectoria_etapa ON registro_trayectoria(etapa, ts)",
 ]
 
 

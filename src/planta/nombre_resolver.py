@@ -170,8 +170,7 @@ def _alias_ordenados(alias: dict[str, str]) -> list[tuple[str, str]]:
     El más largo primero: "la del medio" tiene que ganarle a "la dos".
     """
     return [
-        (f"a{indice}", nombre)
-        for indice, nombre in enumerate(sorted(alias, key=len, reverse=True))
+        (f"a{indice}", nombre) for indice, nombre in enumerate(sorted(alias, key=len, reverse=True))
     ]
 
 

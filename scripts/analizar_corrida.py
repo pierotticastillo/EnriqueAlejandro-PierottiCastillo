@@ -1,6 +1,6 @@
 """Analiza una corrida de corrección: verdad de campo vs. eventos publicados.
 
-    python scripts/analizar_corrida.py <carpeta de corrida> [escenario]
+python scripts/analizar_corrida.py <carpeta de corrida> [escenario]
 """
 
 from __future__ import annotations

@@ -225,4 +225,3 @@ def test_la_nota_sin_presupuesto_no_se_corta() -> None:
         servicio._cortar_si_se_paso_el_plazo("NOTA-NO-EXISTE", "transcripcion")  # noqa: SLF001
         is False
     )
-

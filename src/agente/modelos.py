@@ -62,9 +62,7 @@ class PropuestaAgente(BaseModel):
     tareas: list[str] = Field(
         default_factory=list,
         max_length=MAX_ITEMS,
-        description=(
-            "Un código de tarea del plan por elemento (por ejemplo 'T-B-EMP')."
-        ),
+        description=("Un código de tarea del plan por elemento (por ejemplo 'T-B-EMP')."),
     )
     justificacion: str = Field(
         min_length=1,

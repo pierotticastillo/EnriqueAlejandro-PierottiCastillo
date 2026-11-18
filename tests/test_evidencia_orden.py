@@ -117,13 +117,15 @@ def _analisis(con_datos: bool = True) -> SimpleNamespace:
         else ()
     )
     fragmentos = (
-        (FragmentoManual(
-            documento="MBP-4",
-            seccion="13.2",
-            cita="MBP-4 §13.2",
-            titulo="Inspección",
-            texto="Si la falla no puede identificarse, inspeccionar el equipo.",
-        ),)
+        (
+            FragmentoManual(
+                documento="MBP-4",
+                seccion="13.2",
+                cita="MBP-4 §13.2",
+                titulo="Inspección",
+                texto="Si la falla no puede identificarse, inspeccionar el equipo.",
+            ),
+        )
         if con_datos
         else ()
     )

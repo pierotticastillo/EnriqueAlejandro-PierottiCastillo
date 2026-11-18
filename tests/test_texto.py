@@ -31,15 +31,13 @@ def test_el_asr_que_reserva_no_es_un_ordinal() -> None:
 
 
 def test_la_frase_unida_no_se_come_la_clausula_siguiente() -> None:
-    """"Parada, en reserva" es una idea completa: no absorbe la de al lado.
+    """ "Parada, en reserva" es una idea completa: no absorbe la de al lado.
 
     Si la comiera, el equipo de la medición siguiente ("la dos está en 1630
     de descarga") quedaba escondido detrás del equipo anterior y la
     medición se publicaba en el equipo equivocado.
     """
-    partes = clausulas(
-        "La del fondo está parada, en reserva, la dos está en 1630 de descarga"
-    )
+    partes = clausulas("La del fondo está parada, en reserva, la dos está en 1630 de descarga")
     assert partes == [
         "La del fondo está parada, en reserva",
         "la dos está en 1630 de descarga",

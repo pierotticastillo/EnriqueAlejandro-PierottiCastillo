@@ -72,9 +72,7 @@ def test_disparo_es_inmediato_y_muestra_repetida_no_cuenta_dos_veces() -> None:
 def test_muestra_sin_dato_no_dispara_ni_suma_racha() -> None:
     detector = DetectorSensores(_planta())
     assert detector.evaluar(_lectura("presion_descarga", 130, 1)) is None
-    assert detector.evaluar(
-        _lectura("presion_descarga", None, 2, calidad=Calidad.sin_dato)
-    ) is None
+    assert detector.evaluar(_lectura("presion_descarga", None, 2, calidad=Calidad.sin_dato)) is None
     assert detector.evaluar(_lectura("presion_descarga", 130, 3)) is None
     assert detector.evaluar(_lectura("presion_descarga", 130, 4)) is None
     assert detector.evaluar(_lectura("presion_descarga", 130, 5)) is not None

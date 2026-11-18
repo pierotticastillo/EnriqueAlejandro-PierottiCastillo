@@ -350,9 +350,7 @@ def test_el_cierre_y_la_certificacion_tienen_manifiesto_y_ledger(
         assert decision["contenido"]["decision"]["actor"] == "marta"
         assert decision["contenido"]["decision"]["rol"] == "inspector"
         assert decision["contenido"]["certificacion"]["estado"] == "certificada"
-        assert decision["contenido"]["certificacion"]["habilita"]["numero"].startswith(
-            "HAB-2026-"
-        )
+        assert decision["contenido"]["certificacion"]["habilita"]["numero"].startswith("HAB-2026-")
 
         ledger = repositorio.obtener_ledger_de_orden(orden.id)
         cierre_ledger = next(entrada for entrada in ledger if entrada["tipo"] == "cierre")

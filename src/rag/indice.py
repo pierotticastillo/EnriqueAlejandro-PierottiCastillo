@@ -189,9 +189,7 @@ class IndiceRag:
         combinados: dict[int, float] = {}
         for indice in candidatos:
             lexico = lexicos[indice] / maximo_lexico if maximo_lexico > 0 else 0.0
-            denso = (
-                (densos[indice] - minimo_denso) / rango_denso if rango_denso > 0 else 0.0
-            )
+            denso = (densos[indice] - minimo_denso) / rango_denso if rango_denso > 0 else 0.0
             combinados[indice] = peso * lexico + (1.0 - peso) * denso
         candidatos.sort(key=lambda indice: (-combinados[indice], self._chunks[indice].cita))
         resultado: list[FragmentoManual] = []
@@ -265,9 +263,7 @@ class IndiceRag:
         return [
             sum(
                 componente * consulta_componente
-                for componente, consulta_componente in zip(
-                    embedding, vector, strict=False
-                )
+                for componente, consulta_componente in zip(embedding, vector, strict=False)
             )
             for embedding in self._embeddings
         ]

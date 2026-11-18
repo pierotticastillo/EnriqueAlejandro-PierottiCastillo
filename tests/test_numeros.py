@@ -55,7 +55,7 @@ def test_parsear_numero(texto: str, valor: float, decimal: bool) -> None:
 
 
 def test_los_millares_no_se_confunden_con_un_decimal() -> None:
-    """"1.600 de descarga" son mil seiscientos psi, no 1,6."""
+    """ "1.600 de descarga" son mil seiscientos psi, no 1,6."""
     numero = parsear_numero("lados está en 1.600 de descarga")
     assert numero is not None
     assert numero.valor == pytest.approx(1600)
@@ -118,10 +118,11 @@ def test_el_un_es_numero_cuando_el_contexto_lo_pide() -> None:
 
 
 def test_la_cantidad_de_un_repuesto_se_lee_sin_la_regla_del_articulo() -> None:
-    """"Usé un kit de empaquetadura" es **un** kit: ahí el "un" es la cantidad."""
+    """ "Usé un kit de empaquetadura" es **un** kit: ahí el "un" es la cantidad."""
     numero = parsear_numero("use un kit de empaquetadura", articulos=False)
     assert numero is not None
     assert numero.valor == pytest.approx(1)
+
 
 def test_el_ceo_del_asr_se_lee_como_cero() -> None:
     """El ASR escribe "cero" como "ceo" y el decimal se perdía.

@@ -45,9 +45,7 @@ class IndexadorRag:
         reemplazar: bool = True,
     ) -> ResumenIndexacion:
         chunks = [chunk for documento in documentos for chunk in documento.chunks]
-        textos = [
-            f"{chunk.titulo or ''}\n{chunk.texto}".strip() for chunk in chunks
-        ]
+        textos = [f"{chunk.titulo or ''}\n{chunk.texto}".strip() for chunk in chunks]
         vectores = self._embedder.embed(textos) if textos else []
         if len(vectores) != len(chunks):
             raise ValueError("El embedder devolvió una cantidad de vectores distinta")

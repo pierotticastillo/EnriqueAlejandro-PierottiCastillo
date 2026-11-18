@@ -198,9 +198,7 @@ def test_la_nota_no_puede_corregirse_para_siempre(planta: dict) -> None:
         for _ in range(settings.parte_max_correcciones):
             antes = len(cliente.tablets)
             servicio.encolar_respuesta(_respuesta(cliente.tablets[-1].id))
-            assert _esperar(lambda n=antes: len(cliente.tablets) > n), (
-                "no llegó el borrador nuevo"
-            )
+            assert _esperar(lambda n=antes: len(cliente.tablets) > n), "no llegó el borrador nuevo"
 
         # La respuesta que supera el tope no genera otro borrador: la nota
         # queda para revisión humana.
