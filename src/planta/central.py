@@ -27,11 +27,13 @@ import json
 import logging
 import secrets
 import threading
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import unquote, urlparse
 
 from db.repositorio import ConflictoEstado
+from planta.handoff import GestorHandoff
 from planta.identidad import Actor, AutenticadorToken
 
 logger = logging.getLogger("planta.central")
@@ -89,6 +91,7 @@ class Central:
         autenticador: AutenticadorToken | None = None,
         host: str = "127.0.0.1",
         puerto: int = PUERTO_DEFECTO,
+        gestor_handoff: GestorHandoff | None = None,
     ) -> None:
         self._repositorio = repositorio
         self._publicar_orden = publicar_orden
@@ -99,6 +102,8 @@ class Central:
         self._puerto = puerto
         self._servidor: ThreadingHTTPServer | None = None
         self._hilo: threading.Thread | None = None
+        self._gestor_handoff = gestor_handoff or GestorHandoff()
+        self._handoffs: dict[str, Any] = {}  # orden_id -> handoff (en memoria)
 
     # ------------------------------------------------------------------ ciclo
 
@@ -202,7 +207,62 @@ class Central:
             }
         self._registrar(orden_id, fila, estado, motivo, actor)
         self._publicar(fila, estado)
+
+        # Registrar acuse y decisión en el handoff (P1-20)
+        if self._gestor_handoff is not None:
+            try:
+                ahora = datetime.now(UTC)
+                self._gestor_handoff.registrar_acuse(
+                    handoff_id=orden_id,
+                    recibido_por=actor.usuario,
+                    rol=actor.rol,
+                    observaciones=motivo,
+                    recibido_en=ahora,
+                )
+                self._gestor_handoff.decidir(
+                    handoff_id=orden_id,
+                    decision=decision.strip().lower(),
+                    actor=actor.usuario,
+                    rol=actor.rol,
+                    motivo=motivo,
+                    decidido_en=ahora,
+                )
+            except Exception:  # noqa: BLE001 - el handoff no puede tumbar la decisión
+                logger.exception("No se pudo actualizar el handoff de la orden %s", orden_id)
+
         return {"ok": True, "orden": fila}
+
+    def crear_handoff_para_orden(
+        self,
+        *,
+        orden_id: str,
+        correlation_id: str,
+        evento_id: str | None = None,
+        sla_minutos: int = 60,
+        creado_en: datetime | None = None,
+    ) -> Any:
+        """Crea un handoff para que el planificador apruebe o rechace la orden."""
+        if self._gestor_handoff is None:
+            return None
+        ahora = creado_en or datetime.now(UTC)
+        try:
+            return self._gestor_handoff.crear_handoff(
+                correlation_id=correlation_id,
+                orden_id=orden_id,
+                motivo="Orden pendiente de aprobación del planificador",
+                impacto="Orden de trabajo lista para decisión humana",
+                hechos_confirmados={},
+                evidencia={},
+                estado_actual="Pendiente de aprobacion",
+                accion_requerida="Aprobar o rechazar la orden",
+                actor_destinatario="planificador",
+                rol_destinatario="planificador",
+                sla_minutos=sla_minutos,
+                creado_en=ahora,
+            )
+        except Exception:  # noqa: BLE001 - el handoff no puede bloquear la orden
+            logger.exception("No se pudo crear el handoff para la orden %s", orden_id)
+            return None
 
     def decidir_cierre_humano(
         self,
@@ -259,6 +319,29 @@ class Central:
             resultado.setdefault("codigo", 400)
             return resultado
         self._registrar_cierre(orden_id, accion, motivo, actor, resultado)
+
+        # Registrar acuse y decisión en el handoff (P1-20)
+        if self._gestor_handoff is not None:
+            try:
+                ahora = datetime.now(UTC)
+                self._gestor_handoff.registrar_acuse(
+                    handoff_id=orden_id,
+                    recibido_por=actor.usuario,
+                    rol=actor.rol,
+                    observaciones=motivo,
+                    recibido_en=ahora,
+                )
+                self._gestor_handoff.decidir(
+                    handoff_id=orden_id,
+                    decision=accion,
+                    actor=actor.usuario,
+                    rol=actor.rol,
+                    motivo=motivo,
+                    decidido_en=ahora,
+                )
+            except Exception:  # noqa: BLE001 - el handoff no puede tumbar la decisión
+                logger.exception("No se pudo actualizar el handoff del cierre %s", orden_id)
+
         return resultado
 
     def _publicar(self, fila: dict[str, Any], estado: str) -> None:

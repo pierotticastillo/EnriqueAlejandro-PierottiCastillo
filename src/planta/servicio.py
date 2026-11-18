@@ -78,6 +78,7 @@ class ServicioParteVoz:
         analisis: ServicioAnalisis | None = None,
         vision: ClienteVision | None = None,
         registrador: Any = None,
+        crear_handoff_fn: Any = None,
     ) -> None:
         self._settings = settings
         self._repo = repositorio
@@ -94,6 +95,9 @@ class ServicioParteVoz:
         # Checkpoint duradero: permite reanudar una nota tras un reinicio sin
         # repetir efectos (P1-15 / P1-16).
         self._checkpoint = RepositorioCheckpoint(engine)
+        # Callback para crear un handoff HITL cuando una orden queda
+        # pendiente de decisión humana (P1-20).
+        self._crear_handoff_fn = crear_handoff_fn
         # Modelo de nube con visión: describe las fotos y su resultado puede
         # activar el gate de revisión humana por daño estructural. No aprueba
         # órdenes ni cambia tareas. Es opcional: sin clave o sin modelo, una
@@ -969,6 +973,19 @@ class ServicioParteVoz:
             orden.estado.value,
             analisis.falla.codigo if analisis.falla else "sin falla identificada",
         )
+
+        # Si la orden quedó pendiente de aprobación, crear un handoff HITL
+        # para que el planificador decida (P1-20).
+        if str(snapshot.get("estado")) == "Pendiente de aprobacion":
+            if self._crear_handoff_fn is not None:
+                try:
+                    self._crear_handoff_fn(
+                        orden_id=orden.id,
+                        correlation_id=correlation_id,
+                        evento_id=str(orden.evento_ids[0]) if orden.evento_ids else None,
+                    )
+                except Exception:  # noqa: BLE001 - el handoff no puede bloquear la orden
+                    logger.exception("No se pudo crear el handoff para la orden %s", orden.id)
         # La justificación técnica se redacta después, en su propio hilo: la
         # orden ya está publicada y su estado no depende del modelo.
         self._cola_redaccion.put((analisis, orden))

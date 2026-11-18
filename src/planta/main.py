@@ -29,6 +29,7 @@ from planta.almacenamiento import Almacenamiento
 from planta.central import Central
 from planta.cierre import ServicioCierre
 from planta.cola import DrenadorCola
+from planta.handoff import GestorHandoff
 from planta.heartbeat import Heartbeat, comprobar_enlace
 from planta.heartbeat import crear_cliente as crear_cliente_latido
 from planta.historial import Historiador
@@ -442,6 +443,36 @@ def main() -> None:
     # planificador la aprueba o la rechaza". La Central es ese canal: una
     # página con las órdenes que esperan decisión y una API JSON. No es una
     # tool: el agente no puede llegar a acá.
+    #
+    # Handoff HITL: el gestor de handoff con vencimiento y escalamiento
+    # (P1-20). Se usa callbacks en memoria: los handoffs viven mientras el
+    # sistema está levantado y se recuperan de la base al reiniciar.
+    _handoffs_memoria: dict[str, Any] = {}
+
+    def _obtener_handoff(handoff_id: str) -> Any:
+        return _handoffs_memoria.get(handoff_id)
+
+    def _guardar_handoff(payload: Any) -> None:
+        _handoffs_memoria[payload.orden_id] = payload
+
+    def _guardar_acuse(acuse: Any) -> None:
+        pass  # Se podría persistir en la base si hace falta
+
+    def _guardar_decision(decision: Any) -> None:
+        pass  # Se podría persistir en la base si hace falta
+
+    def _obtener_actor_siguiente(rol: str, actor: str) -> Any:
+        # No hay actor siguiente configurado: fail-closed, no se autoaprueba.
+        return None
+
+    gestor_handoff = GestorHandoff(
+        obtener_handoff=_obtener_handoff,
+        guardar_handoff=_guardar_handoff,
+        guardar_acuse=_guardar_acuse,
+        guardar_decision=_guardar_decision,
+        obtener_actor_siguiente=_obtener_actor_siguiente,
+    )
+
     def _publicar_orden_decidida(fila: dict[str, Any], estado: str) -> None:
         """La orden, con la decisión del planificador, sale por el bus."""
         orden = _orden_recuperada(
@@ -466,9 +497,27 @@ def main() -> None:
         autenticador=autenticador,
         host=settings.central_host,
         puerto=settings.central_puerto,
+        gestor_handoff=gestor_handoff,
     )
+    referencia["central"] = central
     if settings.central_activo:
         central.iniciar()
+
+    def _crear_handoff_para_orden(
+        *,
+        orden_id: str,
+        correlation_id: str,
+        evento_id: str | None = None,
+    ) -> Any:
+        """Crea un handoff HITL para una orden pendiente de aprobación."""
+        central_ref = referencia.get("central")
+        if central_ref is None:
+            return None
+        return central_ref.crear_handoff_para_orden(
+            orden_id=orden_id,
+            correlation_id=correlation_id,
+            evento_id=evento_id,
+        )
 
     servicio = ServicioParteVoz(
         settings,
@@ -482,6 +531,7 @@ def main() -> None:
         analisis=analisis,
         vision=vision,
         registrador=registrador,
+        crear_handoff_fn=_crear_handoff_para_orden,
     )
     referencia["servicio"] = servicio
     parar = threading.Event()
