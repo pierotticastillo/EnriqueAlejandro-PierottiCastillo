@@ -201,10 +201,10 @@ def test_registro_efecto_dentro_de_transaccion(engine):
     with engine.begin() as conexion:
         _guardar_inicial(repositorio, conexion, correlation_id)
         repositorio.registrar_efecto(
-            conexion,
             correlation_id=correlation_id,
             clave_idempotencia="orden:pub:ord-001",
             efecto={"tipo": "orden", "id": "ord-001"},
+            conexion=conexion,
         )
 
     with engine.connect() as conexion:

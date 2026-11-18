@@ -139,6 +139,7 @@ def _servicio(nota_timeout_s: float) -> Any:
     return ServicioParteVoz(
         settings,
         repositorio=RepositorioFalso(),  # type: ignore[arg-type]
+        engine=None,  # type: ignore[arg-type] - los tests de presupuesto no usan el checkpoint
         almacenamiento=None,  # type: ignore[arg-type]
         transcriptor=None,  # type: ignore[arg-type]
         cliente=None,  # type: ignore[arg-type]

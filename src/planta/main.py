@@ -473,6 +473,7 @@ def main() -> None:
     servicio = ServicioParteVoz(
         settings,
         repositorio,
+        engine,
         almacenamiento,
         transcriptor,
         cliente,

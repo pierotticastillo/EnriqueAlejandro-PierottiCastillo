@@ -71,6 +71,19 @@ class PoliticaReintento:
 
     def es_error_transitorio(self, exc: BaseException) -> bool:
         """Si una excepción es de red (y conviene reintentar)."""
+        # Errores de red de httpx: HTTPError que no sea HTTPStatusError (error
+        # del cliente) ni TimeoutException (ese lo maneja el deadline).
+        try:
+            from httpx import HTTPError, HTTPStatusError, TimeoutException
+        except ImportError:  # pragma: no cover - httpx es dependencia directa
+            HTTPError = Exception  # type: ignore[assignment, misc]
+            HTTPStatusError = Exception  # type: ignore[assignment, misc]
+            TimeoutException = Exception  # type: ignore[assignment, misc]
+
+        if isinstance(exc, HTTPError) and not isinstance(exc, (HTTPStatusError, TimeoutException)):
+            return True
+
+        # También verificar por texto (para excepciones envueltas o no-httpx).
         texto = str(exc).lower()
         return any(marca in texto for marca in self.marcas_transitorias)
 

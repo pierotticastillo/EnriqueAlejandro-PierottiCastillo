@@ -241,35 +241,41 @@ class RepositorioCheckpoint:
 
     def registrar_efecto(
         self,
-        conexion: Connection,
-        *,
         correlation_id: str,
         clave_idempotencia: str,
         efecto: dict[str, Any],
+        conexion: Connection | None = None,
     ) -> None:
         """Añade un efecto consumado a las acciones hechas del checkpoint.
 
-        Se usa dentro de la misma transacción que el efecto, para que nunca
-        haya un efecto sin su rastro de idempotencia.
+        Si se entrega una conexión, se usa dentro de esa transacción. Si no,
+        se abre una transacción nueva.
         """
-        conexion.execute(
-            text(
-                """
-                UPDATE checkpoint_ejecucion
-                SET acciones_hechas = acciones_hechas || CAST(:nuevo AS jsonb),
-                    intentos = intentos + 1,
-                    ultimo_avance = now(),
-                    actualizada_en = now()
-                WHERE correlation_id = :cid
-                """
-            ),
-            {
-                "cid": correlation_id,
-                "nuevo": _json(
-                    [{"clave_idempotencia": clave_idempotencia, "efecto": efecto}]
+        def _ejecutar(con: Connection) -> None:
+            con.execute(
+                text(
+                    """
+                    UPDATE checkpoint_ejecucion
+                    SET acciones_hechas = acciones_hechas || CAST(:nuevo AS jsonb),
+                        intentos = intentos + 1,
+                        ultimo_avance = now(),
+                        actualizada_en = now()
+                    WHERE correlation_id = :cid
+                    """
                 ),
-            },
-        )
+                {
+                    "cid": correlation_id,
+                    "nuevo": _json(
+                        [{"clave_idempotencia": clave_idempotencia, "efecto": efecto}]
+                    ),
+                },
+            )
+
+        if conexion is not None:
+            _ejecutar(conexion)
+        else:
+            with self._engine.begin() as conexion_nueva:
+                _ejecutar(conexion_nueva)
 
     def avanzar(
         self,

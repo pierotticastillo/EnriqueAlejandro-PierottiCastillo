@@ -139,6 +139,33 @@ def _es_transitorio(exc: BaseException) -> bool:
     return PoliticaReintento().es_error_transitorio(exc)
 
 
+def _con_reintento(
+    accion: Any,
+    *,
+    intentos: int,
+    espera_s: float,
+    restante: Any = None,
+) -> Any:
+    """Envoltura de retrocompatibilidad alrededor de ``PoliticaReintento.ejecutar``.
+
+    Se mantiene para los tests existentes que importan esta función directamente.
+    """
+    politica = PoliticaReintento(
+        max_intentos=max(1, intentos),
+        espera_base_s=espera_s,
+    )
+    try:
+        return politica.ejecutar(
+            accion,
+            idempotente=True,
+            restante_s=restante,
+        )
+    except TimeoutError as exc:
+        raise PresupuestoAgotado(
+            "se agotó el timeout global antes de reintentar la llamada al modelo"
+        ) from exc
+
+
 #: El plazo (monotónico) de la consulta en curso. Vive en el **contexto** y
 #: no en el modelo: así dos consultas simultáneas no se pisan, y el reintento
 #: puede preguntarle al presupuesto cuánto tiempo queda.

@@ -19,6 +19,7 @@ from planta_contrato import (
     RespuestaOperador,
     TipoEvento,
 )
+from sqlalchemy.engine import Engine
 
 from agente.presupuesto import Presupuesto
 from analisis.evidencia import TendenciaEvidencia
@@ -27,7 +28,7 @@ from analisis.provenance import hash_sha256_archivo, identificador_foto
 from analisis.servicio import ServicioAnalisis
 from analisis.vision import ClienteVision
 from config import Settings
-from db.checkpoint import crear_correlation_id
+from db.checkpoint import RepositorioCheckpoint, crear_correlation_id
 from db.repositorio import Repositorio, filas_desde_json, orden_desde_fila
 from deteccion import seguridad
 from deteccion.partes import clasificar_partes, filas_anomalas, fuentes_tendencia_parte
@@ -64,6 +65,7 @@ class ServicioParteVoz:
         self,
         settings: Settings,
         repositorio: Repositorio,
+        engine: Engine,
         almacenamiento: Almacenamiento,
         transcriptor: Transcriber,
         cliente: ClientePlanta,
@@ -79,6 +81,7 @@ class ServicioParteVoz:
     ) -> None:
         self._settings = settings
         self._repo = repositorio
+        self._engine = engine
         self._almacen = almacenamiento
         self._transcriptor = transcriptor
         self._cliente = cliente
@@ -88,6 +91,9 @@ class ServicioParteVoz:
         # El registro de la trayectoria: los cortes del presupuesto global por
         # nota quedan escritos ahí, no se pierden en el log.
         self._registrador = registrador
+        # Checkpoint duradero: permite reanudar una nota tras un reinicio sin
+        # repetir efectos (P1-15 / P1-16).
+        self._checkpoint = RepositorioCheckpoint(engine)
         # Modelo de nube con visión: describe las fotos y su resultado puede
         # activar el gate de revisión humana por daño estructural. No aprueba
         # órdenes ni cambia tareas. Es opcional: sin clave o sin modelo, una
@@ -392,6 +398,36 @@ class ServicioParteVoz:
             seguridad=extraccion.seguridad,
         )
         correlation_id = crear_correlation_id()
+        # Checkpoint inicial: la nota entró al sistema y se guardó. Desde aquí
+        # se puede reanudar tras un reinicio sin repetir efectos (P1-15).
+        with self._engine.begin() as conexion:
+            self._checkpoint.guardar(
+                conexion,
+                correlation_id=correlation_id,
+                case_id=f"nota:{nota.id}",
+                tipo_tarea="parte",
+                paso_actual="parte_extraido",
+                estado="en_curso",
+                propietario="servicio_parte_voz",
+                datos_confirmados={
+                    "nota_id": nota.id,
+                    "texto": texto,
+                    "seguridad": extraccion.seguridad,
+                },
+                acciones_hechas=[
+                    {
+                        "clave_idempotencia": f"nota:{nota.id}",
+                        "efecto": {
+                            "tipo": "nota_guardada",
+                            "nota_id": str(nota_id),
+                            "estado": "extraida",
+                        },
+                    }
+                ],
+                intentos=1,
+                proxima_accion="enviar_borrador_o_pregunta",
+                version=1,
+            )
         if extraccion.seguridad:
             self._publicar_alerta_seguridad(
                 nota_id, nota, extraccion, texto, fotos_locales,
@@ -820,6 +856,16 @@ class ServicioParteVoz:
             self._repo.registrar_evento(
                 evento, nota_id=nota_id, correlation_id=correlation_id
             )
+            self._checkpoint.registrar_efecto(
+                correlation_id=correlation_id,
+                clave_idempotencia=f"evento:{evento.id}",
+                efecto={
+                    "tipo": "evento_publicado",
+                    "evento_id": evento.id,
+                    "equipo": evento.equipo,
+                    "tipo_evento": str(evento.tipo.value),
+                },
+            )
             self._cliente.publicar_evento(evento)
             if evento.tipo is TipoEvento.escalado:
                 # Un escalado abre una orden de trabajo: el análisis del manual
@@ -896,6 +942,17 @@ class ServicioParteVoz:
                 orden,
                 correlation_id=correlation_id,
                 **self._analisis.datos_de_orden(analisis),
+            )
+            # Checkpoint: la orden se guardó y se puede reanudar desde acá.
+            self._checkpoint.registrar_efecto(
+                correlation_id=correlation_id,
+                clave_idempotencia=f"orden:{orden.id}",
+                efecto={
+                    "tipo": "orden_guardada",
+                    "orden_id": orden.id,
+                    "equipo": orden.equipo,
+                    "estado": str(orden.estado.value),
+                },
             )
         except Exception:  # noqa: BLE001 - sin evidencia no se publica una orden
             logger.exception("No se pudo guardar la orden %s", orden.id)
