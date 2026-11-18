@@ -1,5 +1,5 @@
 # Lockfile de dependencias para PIA-3
-# Generado desde pyproject.toml. Versiones mínimas compatibles.
+# Generado desde pyproject.toml
 
 # Core dependencies
 alembic>=1.13,<2
