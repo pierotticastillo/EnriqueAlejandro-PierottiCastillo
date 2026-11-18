@@ -1,11 +1,13 @@
 # Estado de implementación
 
-**Actualizado:** 2026-11-16
+**Actualizado:** 2026-11-17
 **Plan de referencia:** documento interno del curso (no se publica en este
 repositorio). La segunda entrega sigue el **Plan de implementación 2**; el detalle
 de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
 
 Este archivo registra el avance del repositorio y distingue entre código implementado y comportamiento validado contra la planta simulada.
+
+> **Nota:** Las fases 8–12 del Plan de implementación 2 fueron iniciadas el 2026-11-14 y se implementaron parcialmente hasta el 2026-11-17. No reabren las Fases 0–7.
 
 ## Resumen
 
@@ -188,11 +190,11 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 | 7 — Cierre y certificación | **Remediación y corrida final verificadas** | El cierre técnico deja `Ejecutada`; `supervisor` cierra trabajo propio e `inspector` certifica u observa trabajo de contratista. La migración `0011` corrige `Aprobada → Ejecutada` con motivo tras aprobación humana, exige evidencia válida para estados terminales, vuelve el habilita append-only y rechaza montos no positivos/no finitos. El cálculo contractual es estricto y fail-closed: sin precio completo no se certifica. Las regresiones PostgreSQL, las 77 pruebas autenticadas de G2/G3 y la corrida final de siete escenarios sobre `4eb00f5` pasan. |
 | — — Núcleo de agentes, trayectoria, Central y presupuesto | **Completa y verificada** | Agente de LangChain (`create_agent`) que consulta las ocho tools del MCP y propone con citas (lo que propone se contrasta con el catálogo), con **cierre estructurado** para los modelos que no llaman a la herramienta de salida; registro `registro_trayectoria` con modelo, tools y argumentos, tokens, costo y tiempo (el costo sale de los tokens medidos por la tarifa del modelo); Central de mantenimiento autenticada por token Bearer y RBAC, como canal de decisión humana del planificador, supervisor e inspector; presupuesto de pasos, tokens y timeout global por nota, con el corte escrito en la bitácora y la comprobación **antes** de cada vuelta. Mini spec en `docs/spec-parte.md`. |
 
-| 8 — Alineación de Entrega 2 | En espera de información externa | Se registra la fecha, el alcance, los escenarios y la rúbrica cuando el usuario los comunique después de confirmarlos con la Academia. La implementación de los P0 independientes continúa sin esperar esta respuesta. |
+| 8 — Alineación de Entrega 2 | Pendiente de información oficial | Se solicitó al usuario la fecha, alcance, escenarios y rúbrica de Entrega 2; pendiente de confirmación por la Academia. |
 | 9 — Gobierno humano y seguridad | **Implementada y verificada tras auditoría** | P0-01: el cierre técnico deja `Ejecutada` y la decisión final la toma un `supervisor` o `inspector` autenticado, con motivo/evidencia auditados y habilita sólo tras certificación. La migración `0010` y las guardas de aplicación preservan estado, motivo, costo, tareas y repuestos frente a reprocesos; impiden cierres terminales duplicados y fijan un habilita por orden. P0-04 y P0-05 siguen verificados. |
 | 10 — Evidencia y provenance | **Implementada y verificada tras auditoría** | P0-02: una foto con daño estructural o un resultado indeterminado fuerza revisión humana en escalados ordinarios; una salida válida sin daño no agrega revisión y sin fotos no se activa el gate. P0-03: manifiesto canónico, ledger transaccional y reconstrucción autenticada. La migración `0010` completa el append-only de `decision_cierre`, manifiesto y ledger contra `UPDATE`, `DELETE` y `TRUNCATE`, y vincula decisión, cierre y orden con una FK compuesta restrictiva. |
-| 11 — Evaluación, red team y calidad | Pendiente | La comparación controlada para elegir el LLM local quedó cerrada (`docs/evaluacion_modelo_local.md`); faltan el benchmark del agente contra baseline, la evaluación ampliada de grounding, visión con fotos reales, trayectoria y red team con costo/latencia. |
-| 12 — Operación y cierre | **P0-06 cerrado; resto pendiente** | La corrida oficial reproducible, RAG, métricas, digest y evidencia auditable quedaron cerrados sobre `4eb00f5`. Restan outbox transaccional/PUBACK, observabilidad, CI/CD y cierre documental de las Fases 11–12. |
+| 11 — Evaluación, red team y calidad | **Parcialmente implementada** | `docs/evals/` con 6 baterías (agente_vs_baseline, grounding, vision, multimodal, loops, resiliencia) y `scripts/evaluar_todo.py`. Grounding conectado y verificado (4/4 casos); loops conectado y verificado (3/3 casos). Falta conectar visión, red team y trayectoria completa. |
+| 12 — Operación y cierre | **P0-06 cerrado; P1-15 a P1-21 implementados en lógica** | La corrida oficial reproducible, RAG, métricas, digest y evidencia auditable quedaron cerrados sobre `4eb00f5`. P1-15 (checkpoint duradero), P1-16 (correlation ID), P1-17 (retry/backoff con jitter), P1-18 (detección de loops), P1-19 (cancelación y recuperación), P1-20 (handoff HITL con vencimiento), P1-21 (validación multimodal adversarial) implementados en lógica; integración completa en camino productivo en progreso. Restan outbox transaccional/PUBACK, observabilidad, CI/CD y cierre documental de las Fases 11–12. |
 
 ## Plan de implementación 2 — estado de brechas P0
 
@@ -205,6 +207,32 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 | P0-05 — XSS y CSP | **Implementado y verificado** | `src/planta/central.py`: construcción DOM con `textContent`/`replaceChildren`, CSP con nonce por respuesta y cabeceras defensivas. Sigue integrado con P0-01/P0-04 y verificado por la suite completa. |
 | P0-06 — Corrida sobre el commit final | **Cerrado y verificado** | La corrida oficial final está anclada al commit `4eb00f54b5861c6c3c922aad060de266064012ef`, al corrector `ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic `0011`: **92,6/100 — APRUEBA**, 0 eliminatorias, 467 mensajes válidos y 0 inválidos en los siete escenarios. G2/G3 se verifican además con 77 pruebas autenticadas. El manifiesto incluye hashes, criterios, eliminatorias, mensajes inválidos, modelos, corpus/dataset, digest de cuatro imágenes, tokens, costo y latencia; está archivado en [`docs/evidencia_p0_06/`](evidencia_p0_06/README.md). Los digest usan bytes canónicos UTF-8/LF fijados por `.gitattributes` y se verifican contra los blobs publicados. |
 | P0-07 — Alcance y rúbrica oficiales | Pendiente de información externa | Se actualizará cuando el usuario comunique la información confirmada por la Academia. |
+
+## Plan de implementación 2 — estado de brechas P1
+
+| ID | Estado actual | Evidencia o próximo paso |
+|----|---------------|--------------------------|
+| P1-01 — Suite agente vs baseline | Pendiente | Batería `docs/evals/agente_vs_baseline.json` definida (5 casos); benchmark no conectado aún al agente. |
+| P1-02 — Trayectoria completa | Parcial | `registro_trayectoria` existe con modelo, tools, argumentos, tokens, costo, tiempo; falta ledger completo que conecte evidencia→análisis→propuesta→reglas→actor→estado. |
+| P1-03 — Outbox transaccional | Pendiente | No implementado todavía. |
+| P1-04 — Cola PUBACK | Pendiente | No implementado todavía. |
+| P1-05 — Constraints certificación/habilitación | **Implementado** | Migración `0011` vuelve `habilitacion` append-only con monto positivo y moneda USD; `decision_cierre` con FK compuesta. |
+| P1-06 — Máquina de estados | **Implementado** | Orden no se sobrescribe en estados terminales; `Rechazada` excluida de reincidencia. |
+| P1-07 — CI/CD | Pendiente | No implementado todavía. |
+| P1-08 — Observabilidad | Pendiente | Readiness/liveness no implementado. Métricas parciales en `registro_trayectoria`. |
+| P1-09 — Seguridad MCP/PostgreSQL | Pendiente | Loopback por defecto en Central; servicios expuestos sin controles en Docker. |
+| P1-10 — Redes y presupuesto | Pendiente | No verificado estáticamente. |
+| P1-11 — Calidad de visión | Pendiente | Dataset de fotos reales no disponible; modelo de visión implementado y fail-safe verificado. |
+| P1-12 — Habilita → facturación | Pendiente | No implementado; se declara como límite de responsabilidad. |
+| P1-13 — Registro ingreso/egreso | Pendiente | Se declara como informativo; no bloquea el cierre. |
+| P1-14 — Spec y documentación | Parcial | `docs/spec-parte.md` existe; falta extender a C–G y agregar conclusión final a `INFORME.md`. |
+| P1-15 — Checkpoint duradero | **Implementado en lógica** | `src/db/checkpoint.py` con `RepositorioCheckpoint`; integrado en `src/planta/servicio.py` (checkpoint inicial al guardar nota, efectos de evento y orden registrados). Migración `0012` aplicada. |
+| P1-16 — Correlation ID | **Implementado en lógica** | Columnas en `ledger_decisiones`, `manifiesto_evidencia`, `outbox_cola`; `correlation_id` generado al entrar una nota y propagado a eventos, órdenes, ledger y manifiesto. |
+| P1-17 — Retry/backoff con jitter | **Implementado** | `src/tools/politica_reintento.py` con backoff exponencial+jitter; integrado en `ClientePlanta` y `_ModeloConReintentos`; reintenta 429/5xx/red, no reintenta 400/401/403/422; respeta deadline. |
+| P1-18 — Detección de loops | **Implementado** | `src/agente/deteccion_loops.py` (repetición, ping-pong, no-progreso); integrado en `agente/nucleo.py` como callback de LangChain; 14 tests pasando. |
+| P1-19 — Cancelación y recuperación | Pendiente | Lógica no integrada en camino productivo. |
+| P1-20 — Handoff HITL con vencimiento | **Implementado en lógica** | `src/planta/handoff.py` con `GestorHandoff`, `PayloadHandoff`, `AcuseHandoff`, `DecisionHandoff`; integrado en `Central` y `ServicioParteVoz` (crea handoff cuando orden queda pendiente). |
+| P1-21 — Validación multimodal adversarial | Pendiente | Batería `docs/evals/multimodal.json` definida (4 casos); no conectada aún al agente. |
 
 ## Decisiones que conviene no perder de vista
 
