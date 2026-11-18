@@ -28,7 +28,7 @@ from agente.nucleo import _cita_conocida, _normalizar  # noqa: E402
 from analisis.vision import crear_cliente_vision  # noqa: E402
 from config import Settings  # noqa: E402
 
-EVALS_DIR = Path("docs/evals")
+EVALS_DIR = Path("docs/evaluaciones/baterias")
 
 # Tipos de detección de loops compatibles entre sí.
 # "repeticion_tool_args" y "repeticion" son sinónimos.
