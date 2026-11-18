@@ -25,6 +25,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 from agente.deteccion_loops import DetectorLoops  # noqa: E402
 from agente.modelos import PropuestaAgente  # noqa: E402
 from agente.nucleo import _cita_conocida, _normalizar  # noqa: E402
+from analisis.vision import crear_cliente_vision  # noqa: E402
+from config import Settings  # noqa: E402
 
 EVALS_DIR = Path("docs/evals")
 
@@ -272,6 +274,138 @@ def _ejecutar_loops(datos: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ------------------------------------------------------------------ vision
+
+
+def _ejecutar_vision(datos: dict[str, Any]) -> dict[str, Any]:
+    """Ejecuta la batería de validación de visión usando el cliente real.
+
+    Usa ``ClienteVision`` para procesar cada foto y compara el resultado
+    con la etiqueta esperada (daño estructural, estado, fail-safe).
+    """
+    datos_eval = datos.get("casos", [])
+    umbrales = datos.get("umbrales", {})
+    dimensiones = datos.get("dimensiones", [])
+
+    inicio = time.monotonic()
+    resultados: list[dict[str, Any]] = []
+    aprobados = 0
+
+    settings = Settings()
+    cliente_vision = crear_cliente_vision(settings)
+
+    for caso in datos_eval:
+        caso_inicio = time.monotonic()
+        case_id = caso.get("case_id")
+        orden_id = caso.get("orden_id")
+        imagen_ruta = caso.get("imagen", "")
+        etiqueta_esperada = caso.get("etiqueta_esperada", "")
+        resultado_esperado = caso.get("resultado_esperado", "")
+        fail_safe = caso.get("fail_safe", "")
+
+        if cliente_vision is None or not cliente_vision.habilitado:
+            resultados.append(
+                {
+                    "case_id": case_id,
+                    "orden_id": orden_id,
+                    "estado": "pendiente",
+                    "motivo": "cliente de visión no disponible",
+                    "segundos": round(time.monotonic() - caso_inicio, 3),
+                }
+            )
+            continue
+
+        # Ejecutar la consulta de visión sobre la imagen
+        from pathlib import Path
+
+        ruta_imagen = Path(imagen_ruta)
+        if not ruta_imagen.exists():
+            resultados.append(
+                {
+                    "case_id": case_id,
+                    "orden_id": orden_id,
+                    "estado": "pendiente",
+                    "motivo": f"imagen no encontrada: {imagen_ruta}",
+                    "segundos": round(time.monotonic() - caso_inicio, 3),
+                }
+            )
+            continue
+
+        try:
+            resultado_vision = cliente_vision.describir(ruta_imagen)
+        except Exception as exc:  # noqa: BLE001
+            resultados.append(
+                {
+                    "case_id": case_id,
+                    "orden_id": orden_id,
+                    "estado": "error",
+                    "motivo": f"error ejecutando visión: {exc}",
+                    "segundos": round(time.monotonic() - caso_inicio, 3),
+                }
+            )
+            continue
+
+        segundos = round(time.monotonic() - caso_inicio, 3)
+
+        # Evaluar el resultado contra las expectativas
+        danio_esperado = etiqueta_esperada == "danio_estructural=true"
+        danio_detectado = resultado_vision.hay_danio
+        estado_es_indeterminado = resultado_vision.estado == "indeterminado"
+
+        # Verificar consistencia: si se esperaba daño y se detectó, está bien
+        # Si no se esperaba daño y no se detectó, está bien
+        # Si se esperaba daño pero no se detectó, es falso negativo (fallo)
+        # Si no se esperaba daño pero se detectó, es falso positivo (fallo)
+        danio_coincide = danio_esperado == danio_detectado
+
+        # Fail-safe: si la visión falló (indeterminado), debe ir a revisión humana
+        fail_safe_correcto = (
+            not estado_es_indeterminado
+            or resultado_esperado == "revision_humana"
+            or "sin_danio_nunca" in (fail_safe or "")
+        )
+
+        estado = "aprobado" if danio_coincide and fail_safe_correcto else "fallido"
+
+        if estado == "aprobado":
+            aprobados += 1
+
+        motivos = []
+        if not danio_coincide:
+            motivos.append(
+                f"daño esperado={danio_esperado}, detectado={danio_detectado}"
+            )
+        if not fail_safe_correcto:
+            motivos.append("fail-safe incorrecto")
+
+        resultados.append(
+            {
+                "case_id": case_id,
+                "orden_id": orden_id,
+                "estado": estado,
+                "motivo": "; ".join(motivos) if motivos else "ok",
+                "danio_esperado": danio_esperado,
+                "danio_detectado": danio_detectado,
+                "estado_vision": resultado_vision.estado,
+                "modelo": resultado_vision.modelo,
+                "segundos": segundos,
+            }
+        )
+
+    total_segundos = round(time.monotonic() - inicio, 3)
+    return {
+        "bateria": "vision",
+        "version": datos.get("version", 1),
+        "dimensiones": dimensiones,
+        "umbrales": umbrales,
+        "total_casos": len(datos_eval),
+        "aprobados": aprobados,
+        "pendientes": len(datos_eval) - aprobados,
+        "segundos_totales": total_segundos,
+        "resultados": resultados,
+    }
+
+
 def _ejecutar_bateria_estructural(nombre: str, datos: dict[str, Any]) -> dict[str, Any]:
     """Ejecuta una batería sin implementación real (validación estructural)."""
     casos = datos.get("casos", [])
@@ -318,6 +452,8 @@ def _ejecutar_bateria(nombre: str, datos: dict[str, Any]) -> dict[str, Any]:
         return _ejecutar_grounding(datos)
     if nombre == "loops":
         return _ejecutar_loops(datos)
+    if nombre == "vision":
+        return _ejecutar_vision(datos)
     return _ejecutar_bateria_estructural(nombre, datos)
 
 
@@ -366,6 +502,14 @@ def main() -> int:
         elif nombre == "loops":
             detectados = sum(1 for r in resultado["resultados"] if r["deteccion_obtenida"])
             extra = f" | bucles detectados: {detectados}"
+        elif nombre == "vision":
+            danio_ok = sum(
+                1
+                for r in resultado["resultados"]
+                if r.get("danio_esperado") == r.get("danio_detectado")
+            )
+            total = resultado["total_casos"]
+            extra = f" | daño coincidió: {danio_ok}/{total}"
         print(
             f"  Casos: {resultado['total_casos']} | "
             f"Aprobados: {resultado['aprobados']} | "

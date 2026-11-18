@@ -539,8 +539,14 @@ def main() -> None:
     def _detener(_signum: int, _frame: object) -> None:
         parar.set()
 
-    for senal in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(senal, _detener)
+    try:
+        for senal in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(senal, _detener)
+    except ValueError:
+        # signal.signal solo funciona en el hilo principal; si el sistema se
+        # ejecuta en un hilo secundario (pruebas), se ignora y se detiene con
+        # el evento 'parar' desde afuera.
+        logger.warning("No se pudieron registrar manejadores de señal (no es el hilo principal)")
 
     latido = Heartbeat(
         settings,

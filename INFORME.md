@@ -2718,6 +2718,57 @@ repuestos**.
 8. Registrar en **P0-07** la fecha, el alcance, la rúbrica, los escenarios y
    los datos externos confirmados por la Academia.
 
+## 15. Conclusión de modelos
+
+### Modelo de lenguaje local (auxiliar de redacción y núcleo de agentes)
+
+| Criterio | Valor |
+|----------|-------|
+| Modelo | `Qwen2.5-3B-Instruct` (Q4_K_M) |
+| Motor | Ollama (llama.cpp) |
+| Dispositivo | CPU, 2 hilos |
+| Contexto | 2048 tokens |
+| Temperature | 0 |
+| Seed | 42 |
+| Keep alive | 0 (descarga de memoria al terminar) |
+| Tarifa | 0 USD/millón de tokens (modelo local) |
+
+**Decisión:** mantener `Qwen2.5-3B-Instruct` como único LLM local habilitado. Fue el único candidato de la comparación del 2026-11-16 que consultó realmente las fuentes (tools nativas), produjo una propuesta válida y terminó dentro del presupuesto de 420 s. Los otros candidatos (`qwen3:4b`, `phi4-mini`, `llama3.2:3b`) fallaron en al menos uno de esos criterios: no consultaron herramientas, no produjeron salida válida o superaron el presupuesto de tiempo.
+
+**Función:** el LLM es **auxiliar**, no decide. Escribe la justificación técnica de la orden y es el motor del núcleo de agentes (consulta herramientas y propone con citas), pero las seis reglas de aprobación y la decisión de estado siguen en código (`src/analisis/aprobacion.py`). Si Ollama no responde, el sistema sigue con texto determinista.
+
+**Costo:** 0 USD por millón de tokens (modelo local, no hay nada que facturar).
+
+### Modelo de nube con visión (auxiliar de descripción)
+
+| Criterio | Valor |
+|----------|-------|
+| Modelo | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` |
+| Motor | API de NVIDIA (`integrate.api.nvidia.com/v1`) |
+| Temperatura | 0 |
+| Max tokens | 800 |
+| Timeout | 8 s |
+| Proxy | `enlace:3128` (salida sancionada) |
+
+**Decisión:** usar `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` como modelo de visión. Es el Nemotron con visión vigente en el catálogo de NVIDIA (el candidato original, `nvidia/nemotron-nano-12b-v2-vl`, fue retirado el 2026-08-26 con HTTP 410 Gone y además era inglés-only). Fue el modelo más rápido de los que funcionan (mediana 2,93 s por foto) y el único que devolvió la respuesta en `content` limpio sin necesitar post-procesamiento.
+
+**Función:** auxiliar de descripción. Describe qué se ve en una foto para que quien revise no tenga que adivinar. **No decide, no aprueba y nunca afirma "no hay daño"**: si no puede responder, el resultado queda `indeterminado` y la foto sigue yendo a revisión humana. La salida se valida contra un esquema estricto y el prompt no lleva texto libre del operador.
+
+**Costo:** se mide por tokens de entrada (~861 constantes por llamada) y salida (mediana 191 tokens). A tarifas públicas de terceros (0,20–0,50 USD/1M entrada, 0,80–0,90 USD/1M salida), el costo por llamada ronda los **0,00033–0,00060 USD** (~0,03–0,06 USD por cada 100 llamadas). El modelo de nube es el único componente que sale del contenedor y el único con costo por uso.
+
+### Conclusión general del sistema de modelos
+
+El sistema PIA-3 usa **cuatro modelos** de una lista cerrada (`src/modelos_lista.py`), verificada al arrancar por `scripts/verificar_modelos.py`:
+
+| Clave | Modelo | Motor | Dónde | Función | Costo |
+|-------|--------|-------|-------|---------|-------|
+| `asr` | `faster-whisper-base` | faster-whisper (CTranslate2) | Planta (CPU) | Transcripción de audio de notas y cierres | 0 USD (local) |
+| `embeddings` | `paraphrase-multilingual-MiniLM-L12-v2` | fastembed (ONNX) | Planta (CPU) | Embeddings del índice pgvector del RAG | 0 USD (local) |
+| `llm` | `Qwen2.5-3B-Instruct` | Ollama (llama.cpp) | Planta (CPU) | Justificación técnica y agente (consulta y propone) | 0 USD (local) |
+| `vision` | `Nemotron 3 Nano Omni 30B A3B` | API de NVIDIA | Nube (por proxy del enlace) | Descripción de fotos para revisión humana | ~0,00033–0,00060 USD/llamada |
+
+Todos los modelos locales (ASR, embeddings, LLM) corren dentro del contenedor de la planta sin salir a internet. Solo el modelo de visión sale a la nube, y solo para describir fotos: la decisión nunca la toma un modelo.
+
 ---
 
 ## 16. Referencias
