@@ -19,7 +19,7 @@ jobs:
           POSTGRES_USER: pia3
           POSTGRES_PASSWORD: pia3
         ports:
-          - 55432:5432
+          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U pia3 -d pia3"
           --health-interval 10s
@@ -38,7 +38,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-          pip install psycopg[binary]
 
       - name: Run ruff lint
         run: ruff check src tests scripts migrations
@@ -55,8 +54,6 @@ jobs:
         run: pytest tests/test_db_*.py tests/test_checkpoint_reanudacion.py tests/test_correlation_id.py -q
 
       - name: Run evaluation suite
-        env:
-          TEST_DATABASE_URL: postgresql+psycopg://pia3:pia3@localhost:55432/pia3
         run: python scripts/evaluar_todo.py --salida reporte_evaluacion.json
 
       - name: Upload evaluation report
