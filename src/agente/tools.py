@@ -51,8 +51,7 @@ def construir_tools(
     recuperador y, en el peor caso, cae a la búsqueda léxica.
     """
     return [
-        _armar(tool, cliente, corpus=corpus, recuperador=recuperador)
-        for tool in REGISTRO.values()
+        _armar(tool, cliente, corpus=corpus, recuperador=recuperador) for tool in REGISTRO.values()
     ]
 
 

@@ -617,9 +617,7 @@ def crear_agente(
         num_thread=settings.ollama_num_thread,
         # Y necesita escribir más: la propuesta completa (falla, causas, citas,
         # tareas y justificación) no entra en 250 tokens.
-        num_predict=getattr(
-            settings, "agente_max_tokens_salida", settings.ollama_max_tokens
-        ),
+        num_predict=getattr(settings, "agente_max_tokens_salida", settings.ollama_max_tokens),
         keep_alive=settings.ollama_keep_alive,
         client_kwargs=cliente_kwargs,
         max_intentos=getattr(settings, "agente_max_intentos", 2),

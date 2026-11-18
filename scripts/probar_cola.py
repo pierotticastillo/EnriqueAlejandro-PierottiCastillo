@@ -148,13 +148,17 @@ def main() -> None:
 
     print("\n== Estado final en la cola")
     with motor.connect() as conexion:
-        filas = conexion.execute(
-            text(
-                "SELECT tipo, topico, estado, payload ->> 'id' AS mensaje "
-                "FROM outbox_cola WHERE payload ->> 'id' LIKE :patron ORDER BY creado_en"
-            ),
-            {"patron": f"%{sufijo}%"},
-        ).mappings().all()
+        filas = (
+            conexion.execute(
+                text(
+                    "SELECT tipo, topico, estado, payload ->> 'id' AS mensaje "
+                    "FROM outbox_cola WHERE payload ->> 'id' LIKE :patron ORDER BY creado_en"
+                ),
+                {"patron": f"%{sufijo}%"},
+            )
+            .mappings()
+            .all()
+        )
     for fila in filas:
         print(f"  {fila['tipo']:6} · {fila['topico']:16} · {fila['estado']:9} · {fila['mensaje']}")
 

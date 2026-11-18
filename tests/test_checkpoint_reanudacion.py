@@ -85,9 +85,7 @@ def test_guarda_y_recupera_checkpoint(engine):
     assert checkpoint.efecto_ya_hecho == {"evento:evt-001:ord-001"}
 
     with engine.connect() as conexion:
-        recuperado = repositorio.cargar_ultimo(
-            conexion, correlation_id=correlation_id
-        )
+        recuperado = repositorio.cargar_ultimo(conexion, correlation_id=correlation_id)
     assert recuperado is not None
     assert recuperado.correlation_id == correlation_id
     assert recuperado.case_id == "caso-001"
@@ -148,9 +146,7 @@ def test_checkpoint_no_encontrado_si_no_existe(engine):
     """Cargar un correlation_id que no tiene checkpoint devuelve None."""
     repositorio = RepositorioCheckpoint(engine)
     with engine.connect() as conexion:
-        resultado = repositorio.cargar_ultimo(
-            conexion, correlation_id="no-existe:000"
-        )
+        resultado = repositorio.cargar_ultimo(conexion, correlation_id="no-existe:000")
     assert resultado is None
 
 

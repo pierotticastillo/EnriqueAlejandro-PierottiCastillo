@@ -71,8 +71,10 @@ class Historiador:
         valores = [valor for _, valor in puntos]
         primero, ultimo = valores[0], valores[-1]
         margen = max((max(valores) - min(valores)) * 0.05, abs(primero) * 0.005, 0.01)
-        direccion = "sube" if ultimo - primero > margen else (
-            "baja" if primero - ultimo > margen else "estable"
+        direccion = (
+            "sube"
+            if ultimo - primero > margen
+            else ("baja" if primero - ultimo > margen else "estable")
         )
         sufijo = f" {unidad}" if unidad else ""
         ventana = _duracion_texto(self._ventana)

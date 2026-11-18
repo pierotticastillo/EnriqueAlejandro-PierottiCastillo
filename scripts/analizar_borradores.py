@@ -1,6 +1,6 @@
 """Analiza los borradores de la corrida: qué corrigió el operador y por qué.
 
-    python scripts/analizar_borradores.py <carpeta de corrida> [escenario]
+python scripts/analizar_borradores.py <carpeta de corrida> [escenario]
 """
 
 from __future__ import annotations

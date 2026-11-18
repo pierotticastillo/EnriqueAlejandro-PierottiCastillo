@@ -40,9 +40,7 @@ class RepoFalso:
         self.pendientes.append((id_outbox, tipo, topico, payload))
         return id_outbox
 
-    def pendientes_outbox(
-        self, limite: int = 50
-    ) -> list[tuple[str, str, str, dict[str, Any]]]:
+    def pendientes_outbox(self, limite: int = 50) -> list[tuple[str, str, str, dict[str, Any]]]:
         return self.pendientes[:limite]
 
     def marcar_outbox_enviado(self, id_outbox: str) -> None:

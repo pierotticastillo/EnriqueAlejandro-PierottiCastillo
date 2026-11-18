@@ -97,9 +97,7 @@ def clausulas(oracion: str) -> list[str]:
     """
     por_magnitud = [
         trozo.strip()
-        for trozo in _BORDE_MEDICION.sub(
-            lambda m: f"{m.group(0)}{_CORTE}", oracion
-        ).split(_CORTE)
+        for trozo in _BORDE_MEDICION.sub(lambda m: f"{m.group(0)}{_CORTE}", oracion).split(_CORTE)
         if trozo.strip()
     ]
 
@@ -123,9 +121,7 @@ def clausulas(oracion: str) -> list[str]:
                 unidas[-1] = f"{unidas[-1]}, {parte}"
             else:
                 unidas.append(parte)
-        resultado.extend(
-            parte.replace(_UNIDO, ", ").strip() for parte in unidas if parte.strip()
-        )
+        resultado.extend(parte.replace(_UNIDO, ", ").strip() for parte in unidas if parte.strip())
     return resultado
 
 

@@ -647,9 +647,7 @@ def test_una_foto_validada_sin_dano_no_obliga_a_revisar(
     analisis = servicio.analizar_evento(
         _evento("F-201A", "F-201A presion_diferencial: diferencial alto"),
         filas=filas,
-        evidencia_vision=(
-            _evidencia_vision(danio=False, descripcion="carcasa sin grietas"),
-        ),
+        evidencia_vision=(_evidencia_vision(danio=False, descripcion="carcasa sin grietas"),),
     )
 
     assert analisis is not None
@@ -676,9 +674,7 @@ def test_una_foto_indeterminada_tambien_va_a_revision_humana(
     analisis = servicio.analizar_evento(
         _evento("F-201A", "F-201A presion_diferencial: diferencial alto"),
         filas=filas,
-        evidencia_vision=(
-            _evidencia_vision(estado="indeterminado", danio=None, descripcion=""),
-        ),
+        evidencia_vision=(_evidencia_vision(estado="indeterminado", danio=None, descripcion=""),),
     )
 
     assert analisis is not None

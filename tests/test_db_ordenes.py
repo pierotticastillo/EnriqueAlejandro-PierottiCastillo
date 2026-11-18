@@ -1,4 +1,4 @@
-﻿"""Tests de la persistencia de órdenes (Fase 5).
+"""Tests de la persistencia de órdenes (Fase 5).
 
 Requieren un PostgreSQL con las migraciones aplicadas:
 
@@ -72,9 +72,7 @@ def _orden(evento_id: str, *, estado: EstadoOrden = EstadoOrden.pendiente) -> Or
         ejecutor="propio",
         repuestos=[Repuesto(codigo="TX-EMP-KIT", cantidad=1)],
         motivo=(
-            "Tarea estándar: la orden no para la bomba"
-            if estado is EstadoOrden.pendiente
-            else None
+            "Tarea estándar: la orden no para la bomba" if estado is EstadoOrden.pendiente else None
         ),
     )
 
@@ -131,9 +129,7 @@ def test_la_orden_se_guarda_con_sus_tareas_y_repuestos(repositorio, engine) -> N
         _limpiar(engine, [orden.id], evento_id)
 
 
-def test_la_evidencia_fotografica_queda_persistida_con_la_orden(
-    repositorio, engine
-) -> None:
+def test_la_evidencia_fotografica_queda_persistida_con_la_orden(repositorio, engine) -> None:
     """P0-02: la foto, su veredicto y el modelo se recuperan de PostgreSQL."""
     with engine.begin() as conexion:
         evento_id = _evento(conexion)
@@ -277,9 +273,7 @@ def test_un_reproceso_no_degrada_una_aprobacion_del_planificador(
         assert guardada["estado"] == "Aprobada"
         assert float(repositorio.obtener_orden(orden.id)["costo_estimado"]) == 420
         assert guardada["tareas"] == ["T-B-EMP"]
-        assert [repuesto["codigo"] for repuesto in guardada["repuestos"]] == [
-            "TX-EMP-KIT"
-        ]
+        assert [repuesto["codigo"] for repuesto in guardada["repuestos"]] == ["TX-EMP-KIT"]
         assert guardada["motivo"] is None
         with engine.connect() as conexion:
             aprobaciones = conexion.execute(
@@ -312,8 +306,7 @@ def test_postgresql_no_permite_cambiar_una_aprobacion_por_un_rechazo(
             with engine.begin() as conexion:
                 conexion.execute(
                     text(
-                        "UPDATE orden SET estado = CAST('Rechazada' AS estado_orden) "
-                        "WHERE id = :id"
+                        "UPDATE orden SET estado = CAST('Rechazada' AS estado_orden) WHERE id = :id"
                     ),
                     {"id": orden.id},
                 )

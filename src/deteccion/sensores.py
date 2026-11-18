@@ -69,9 +69,8 @@ class DetectorSensores:
 
         valor = lectura.valor
         disparo = limite.disparo is not None and valor >= limite.disparo
-        fuera = (
-            (limite.alarma_baja is not None and valor <= limite.alarma_baja)
-            or (limite.alarma_alta is not None and valor >= limite.alarma_alta)
+        fuera = (limite.alarma_baja is not None and valor <= limite.alarma_baja) or (
+            limite.alarma_alta is not None and valor >= limite.alarma_alta
         )
         if not disparo and not fuera:
             estado.racha_fuera = 0

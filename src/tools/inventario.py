@@ -40,9 +40,7 @@ def inventario(
         codigo = fila[0]
         if consulta.codigo and codigo != consulta.codigo:
             continue
-        equipos = [
-            tag for tag, codigos in materiales_por_equipo.items() if codigo in codigos
-        ]
+        equipos = [tag for tag, codigos in materiales_por_equipo.items() if codigo in codigos]
         if consulta.equipo and consulta.equipo not in equipos:
             continue
         stock = {

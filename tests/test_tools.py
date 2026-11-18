@@ -307,9 +307,7 @@ def test_inventario_por_almacen_central() -> None:
 
 
 def test_lista_materiales_de_un_equipo() -> None:
-    resultado = lista_materiales(
-        _cliente(), ConsultaListaMateriales(equipo="B-101")
-    )
+    resultado = lista_materiales(_cliente(), ConsultaListaMateriales(equipo="B-101"))
     assert [material.codigo for material in resultado] == ["TX-EMP-KIT", "ACE-ISO220"]
     assert resultado[0].costo_usd == 420
 
@@ -336,9 +334,7 @@ def test_catalogo_tareas_filtra_por_equipo() -> None:
 
 
 def test_catalogo_tareas_sin_no_estandar() -> None:
-    resultado = catalogo_tareas(
-        _cliente(), ConsultaCatalogoTareas(incluir_no_estandar=False)
-    )
+    resultado = catalogo_tareas(_cliente(), ConsultaCatalogoTareas(incluir_no_estandar=False))
     assert all(tarea.estandar for tarea in resultado)
 
 

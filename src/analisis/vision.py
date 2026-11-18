@@ -226,9 +226,7 @@ class ClienteVision:
                     )
         except Exception as exc:  # noqa: BLE001 - cualquier fallo queda indeterminado
             via = f" por el proxy {self._proxy}" if self._proxy else " de forma directa"
-            raise ErrorVision(
-                f"No se pudo llamar a la API de NVIDIA{via}: {exc}"
-            ) from exc
+            raise ErrorVision(f"No se pudo llamar a la API de NVIDIA{via}: {exc}") from exc
         if respuesta.status_code != 200:
             raise ErrorVision(f"La API de NVIDIA respondió {respuesta.status_code}")
         try:

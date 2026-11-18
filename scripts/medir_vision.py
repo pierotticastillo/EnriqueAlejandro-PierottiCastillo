@@ -74,8 +74,7 @@ def main() -> int:
     cliente = crear_cliente_vision(settings)
     if cliente is None:
         print(
-            "El modelo de visión no está habilitado "
-            "(falta la clave o el modelo no es de la lista)."
+            "El modelo de visión no está habilitado (falta la clave o el modelo no es de la lista)."
         )
         return 1
 

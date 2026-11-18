@@ -62,9 +62,7 @@ def redactar(
     except Exception:  # noqa: BLE001 - el modelo no puede tumbar el análisis
         logger.warning("Falló la redacción con el modelo local", exc_info=True)
         return None
-    desconocidas = [
-        cita for cita in salida.citas if _normalizar(cita) not in conocidas
-    ]
+    desconocidas = [cita for cita in salida.citas if _normalizar(cita) not in conocidas]
     if desconocidas:
         logger.warning(
             "El modelo local-citó documentos desconocidos (%s): se descarta su redacción",

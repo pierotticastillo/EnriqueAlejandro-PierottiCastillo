@@ -143,6 +143,7 @@ class CorpusPlanta:
             chunks=tuple(chunks),
         )
 
+
 class CorpusArchivos:
     """Corpus leído de una copia local de ``datos/documentos`` de la planta."""
 
@@ -153,9 +154,7 @@ class CorpusArchivos:
         indice = json.loads((self._base / "indice.json").read_text(encoding="utf-8"))
         fragmentos = [
             json.loads(linea)
-            for linea in (self._base / "fragmentos.jsonl")
-            .read_text(encoding="utf-8")
-            .splitlines()
+            for linea in (self._base / "fragmentos.jsonl").read_text(encoding="utf-8").splitlines()
             if linea
         ]
         por_documento: dict[str, dict[str, dict[str, Any]]] = {}

@@ -203,21 +203,22 @@ def test_la_decision_queda_escrita_con_su_usuario(repositorio, engine) -> None:
         )
 
         with engine.connect() as conexion:
-            filas = conexion.execute(
-                text(
-                    "SELECT decision, usuario, rol, reglas_evaluadas FROM aprobacion "
-                    "WHERE orden_id = :id ORDER BY creada_en"
-                ),
-                {"id": orden.id},
-            ).mappings().all()
+            filas = (
+                conexion.execute(
+                    text(
+                        "SELECT decision, usuario, rol, reglas_evaluadas FROM aprobacion "
+                        "WHERE orden_id = :id ORDER BY creada_en"
+                    ),
+                    {"id": orden.id},
+                )
+                .mappings()
+                .all()
+            )
         decisiones = [fila["decision"] for fila in filas]
         assert "Aprobada" in decisiones
         # La fila de las reglas se conserva: la decisión del planificador no
         # borra la evaluación que la dejó pendiente.
-        assert any(
-            fila["usuario"] == "juan" and fila["rol"] == "planificador"
-            for fila in filas
-        )
+        assert any(fila["usuario"] == "juan" and fila["rol"] == "planificador" for fila in filas)
         assert any(fila["reglas_evaluadas"] for fila in filas)
     finally:
         _limpiar(engine, [orden.id], evento_id)

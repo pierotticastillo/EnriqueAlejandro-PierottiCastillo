@@ -161,8 +161,7 @@ class CatalogoManuales:
         return tuple(
             tarea
             for tarea in self.tareas
-            if tarea.codigo in {"I-VIB", "I-VAL"}
-            and (equipo in tarea.equipos or not tarea.equipos)
+            if tarea.codigo in {"I-VIB", "I-VAL"} and (equipo in tarea.equipos or not tarea.equipos)
         )
 
     def tarea_por_codigo(self, codigo: str, equipo: str) -> TareaCatalogo | None:

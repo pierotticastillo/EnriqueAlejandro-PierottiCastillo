@@ -55,8 +55,7 @@ _ESTADOS_ORDEN_PROTEGIDOS = frozenset(
 _ESTADOS_ORDEN_CIERRE_ADMISIBLES = frozenset({"Aprobada", "Observada"})
 
 _ESTADO_CONTRACTO = {
-    estado_db: EstadoOrden(contrato)
-    for contrato, estado_db in _ESTADO_ORDEN_DB.items()
+    estado_db: EstadoOrden(contrato) for contrato, estado_db in _ESTADO_ORDEN_DB.items()
 }
 
 
@@ -567,9 +566,7 @@ class Repositorio:
         if evento_id is None:
             raise ValueError("La orden tiene que referenciar el evento que la originó")
         reglas_json = json.dumps(reglas or {}, ensure_ascii=False)
-        detalles = {
-            str(detalle.get("codigo")): detalle for detalle in (repuestos or [])
-        }
+        detalles = {str(detalle.get("codigo")): detalle for detalle in (repuestos or [])}
         with self._engine.begin() as conexion:
             # El bloqueo serializa dos reprocesos de la misma orden.  Si la
             # orden ya está en un estado del flujo humano, el reproceso sólo
@@ -593,9 +590,7 @@ class Repositorio:
                 ),
                 {"id": orden.id},
             ).scalar_one()
-            preservar = (
-                estado_previo in _ESTADOS_ORDEN_PROTEGIDOS or bool(decision_humana)
-            )
+            preservar = estado_previo in _ESTADOS_ORDEN_PROTEGIDOS or bool(decision_humana)
             estado_efectivo = estado_previo if preservar else estado_db
 
             conexion.execute(
@@ -818,9 +813,10 @@ class Repositorio:
     ) -> tuple[str, str]:
         """Inserta un manifiesto sin permitir que una repeticion lo cambie."""
         serializado = json.dumps(contenido, ensure_ascii=False, default=str)
-        fila = conexion.execute(
-            text(
-                """
+        fila = (
+            conexion.execute(
+                text(
+                    """
                 INSERT INTO manifiesto_evidencia (
                     tipo, referencia_id, evento_id, orden_id, parte_id,
                     contenido, hash_sha256, correlation_id
@@ -836,27 +832,34 @@ class Repositorio:
                 ON CONFLICT (tipo, referencia_id) DO NOTHING
                 RETURNING id, hash_sha256
                 """
-            ),
-            {
-                "tipo": tipo,
-                "referencia": referencia_id,
-                "evento": evento_id,
-                "orden": orden_id,
-                "parte": parte_id,
-                "contenido": serializado,
-                "correlation_id": correlation_id,
-            },
-        ).mappings().first()
+                ),
+                {
+                    "tipo": tipo,
+                    "referencia": referencia_id,
+                    "evento": evento_id,
+                    "orden": orden_id,
+                    "parte": parte_id,
+                    "contenido": serializado,
+                    "correlation_id": correlation_id,
+                },
+            )
+            .mappings()
+            .first()
+        )
         if fila is None:
-            fila = conexion.execute(
-                text(
-                    """
+            fila = (
+                conexion.execute(
+                    text(
+                        """
                     SELECT id, hash_sha256 FROM manifiesto_evidencia
                     WHERE tipo = :tipo AND referencia_id = :referencia
                     """
-                ),
-                {"tipo": tipo, "referencia": referencia_id},
-            ).mappings().one()
+                    ),
+                    {"tipo": tipo, "referencia": referencia_id},
+                )
+                .mappings()
+                .one()
+            )
         return str(fila["id"]), str(fila["hash_sha256"])
 
     def _insertar_ledger(
@@ -976,27 +979,35 @@ class Repositorio:
                 },
             )
             if resultado.rowcount:
-                orden = conexion.execute(
-                    text(
-                        """
+                orden = (
+                    conexion.execute(
+                        text(
+                            """
                         SELECT evento_id, equipo, estado::text AS estado
                         FROM orden WHERE id = :id
                         """
-                    ),
-                    {"id": orden_id},
-                ).mappings().one()
-                pasos = conexion.execute(
-                    text(
-                        """
+                        ),
+                        {"id": orden_id},
+                    )
+                    .mappings()
+                    .one()
+                )
+                pasos = (
+                    conexion.execute(
+                        text(
+                            """
                         SELECT modelo, herramienta, tokens_prompt,
                                tokens_completion, costo_usd, segundos
                         FROM registro_trayectoria
                         WHERE orden_id = :orden
                         ORDER BY ts, paso
                         """
-                    ),
-                    {"orden": orden_id},
-                ).mappings().all()
+                        ),
+                        {"orden": orden_id},
+                    )
+                    .mappings()
+                    .all()
+                )
                 modelos = {
                     str(paso["modelo"])
                     for paso in pasos
@@ -1005,16 +1016,10 @@ class Repositorio:
                 if modelo:
                     modelos.add(modelo)
                 herramientas = sorted(
-                    {
-                        str(paso["herramienta"])
-                        for paso in pasos
-                        if paso["herramienta"]
-                    }
+                    {str(paso["herramienta"]) for paso in pasos if paso["herramienta"]}
                 )
                 tokens_prompt = sum(int(paso["tokens_prompt"] or 0) for paso in pasos)
-                tokens_completion = sum(
-                    int(paso["tokens_completion"] or 0) for paso in pasos
-                )
+                tokens_completion = sum(int(paso["tokens_completion"] or 0) for paso in pasos)
                 costo_usd = sum(float(paso["costo_usd"] or 0.0) for paso in pasos)
                 segundos = sum(float(paso["segundos"] or 0.0) for paso in pasos)
                 digest = hashlib.sha256(redaccion.encode("utf-8")).hexdigest()[:16]
@@ -1128,18 +1133,22 @@ class Repositorio:
         orden_id: str,
     ) -> dict[str, Any] | None:
         """Habilita vigente de una orden, si ya fue certificado."""
-        fila = conexion.execute(
-            text(
-                """
+        fila = (
+            conexion.execute(
+                text(
+                    """
                 SELECT numero, monto
                 FROM habilitacion
                 WHERE orden_id = :orden_id
                 ORDER BY emitida_en, id
                 LIMIT 1
                 """
-            ),
-            {"orden_id": orden_id},
-        ).mappings().first()
+                ),
+                {"orden_id": orden_id},
+            )
+            .mappings()
+            .first()
+        )
         if fila is None:
             return None
         return {"numero": str(fila["numero"]), "monto": float(fila["monto"])}
@@ -1177,10 +1186,14 @@ class Repositorio:
             # y se vuelve a consultar: ese segundo control cubre dos cierres
             # iguales que llegan al mismo tiempo sin esperar un lock adicional
             # sobre PostgreSQL.
-            existente = conexion.execute(
-                text("SELECT id, orden_id FROM cierre WHERE externa_id = :externa_id"),
-                {"externa_id": cierre_id},
-            ).mappings().first()
+            existente = (
+                conexion.execute(
+                    text("SELECT id, orden_id FROM cierre WHERE externa_id = :externa_id"),
+                    {"externa_id": cierre_id},
+                )
+                .mappings()
+                .first()
+            )
             if existente is not None:
                 if existente["orden_id"] != orden_id:
                     raise ConflictoEstado(
@@ -1190,9 +1203,7 @@ class Repositorio:
                 return {
                     "cierre_id": str(existente["id"]),
                     "nuevo": False,
-                    "habilita": (
-                        habilitacion["numero"] if habilitacion is not None else None
-                    ),
+                    "habilita": (habilitacion["numero"] if habilitacion is not None else None),
                     "monto_habilita_usd": (
                         habilitacion["monto"] if habilitacion is not None else None
                     ),
@@ -1208,10 +1219,14 @@ class Repositorio:
             if estado_actual is None:
                 raise ValueError(f"La orden no existe: {orden_id}")
 
-            existente = conexion.execute(
-                text("SELECT id, orden_id FROM cierre WHERE externa_id = :externa_id"),
-                {"externa_id": cierre_id},
-            ).mappings().first()
+            existente = (
+                conexion.execute(
+                    text("SELECT id, orden_id FROM cierre WHERE externa_id = :externa_id"),
+                    {"externa_id": cierre_id},
+                )
+                .mappings()
+                .first()
+            )
             if existente is not None:
                 if existente["orden_id"] != orden_id:
                     raise ConflictoEstado(
@@ -1221,9 +1236,7 @@ class Repositorio:
                 return {
                     "cierre_id": str(existente["id"]),
                     "nuevo": False,
-                    "habilita": (
-                        habilitacion["numero"] if habilitacion is not None else None
-                    ),
+                    "habilita": (habilitacion["numero"] if habilitacion is not None else None),
                     "monto_habilita_usd": (
                         habilitacion["monto"] if habilitacion is not None else None
                     ),
@@ -1231,8 +1244,7 @@ class Repositorio:
 
             if estado_actual in {"Cerrada", "Certificada"}:
                 raise ConflictoEstado(
-                    f"La orden {orden_id} ya tiene una decisión de cierre "
-                    "y no admite otro cierre"
+                    f"La orden {orden_id} ya tiene una decisión de cierre y no admite otro cierre"
                 )
             if estado_actual not in _ESTADOS_ORDEN_CIERRE_ADMISIBLES:
                 raise ConflictoEstado(
@@ -1241,9 +1253,10 @@ class Repositorio:
 
             aclara_cierre_id: str | None = None
             if estado_actual == "Observada":
-                observaciones = conexion.execute(
-                    text(
-                        """
+                observaciones = (
+                    conexion.execute(
+                        text(
+                            """
                         SELECT c.id
                         FROM cierre c
                         JOIN decision_cierre d ON d.cierre_id = c.id
@@ -1256,9 +1269,12 @@ class Repositorio:
                         ORDER BY c.creado_en DESC, c.id DESC
                         FOR UPDATE OF c
                         """
-                    ),
-                    {"orden_id": orden_id},
-                ).scalars().all()
+                        ),
+                        {"orden_id": orden_id},
+                    )
+                    .scalars()
+                    .all()
+                )
                 if len(observaciones) != 1:
                     raise ConflictoEstado(
                         f"La orden {orden_id} no tiene una observación pendiente de aclaración"
@@ -1297,10 +1313,14 @@ class Repositorio:
                 },
             ).scalar_one_or_none()
             if id_cierre is None:
-                existente = conexion.execute(
-                    text("SELECT id, orden_id FROM cierre WHERE externa_id = :externa_id"),
-                    {"externa_id": cierre_id},
-                ).mappings().one()
+                existente = (
+                    conexion.execute(
+                        text("SELECT id, orden_id FROM cierre WHERE externa_id = :externa_id"),
+                        {"externa_id": cierre_id},
+                    )
+                    .mappings()
+                    .one()
+                )
                 if existente["orden_id"] != orden_id:
                     raise ConflictoEstado(
                         f"El identificador de cierre {cierre_id} ya pertenece a otra orden"
@@ -1309,9 +1329,7 @@ class Repositorio:
                 return {
                     "cierre_id": str(existente["id"]),
                     "nuevo": False,
-                    "habilita": (
-                        habilitacion["numero"] if habilitacion is not None else None
-                    ),
+                    "habilita": (habilitacion["numero"] if habilitacion is not None else None),
                     "monto_habilita_usd": (
                         habilitacion["monto"] if habilitacion is not None else None
                     ),
@@ -1342,14 +1360,18 @@ class Repositorio:
                     raise ValueError(
                         f"La orden {orden_id} cambió de estado mientras se registraba el cierre"
                     )
-                orden = conexion.execute(
-                    text(
-                        """
+                orden = (
+                    conexion.execute(
+                        text(
+                            """
                         SELECT evento_id, equipo FROM orden WHERE id = :id
                         """
-                    ),
-                    {"id": orden_id},
-                ).mappings().one()
+                        ),
+                        {"id": orden_id},
+                    )
+                    .mappings()
+                    .one()
+                )
                 contenido_manifiesto = manifiesto_de_cierre(
                     evento_id=str(orden["evento_id"]),
                     orden_id=orden_id,
@@ -1677,14 +1699,10 @@ class Repositorio:
                 if rol != "supervisor":
                     raise AutorizacionInvalida("Sólo el supervisor puede cerrar el trabajo")
                 if ejecutor != "propio":
-                    raise AutorizacionInvalida(
-                        "El supervisor sólo puede cerrar trabajo propio"
-                    )
+                    raise AutorizacionInvalida("El supervisor sólo puede cerrar trabajo propio")
             else:
                 if rol != "inspector":
-                    raise AutorizacionInvalida(
-                        "Sólo el inspector puede certificar u observar"
-                    )
+                    raise AutorizacionInvalida("Sólo el inspector puede certificar u observar")
                 if ejecutor == "propio":
                     raise AutorizacionInvalida(
                         "El inspector sólo puede certificar u observar trabajo de contratista"
@@ -1730,9 +1748,7 @@ class Repositorio:
                     "decision": dict(existente),
                     "orden": orden,
                     "habilita": habilitacion["numero"] if habilitacion else None,
-                    "monto_habilita_usd": (
-                        float(habilitacion["monto"]) if habilitacion else None
-                    ),
+                    "monto_habilita_usd": (float(habilitacion["monto"]) if habilitacion else None),
                 }
 
             if fila["estado"] != "Ejecutada":
@@ -1890,24 +1906,24 @@ class Repositorio:
                 {"estado": estado, "motivo": motivo_final, "id": orden_id},
             )
 
-            manifiesto_cierre = conexion.execute(
-                text(
-                    """
+            manifiesto_cierre = (
+                conexion.execute(
+                    text(
+                        """
                     SELECT id, hash_sha256, contenido
                     FROM manifiesto_evidencia
                     WHERE tipo = 'cierre' AND referencia_id = :referencia
                     """
-                ),
-                {"referencia": cierre_referencia},
-            ).mappings().first()
+                    ),
+                    {"referencia": cierre_referencia},
+                )
+                .mappings()
+                .first()
+            )
             contenido_cierre = (
-                dict(manifiesto_cierre["contenido"])
-                if manifiesto_cierre is not None
-                else {}
+                dict(manifiesto_cierre["contenido"]) if manifiesto_cierre is not None else {}
             )
-            evidencia_cierre = dict(
-                contenido_cierre.get("evidencia_cierre") or evidencia
-            )
+            evidencia_cierre = dict(contenido_cierre.get("evidencia_cierre") or evidencia)
             contenido_decision = manifiesto_de_decision_cierre(
                 evento_id=str(fila["evento_id"]),
                 orden_id=orden_id,
@@ -1940,9 +1956,7 @@ class Repositorio:
                     "manifiesto_id": manifiesto_id,
                     "hash_sha256": hash_manifiesto,
                     "cierre_manifiesto_id": (
-                        str(manifiesto_cierre["id"])
-                        if manifiesto_cierre is not None
-                        else None
+                        str(manifiesto_cierre["id"]) if manifiesto_cierre is not None else None
                     ),
                 },
                 reglas=reglas,
@@ -2230,16 +2244,20 @@ class Repositorio:
                 ),
                 {"orden": orden_id},
             ).scalar_one()
-            manifiesto = conexion.execute(
-                text(
-                    """
+            manifiesto = (
+                conexion.execute(
+                    text(
+                        """
                     SELECT id, hash_sha256 FROM manifiesto_evidencia
                     WHERE orden_id = :orden AND tipo = 'orden'
                     ORDER BY creado_en DESC, id DESC LIMIT 1
                     """
-                ),
-                {"orden": orden_id},
-            ).mappings().first()
+                    ),
+                    {"orden": orden_id},
+                )
+                .mappings()
+                .first()
+            )
             self._insertar_ledger(
                 conexion,
                 tipo="aprobacion",
@@ -2264,9 +2282,7 @@ class Repositorio:
                 rol=rol,
                 estado=estado,
                 datos={"decision": decision, "motivo": motivo},
-                idempotencia=(
-                    f"aprobacion:{orden_id}:{decision}:{usuario or 'sin_usuario'}"
-                ),
+                idempotencia=(f"aprobacion:{orden_id}:{decision}:{usuario or 'sin_usuario'}"),
             )
         return dict(fila)
 
@@ -2443,9 +2459,7 @@ class Repositorio:
                 if id_outbox is not None:
                     break
             if id_outbox is None:
-                raise RuntimeError(
-                    f"No se pudo encolar el mensaje {payload.get('id', '')!r}"
-                )
+                raise RuntimeError(f"No se pudo encolar el mensaje {payload.get('id', '')!r}")
             # El registro de idempotencia deja escrito qué mensaje se
             # encoló y en qué fila: así no se encola dos veces y se puede
             # auditar qué salió de la planta.
@@ -2466,9 +2480,7 @@ class Repositorio:
             )
         return str(id_outbox)
 
-    def pendientes_outbox(
-        self, limite: int = 50
-    ) -> list[tuple[str, str, str, dict[str, Any]]]:
+    def pendientes_outbox(self, limite: int = 50) -> list[tuple[str, str, str, dict[str, Any]]]:
         """Mensajes en cola, en el orden en que se encolaron.
 
         Cada fila trae ``(id, tipo, topico, payload)``: el tipo dice qué

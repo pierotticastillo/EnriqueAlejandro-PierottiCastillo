@@ -360,11 +360,7 @@ def _tareas_del_texto(texto: str, catalogo: CatalogoManuales) -> tuple[str, ...]
         objetivo = _tokens(tarea.nombre)
         if not objetivo:
             continue
-        encontrados = {
-            token
-            for token in objetivo
-            if token in formas or _singular(token) in formas
-        }
+        encontrados = {token for token in objetivo if token in formas or _singular(token) in formas}
         if not encontrados:
             continue
         puntuacion = len(encontrados) / len(objetivo)
@@ -475,11 +471,7 @@ def _repuestos_parciales(
     dice "cartucho filtrante 25", es el de 25 y no el de 10.
     """
     formas_texto = _formas(_tokens(texto))
-    ocupados = {
-        token
-        for repuesto in ya_encontrados
-        for token in _tokens(repuesto.nombre or "")
-    }
+    ocupados = {token for repuesto in ya_encontrados for token in _tokens(repuesto.nombre or "")}
     candidatos: list[tuple[float, str, str, set[str], list[list[str]]]] = []
     for codigo, nombre, _tokens_nombre, variantes in _materiales(catalogo):
         if any(repuesto.codigo == codigo for repuesto in ya_encontrados):
@@ -774,7 +766,7 @@ def _misma_cantidad(reservada: float, declarada: float) -> bool:
 
 def _nombre_repuesto(catalogo: CatalogoManuales, codigo: str) -> str:
     repuesto = catalogo.repuestos.get(codigo)
-    return (repuesto.nombre if repuesto and repuesto.nombre else codigo)
+    return repuesto.nombre if repuesto and repuesto.nombre else codigo
 
 
 def _comparar_horas(
@@ -835,9 +827,7 @@ def monto_de_la_orden(
     for codigo in orden.tareas:
         precio = precios.de_tarea(codigo)
         if precio is None:
-            raise MontoContractualInvalido(
-                f"Falta el precio contractual de la tarea {codigo}"
-            )
+            raise MontoContractualInvalido(f"Falta el precio contractual de la tarea {codigo}")
         if not math.isfinite(precio.precio_usd) or precio.precio_usd <= 0:
             raise MontoContractualInvalido(
                 f"El precio contractual de {codigo} no es positivo y finito"
@@ -904,9 +894,7 @@ def validar_decision_cierre(
         if rol_normalizado != "inspector":
             raise ValueError("Sólo el inspector puede certificar u observar")
         if ejecutor_normalizado == "propio":
-            raise ValueError(
-                "El inspector sólo puede certificar u observar trabajo de contratista"
-            )
+            raise ValueError("El inspector sólo puede certificar u observar trabajo de contratista")
         if accion == "observar" and not motivo_normalizado:
             raise ValueError("La observación necesita un motivo")
         return DecisionCierreHumano(

@@ -108,10 +108,14 @@ def test_el_mensaje_encolado_guarda_su_topico(engine, repositorio) -> None:
     id_outbox = repositorio.encolar_outbox("radio", _mensaje("radio-1"), "sistema/tablet")
 
     with engine.connect() as conexion:
-        fila = conexion.execute(
-            text("SELECT tipo, topico, estado FROM outbox_cola WHERE id = :id"),
-            {"id": id_outbox},
-        ).mappings().one()
+        fila = (
+            conexion.execute(
+                text("SELECT tipo, topico, estado FROM outbox_cola WHERE id = :id"),
+                {"id": id_outbox},
+            )
+            .mappings()
+            .one()
+        )
     assert fila["tipo"] == "radio"
     assert fila["topico"] == "sistema/tablet"
     assert fila["estado"] == "pendiente"
@@ -147,12 +151,16 @@ def test_un_mensaje_ya_enviado_puede_volver_a_encolarse(engine, repositorio) -> 
 
     assert segundo != primero
     with engine.connect() as conexion:
-        filas = conexion.execute(
-            text(
-                "SELECT estado FROM outbox_cola WHERE payload ->> 'id' = 'parte:N1:A1' "
-                "ORDER BY creado_en, id"
+        filas = (
+            conexion.execute(
+                text(
+                    "SELECT estado FROM outbox_cola WHERE payload ->> 'id' = 'parte:N1:A1' "
+                    "ORDER BY creado_en, id"
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert filas == ["enviado", "pendiente"]
     # Y el pendiente vuelve a salir, una sola vez.
     pendientes = repositorio.pendientes_outbox()
@@ -166,10 +174,14 @@ def test_queda_escrito_que_se_encolo(engine, repositorio) -> None:
     id_outbox = repositorio.encolar_outbox("orden", {"id": "ORD-1"}, "sistema/ordenes")
 
     with engine.connect() as conexion:
-        fila = conexion.execute(
-            text("SELECT tipo, referencia_id FROM idempotency_key WHERE clave = :clave"),
-            {"clave": "outbox:orden:ORD-1"},
-        ).mappings().one()
+        fila = (
+            conexion.execute(
+                text("SELECT tipo, referencia_id FROM idempotency_key WHERE clave = :clave"),
+                {"clave": "outbox:orden:ORD-1"},
+            )
+            .mappings()
+            .one()
+        )
     assert fila["tipo"] == "orden"
     assert fila["referencia_id"] == id_outbox
 
@@ -178,9 +190,7 @@ def test_los_pendientes_salen_en_orden(engine, repositorio) -> None:
     _limpiar(engine)
 
     for numero in range(3):
-        repositorio.encolar_outbox(
-            "evento", {"id": f"parte:N1:A{numero}"}, "sistema/eventos"
-        )
+        repositorio.encolar_outbox("evento", {"id": f"parte:N1:A{numero}"}, "sistema/eventos")
 
     pendientes = repositorio.pendientes_outbox()
 
@@ -215,10 +225,14 @@ def test_un_mensaje_con_error_sigue_pendiente_pero_espera(engine, repositorio) -
     repositorio.marcar_outbox_error(id_outbox)
 
     with engine.connect() as conexion:
-        fila = conexion.execute(
-            text("SELECT estado, intentos, proximo_intento FROM outbox_cola WHERE id = :id"),
-            {"id": id_outbox},
-        ).mappings().one()
+        fila = (
+            conexion.execute(
+                text("SELECT estado, intentos, proximo_intento FROM outbox_cola WHERE id = :id"),
+                {"id": id_outbox},
+            )
+            .mappings()
+            .one()
+        )
     assert fila["estado"] == "pendiente"
     assert fila["intentos"] == 1
     assert fila["proximo_intento"] is not None
@@ -257,13 +271,17 @@ def test_una_orden_pendiente_actualiza_el_payload_sin_duplicarse(
 
         assert primero == segundo
         with engine.connect() as conexion:
-            filas = conexion.execute(
-                text(
-                    "SELECT payload FROM outbox_cola "
-                    "WHERE tipo = 'orden' AND payload ->> 'id' = :id"
-                ),
-                {"id": orden.id},
-            ).mappings().all()
+            filas = (
+                conexion.execute(
+                    text(
+                        "SELECT payload FROM outbox_cola "
+                        "WHERE tipo = 'orden' AND payload ->> 'id' = :id"
+                    ),
+                    {"id": orden.id},
+                )
+                .mappings()
+                .all()
+            )
         assert len(filas) == 1
         assert filas[0]["payload"]["estado"] == "Aprobada"
         assert filas[0]["payload"]["tareas"] == ["T-B-VAL"]
@@ -292,10 +310,7 @@ def test_una_orden_pendiente_se_relee_con_el_estado_vigente(
         )
         with engine.begin() as conexion:
             conexion.execute(
-                text(
-                    "UPDATE orden SET estado = CAST('Aprobada' AS estado_orden) "
-                    "WHERE id = :id"
-                ),
+                text("UPDATE orden SET estado = CAST('Aprobada' AS estado_orden) WHERE id = :id"),
                 {"id": orden.id},
             )
 

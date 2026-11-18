@@ -225,9 +225,7 @@ def test_corpus_archivos_lee_la_copia_local(tmp_path: Path) -> None:
                         "revision": "4",
                         "vigente": True,
                         "equipos": ["B-101"],
-                        "secciones": [
-                            {"numero": "10.2", "titulo": "Pérdida", "pagina": 31}
-                        ],
+                        "secciones": [{"numero": "10.2", "titulo": "Pérdida", "pagina": 31}],
                     }
                 ]
             },

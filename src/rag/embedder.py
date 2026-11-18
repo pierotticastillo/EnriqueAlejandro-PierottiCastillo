@@ -135,7 +135,7 @@ def _caracteristicas(texto: str) -> dict[str, float]:
         if len(termino) > 3:
             relleno = f"#{termino}#"
             for indice in range(len(relleno) - 3):
-                pesos[f"c:{relleno[indice:indice + 4]}"] += 0.35
+                pesos[f"c:{relleno[indice : indice + 4]}"] += 0.35
     for primero, segundo in zip(terminos, terminos[1:], strict=False):
         pesos[f"b:{primero}_{segundo}"] += 0.6
     return {caracteristica: 1.0 + math.log(cantidad) for caracteristica, cantidad in pesos.items()}

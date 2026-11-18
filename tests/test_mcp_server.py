@@ -38,8 +38,7 @@ class ClienteFalso:
                     "titulo": "Tareas estándar",
                     "vigente": True,
                     "texto": (
-                        "T-B-EMP | Cambio de empaquetadura | B-101 | Sí | 4 | "
-                        "propio | - | USD 0"
+                        "T-B-EMP | Cambio de empaquetadura | B-101 | Sí | 4 | propio | - | USD 0"
                     ),
                 }
             ]

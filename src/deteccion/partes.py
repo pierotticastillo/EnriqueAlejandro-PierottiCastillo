@@ -101,10 +101,7 @@ def clasificar_partes(
             resumen += f" [{_contexto(filas_tag, fotos)}]"
             tipo = TipoEvento.escalado
         else:
-            resumen = (
-                f"{tag}: parte confirmado sin desvíos detectados "
-                f"({len(filas_tag)} fila(s))."
-            )
+            resumen = f"{tag}: parte confirmado sin desvíos detectados ({len(filas_tag)} fila(s))."
             tipo = TipoEvento.sin_novedad
         eventos.append(
             EventoSistema(

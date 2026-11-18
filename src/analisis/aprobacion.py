@@ -73,9 +73,7 @@ def _regla_tarea_estandar(borrador: BorradorOrden, contexto: Contexto) -> Regla:
             codigo="tarea_estandar",
             nombre="Tarea estándar",
             cumple=False,
-            detalle=(
-                f"{', '.join(no_estandar)} no es una tarea estándar de {borrador.equipo}"
-            ),
+            detalle=(f"{', '.join(no_estandar)} no es una tarea estándar de {borrador.equipo}"),
         )
     return Regla(
         codigo="tarea_estandar",
@@ -167,8 +165,7 @@ def _regla_costo(borrador: BorradorOrden, contexto: Contexto) -> Regla:
             nombre="Costo dentro del tope",
             cumple=False,
             detalle=(
-                f"costo USD {borrador.costo_usd:,.0f} "
-                f"(tope USD {contexto.costo_max_usd:,.0f})"
+                f"costo USD {borrador.costo_usd:,.0f} (tope USD {contexto.costo_max_usd:,.0f})"
             ),
         )
     return Regla(

@@ -481,9 +481,7 @@ class _Handler(BaseHTTPRequestHandler):
         ):
             orden_id = unquote(partes[3])
             evidencia = self.central.evidencia(orden_id)
-            codigo = int(
-                evidencia.get("codigo") or (503 if evidencia.get("ok") is False else 200)
-            )
+            codigo = int(evidencia.get("codigo") or (503 if evidencia.get("ok") is False else 200))
             self._responder_json(codigo, evidencia)
         else:
             self._responder_json(404, {"error": "No encontrado"})
@@ -500,11 +498,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         # ``usuario`` y ``rol`` se toleran para clientes antiguos, pero se
         # ignoran: la identidad viene exclusivamente del token autenticado.
-        cuerpo = {
-            clave: valor
-            for clave, valor in datos.items()
-            if clave not in {"usuario", "rol"}
-        }
+        cuerpo = {clave: valor for clave, valor in datos.items() if clave not in {"usuario", "rol"}}
         unknown = set(cuerpo) - {"decision", "motivo"}
         if unknown:
             self._responder_json(
@@ -566,9 +560,7 @@ class _Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------ salida
 
     def _autenticar(self) -> Actor | None:
-        actor = self.central.autenticador.autenticar(
-            self.headers.get_all("Authorization") or []
-        )
+        actor = self.central.autenticador.autenticar(self.headers.get_all("Authorization") or [])
         if actor is None:
             self._responder_json(
                 401,

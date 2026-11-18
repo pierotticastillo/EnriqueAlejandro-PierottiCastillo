@@ -168,8 +168,6 @@ def precargar_modelo(
     )
     precargar = getattr(transcriptor, "precargar", None)
     if not callable(precargar):
-        raise ErrorTranscripcion(
-            f"El motor {motor!r} no permite precargar el modelo {modelo!r}"
-        )
+        raise ErrorTranscripcion(f"El motor {motor!r} no permite precargar el modelo {modelo!r}")
     precargar()
     return transcriptor

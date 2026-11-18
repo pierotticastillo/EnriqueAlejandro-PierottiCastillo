@@ -135,8 +135,7 @@ class RecuperadorPgvector:
         try:
             with self._engine.connect() as conexion:
                 return {
-                    str(fila[0]): float(fila[1])
-                    for fila in conexion.execute(consulta, parametros)
+                    str(fila[0]): float(fila[1]) for fila in conexion.execute(consulta, parametros)
                 }
         except Exception as exc:  # noqa: BLE001 - pgvector puede no estar instalado
             logger.warning("Fallo la búsqueda densa: %s", exc)
@@ -158,8 +157,7 @@ class RecuperadorPgvector:
         candidatos = [
             (filas[posicion][0], puntajes[posicion])
             for posicion in range(len(filas))
-            if (documento is None or filas[posicion][1] == documento)
-            and puntajes[posicion] > 0
+            if (documento is None or filas[posicion][1] == documento) and puntajes[posicion] > 0
         ]
         candidatos.sort(key=lambda item: (-item[1], item[0]))
         return dict(candidatos[: self._candidatos])

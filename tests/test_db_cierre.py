@@ -122,9 +122,7 @@ def _registrar(repositorio: Repositorio, orden: OrdenSistema, **datos):
 # ------------------------------------------------------------------- los tests
 
 
-def test_el_cierre_automatico_se_guarda_y_espera_decision_humana(
-    repositorio, engine
-) -> None:
+def test_el_cierre_automatico_se_guarda_y_espera_decision_humana(repositorio, engine) -> None:
     with engine.begin() as conexion:
         evento_id = _evento(conexion)
     orden = _orden(evento_id)
@@ -151,9 +149,7 @@ def test_el_cierre_automatico_se_guarda_y_espera_decision_humana(
                 {"id": orden.id},
             ).fetchall()
             certificaciones = conexion.execute(
-                text(
-                    "SELECT count(*) FROM certificacion WHERE orden_id = :id"
-                ),
+                text("SELECT count(*) FROM certificacion WHERE orden_id = :id"),
                 {"id": orden.id},
             ).scalar()
             orden_fila = conexion.execute(
@@ -172,9 +168,7 @@ def test_el_cierre_automatico_se_guarda_y_espera_decision_humana(
         _limpiar(engine, [orden.id], evento_id)
 
 
-def test_el_supervisor_cierra_el_trabajo_propio_sin_certificarlo(
-    repositorio, engine
-) -> None:
+def test_el_supervisor_cierra_el_trabajo_propio_sin_certificarlo(repositorio, engine) -> None:
     with engine.begin() as conexion:
         evento_id = _evento(conexion)
     orden = _orden(evento_id)
@@ -201,13 +195,17 @@ def test_el_supervisor_cierra_el_trabajo_propio_sin_certificarlo(
                 text("SELECT count(*) FROM habilitacion WHERE orden_id = :id"),
                 {"id": orden.id},
             ).scalar()
-            decision = conexion.execute(
-                text(
-                    "SELECT decision, actor, rol, motivo "
-                    "FROM decision_cierre WHERE orden_id = :id"
-                ),
-                {"id": orden.id},
-            ).mappings().one()
+            decision = (
+                conexion.execute(
+                    text(
+                        "SELECT decision, actor, rol, motivo "
+                        "FROM decision_cierre WHERE orden_id = :id"
+                    ),
+                    {"id": orden.id},
+                )
+                .mappings()
+                .one()
+            )
         assert certificaciones == 0
         assert habilitaciones == 0
         assert decision["decision"] == "cerrar"
@@ -218,9 +216,7 @@ def test_el_supervisor_cierra_el_trabajo_propio_sin_certificarlo(
         _limpiar(engine, [orden.id], evento_id)
 
 
-def test_el_habilita_se_emite_solo_tras_certificar_con_numero_y_monto(
-    repositorio, engine
-) -> None:
+def test_el_habilita_se_emite_solo_tras_certificar_con_numero_y_monto(repositorio, engine) -> None:
     with engine.begin() as conexion:
         evento_id = _evento(conexion)
     orden = _orden(evento_id, ejecutor="Servipat")
@@ -285,9 +281,7 @@ def test_el_cierre_que_vuelve_no_se_duplica(repositorio, engine) -> None:
         assert repetido["orden"] == resultado["orden"]
         assert repetido["orden"]["equipo"] == "F-201A"
         assert repetido["orden"]["tareas"] == ["T-F-CAR"]
-        assert [repuesto["codigo"] for repuesto in repetido["orden"]["repuestos"]] == [
-            "FC-CART-25"
-        ]
+        assert [repuesto["codigo"] for repuesto in repetido["orden"]["repuestos"]] == ["FC-CART-25"]
         assert repetido["orden"]["ejecutor"] == "Servipat"
         assert repetido["orden"]["estado"] == "Certificada"
         with engine.connect() as conexion:
@@ -330,18 +324,14 @@ def test_los_numeros_de_habilita_no_se_repiten(repositorio, engine) -> None:
                 rol="inspector",
                 monto_usd=1150.0,
             )
-        numeros = [
-            repositorio.obtener_habilitacion(orden.id)["numero"] for orden in ordenes
-        ]
+        numeros = [repositorio.obtener_habilitacion(orden.id)["numero"] for orden in ordenes]
         assert numeros[0] != numeros[1]
         assert all(numero.startswith("HAB-2026-") for numero in numeros)
     finally:
         _limpiar(engine, [orden.id for orden in ordenes], evento_id)
 
 
-def test_observar_una_contratista_exige_motivo_y_no_emite_habilita(
-    repositorio, engine
-) -> None:
+def test_observar_una_contratista_exige_motivo_y_no_emite_habilita(repositorio, engine) -> None:
     with engine.begin() as conexion:
         evento_id = _evento(conexion)
     orden = _orden(evento_id, ejecutor="Servipat")
@@ -451,11 +441,14 @@ def test_reprocesar_una_orden_con_decision_no_degrada_estado_ni_contenido(
         )
 
         guardada = repositorio.obtener_orden_completa(orden.id)
-        assert guardada["estado"] == {
-            "cerrar": "Cerrada",
-            "observar": "Observada",
-            "certificar": "Certificada",
-        }[decision]
+        assert (
+            guardada["estado"]
+            == {
+                "cerrar": "Cerrada",
+                "observar": "Observada",
+                "certificar": "Certificada",
+            }[decision]
+        )
         assert float(repositorio.obtener_orden(orden.id)["costo_estimado"]) == 1150.0
         assert guardada["tareas"] == ["T-F-CAR"]
         assert [repuesto["codigo"] for repuesto in guardada["repuestos"]] == ["FC-CART-25"]
@@ -583,10 +576,7 @@ def test_decision_cierre_es_append_only_para_update_delete_y_truncate(
         with pytest.raises(DBAPIError, match="append-only"):
             with engine.begin() as conexion:
                 conexion.execute(
-                    text(
-                        "UPDATE decision_cierre SET actor = 'alterado' "
-                        "WHERE orden_id = :id"
-                    ),
+                    text("UPDATE decision_cierre SET actor = 'alterado' WHERE orden_id = :id"),
                     {"id": orden.id},
                 )
         with pytest.raises(DBAPIError, match="append-only"):
@@ -597,9 +587,7 @@ def test_decision_cierre_es_append_only_para_update_delete_y_truncate(
                 )
         with pytest.raises(DBAPIError, match="append-only"):
             with engine.begin() as conexion:
-                conexion.execute(
-                    text("TRUNCATE TABLE decision_cierre, habilitacion")
-                )
+                conexion.execute(text("TRUNCATE TABLE decision_cierre, habilitacion"))
     finally:
         _limpiar(engine, [orden.id], evento_id)
 
@@ -647,9 +635,10 @@ def test_no_se_puede_emitir_un_segundo_habilita_para_la_misma_orden(
         )
 
         with engine.connect() as conexion:
-            enlaces = conexion.execute(
-                text(
-                    """
+            enlaces = (
+                conexion.execute(
+                    text(
+                        """
                     SELECT d.id AS decision_id, c.id AS certificacion_id
                     FROM decision_cierre d
                     JOIN certificacion c
@@ -657,9 +646,12 @@ def test_no_se_puede_emitir_un_segundo_habilita_para_la_misma_orden(
                      AND c.decision = 'certifica'
                     WHERE d.orden_id = :id
                     """
-                ),
-                {"id": orden.id},
-            ).mappings().one()
+                    ),
+                    {"id": orden.id},
+                )
+                .mappings()
+                .one()
+            )
         with pytest.raises(IntegrityError):
             with engine.begin() as conexion:
                 conexion.execute(
@@ -845,8 +837,7 @@ def test_postgresql_rechaza_una_transicion_invalida_de_orden(
             with engine.begin() as conexion:
                 conexion.execute(
                     text(
-                        "UPDATE orden SET estado = CAST('Cerrada' AS estado_orden) "
-                        "WHERE id = :id"
+                        "UPDATE orden SET estado = CAST('Cerrada' AS estado_orden) WHERE id = :id"
                     ),
                     {"id": orden.id},
                 )
@@ -883,10 +874,7 @@ def test_postgresql_protege_el_contenido_de_una_orden_certificada(
         with pytest.raises(DBAPIError, match="ya decidida"):
             with engine.begin() as conexion:
                 conexion.execute(
-                    text(
-                        "UPDATE orden_tarea SET tarea_id = 'T-ALTERADA' "
-                        "WHERE orden_id = :id"
-                    ),
+                    text("UPDATE orden_tarea SET tarea_id = 'T-ALTERADA' WHERE orden_id = :id"),
                     {"id": orden.id},
                 )
 
@@ -1117,10 +1105,7 @@ def test_habilitacion_es_append_only_para_update_delete_y_truncate(
         with pytest.raises(DBAPIError, match="append-only"):
             with engine.begin() as conexion:
                 conexion.execute(
-                    text(
-                        "UPDATE habilitacion SET monto = 999999 "
-                        "WHERE orden_id = :id"
-                    ),
+                    text("UPDATE habilitacion SET monto = 999999 WHERE orden_id = :id"),
                     {"id": orden.id},
                 )
         with pytest.raises(DBAPIError, match="append-only"):

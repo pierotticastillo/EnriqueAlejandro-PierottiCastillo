@@ -123,7 +123,7 @@ def test_la_observacion_que_sale_del_texto_no_se_toca_al_corregir(planta: dict) 
 
 
 def test_una_correccion_en_gotas_por_minuto_no_pisa_la_presion(planta: dict) -> None:
-    """"Cien gotas por minuto" es del goteo, no de la presión de descarga.
+    """ "Cien gotas por minuto" es del goteo, no de la presión de descarga.
 
     La corrección llega con su unidad ("gotas por minuto"). Si esa unidad no
     se reconoce, la corrección queda sin fila propia y se escribe sobre la
@@ -191,7 +191,7 @@ def test_un_goteo_de_diez_gotas_no_es_anomalia(planta: dict) -> None:
 
 
 def test_la_correccion_toma_el_valor_que_no_se_nega(planta: dict) -> None:
-    """"Mil seiscientos cuarenta psi, no en cien" vale 1640.
+    """ "Mil seiscientos cuarenta psi, no en cien" vale 1640.
 
     La frase trae los dos números: el que el operador dice y el que niega.
     El que manda es el primero.

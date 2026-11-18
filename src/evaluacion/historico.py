@@ -123,9 +123,7 @@ class CasoHistorial:
             "fecha_aviso": self.fecha_aviso,
             "equipo": self.equipo,
             "tipo_equipo": self.tipo_equipo,
-            "aviso_sha256": hashlib.sha256(
-                self.texto_normalizado.encode("utf-8")
-            ).hexdigest(),
+            "aviso_sha256": hashlib.sha256(self.texto_normalizado.encode("utf-8")).hexdigest(),
             "entrada_compartida": [observacion.as_dict() for observacion in self.observaciones],
             "tiene_evidencia_diagnostica": self.tiene_evidencia_diagnostica,
             "ground_truth": {

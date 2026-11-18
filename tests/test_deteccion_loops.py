@@ -21,6 +21,7 @@ from agente.deteccion_loops import (
 
 # ------------------------------------------------------------------ detector
 
+
 def test_repeticion_detectada():
     """Misma tool con mismos argumentos 3 veces seguidas: loop por repetición."""
     detector = DetectorLoops()
@@ -108,14 +109,27 @@ def test_reiniciar_limpia_historial():
 
 # ------------------------------------------------------------------ callback
 
+
 class RegistradorFalso:
     """Registrador de trayectoria falso para probar el callback."""
 
     def __init__(self) -> None:
         self.eventos = []
 
-    def registrar(self, *, etapa, tipo, herramienta, argumentos, salida, error,
-                  orden_id=None, evento_id=None, equipo=None, paso=None):
+    def registrar(
+        self,
+        *,
+        etapa,
+        tipo,
+        herramienta,
+        argumentos,
+        salida,
+        error,
+        orden_id=None,
+        evento_id=None,
+        equipo=None,
+        paso=None,
+    ):
         self.eventos.append(
             {
                 "etapa": etapa,
@@ -175,20 +189,26 @@ def test_callback_sin_loop_no_lanza():
     detector = DetectorLoops()
     callback = CallbackDetectarLoops(detector)
 
-    assert callback.on_tool_start(
-        {"name": "busqueda_rag"},
-        '{"tag": "B-101"}',
-        run_id="run-1",
-        name="busqueda_rag",
-        inputs={"tag": "B-101"},
-    ) is None
-    assert callback.on_tool_start(
-        {"name": "busqueda_manuales"},
-        '{"tag": "F-201A"}',
-        run_id="run-2",
-        name="busqueda_manuales",
-        inputs={"tag": "F-201A"},
-    ) is None
+    assert (
+        callback.on_tool_start(
+            {"name": "busqueda_rag"},
+            '{"tag": "B-101"}',
+            run_id="run-1",
+            name="busqueda_rag",
+            inputs={"tag": "B-101"},
+        )
+        is None
+    )
+    assert (
+        callback.on_tool_start(
+            {"name": "busqueda_manuales"},
+            '{"tag": "F-201A"}',
+            run_id="run-2",
+            name="busqueda_manuales",
+            inputs={"tag": "F-201A"},
+        )
+        is None
+    )
 
 
 def test_callback_ping_pong_lanza():

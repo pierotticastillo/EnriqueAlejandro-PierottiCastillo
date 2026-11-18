@@ -240,7 +240,7 @@ def test_la_cantidad_es_el_numero_pegado_al_nombre(catalogo: CatalogoManuales) -
 
 
 def test_un_codigo_no_es_una_cantidad(catalogo: CatalogoManuales) -> None:
-    """"C-48 cartucho filtrante 25" habla del filtro, no de 48 cartuchos."""
+    """ "C-48 cartucho filtrante 25" habla del filtro, no de 48 cartuchos."""
     orden = _orden(tareas=("T-F-CAR",), repuestos=(("FC-CART-25", 48.0),))
     texto = (
         "Tierra la orden hora de F-201-F-C-C-1 y se cambió de cartuchos. "
@@ -278,10 +278,7 @@ def test_se_entiende_un_repuesto_con_el_nombre_que_se_dice_en_campo(
     """El catálogo dice "kit de empaquetadura TX-350 (3 émbolos)" y en campo se
     dice "kit de empaquetadura TX-350"."""
     orden = _orden(equipo="B-101", tareas=("T-B-EMP",), repuestos=(("TX-EMP-KIT", 1.0),))
-    texto = (
-        "Hice cambio de empaquetadura. Usé un kit de empaquetadura TX-350. "
-        "Fueron cuatro horas."
-    )
+    texto = "Hice cambio de empaquetadura. Usé un kit de empaquetadura TX-350. Fueron cuatro horas."
     cierre = parsear_cierre(texto, orden, catalogo)
     assert [repuesto.codigo for repuesto in cierre.repuestos] == ["TX-EMP-KIT"]
     assert cierre.repuestos[0].cantidad == 1.0

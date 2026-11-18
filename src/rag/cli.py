@@ -87,8 +87,9 @@ def cmd_evaluar(args: argparse.Namespace, settings: Settings) -> int:
         base = Path(args.corpus)
         documentos = CorpusArchivos(base).cargar(incluir_historial=True)
         suite = json.loads(
-            (Path(args.suite) if args.suite else base / "evaluacion" / "retrieval.json")
-            .read_text(encoding="utf-8")
+            (Path(args.suite) if args.suite else base / "evaluacion" / "retrieval.json").read_text(
+                encoding="utf-8"
+            )
         )
     else:
         cliente = _cliente(args, settings)
@@ -173,9 +174,7 @@ def cmd_evaluar_pgvector(args: argparse.Namespace, settings: Settings) -> int:
     def buscar(pregunta: str, k: int) -> list[str]:
         return [
             fragmento.cita
-            for fragmento in recuperador.buscar(
-                ConsultaManuales(consulta=pregunta, top_k=k)
-            )
+            for fragmento in recuperador.buscar(ConsultaManuales(consulta=pregunta, top_k=k))
         ]
 
     resultado = evaluar(buscar, suite)

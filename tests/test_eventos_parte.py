@@ -151,9 +151,7 @@ def test_equipo_en_reserva_o_mantenimiento_no_es_anomalia() -> None:
 
 
 def test_equipo_disparado_es_anomalia() -> None:
-    eventos = _clasificar(
-        [Hallazgo("B-102", "estado", None, None, "disparada, no arranca")]
-    )
+    eventos = _clasificar([Hallazgo("B-102", "estado", None, None, "disparada, no arranca")])
     assert eventos[0].tipo is TipoEvento.escalado
 
 
@@ -192,9 +190,7 @@ def test_evento_escalado_lleva_el_contexto_del_parte() -> None:
 
 def test_nota_sin_novedad_no_es_un_equipo() -> None:
     """El tag virtual PLANTA no es un equipo: el evento sale sin equipo."""
-    eventos = _clasificar(
-        [Hallazgo("PLANTA", "estado", None, None, "Sin novedad")]
-    )
+    eventos = _clasificar([Hallazgo("PLANTA", "estado", None, None, "Sin novedad")])
     assert len(eventos) == 1
     assert eventos[0].equipo is None
     assert eventos[0].tipo is TipoEvento.sin_novedad

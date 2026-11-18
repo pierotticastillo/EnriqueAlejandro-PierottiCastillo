@@ -68,15 +68,9 @@ def verificar_configuracion(settings: Settings) -> list[Resultado]:
     """Que lo configurado sea un modelo de la lista, con su configuración."""
     resultados: list[Resultado] = []
 
-    resultados.append(
-        _configuracion_asr(settings, por_clave(CLAVE_ASR))
-    )
-    resultados.append(
-        _configuracion_embeddings(settings, por_clave(CLAVE_EMBEDDINGS))
-    )
-    resultados.append(
-        _configuracion_llm(settings, por_clave(CLAVE_LLM))
-    )
+    resultados.append(_configuracion_asr(settings, por_clave(CLAVE_ASR)))
+    resultados.append(_configuracion_embeddings(settings, por_clave(CLAVE_EMBEDDINGS)))
+    resultados.append(_configuracion_llm(settings, por_clave(CLAVE_LLM)))
     resultados.append(_configuracion_vision(settings))
     return resultados
 
@@ -349,9 +343,7 @@ def _consultar_ollama(
     }
     if nombre.lower() not in nombres:
         disponibles = ", ".join(sorted(nombres)) or "ninguno"
-        raise RuntimeError(
-            f"el modelo {nombre} no está en Ollama (disponibles: {disponibles})"
-        )
+        raise RuntimeError(f"el modelo {nombre} no está en Ollama (disponibles: {disponibles})")
     detalle = cliente.post(f"{url}/api/show", json={"model": nombre})
     detalle.raise_for_status()
     info = detalle.json()
@@ -369,8 +361,7 @@ def registrar(resultados: list[Resultado]) -> None:
     """Deja la verificación escrita en el log."""
     for resultado in resultados:
         mensaje = (
-            f"{resultado.clave} | {resultado.modelo} | "
-            f"{resultado.estado} | {resultado.detalle}"
+            f"{resultado.clave} | {resultado.modelo} | {resultado.estado} | {resultado.detalle}"
         )
         if resultado.severidad == "ERROR":
             logger.error("Lista cerrada de modelos: %s", mensaje)
