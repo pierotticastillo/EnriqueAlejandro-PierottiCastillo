@@ -182,6 +182,65 @@ def _ejecutar_grounding(datos: dict[str, Any]) -> dict[str, Any]:
 # ------------------------------------------------------------------ loops
 
 
+def _ejecutar_agente_vs_baseline(datos: dict[str, Any]) -> dict[str, Any]:
+    """Ejecuta la batería de agente vs baseline determinista.
+
+    Evalúa la falla, causas, tareas y citas del agente contra el baseline
+    determinista del Enunciado, reportando aciertos, costo y latencia por caso.
+    """
+    casos = datos.get("casos", [])
+    umbrales = datos.get("umbrales", {})
+    dimensiones = datos.get("dimensiones", [])
+
+    inicio = time.monotonic()
+    resultados: list[dict[str, Any]] = []
+    aprobados = 0
+
+    for caso in casos:
+        caso_inicio = time.monotonic()
+        case_id = caso.get("case_id")
+        entrada_compartida = list(caso.get("entrada_compartida", []))
+        ground_truth = caso.get("ground_truth", {})
+
+        falla_esperada = ground_truth.get("falla_catalogo")
+        tarea_esperada = ground_truth.get("tarea_esperada")
+        tareas_reales = list(ground_truth.get("tareas_reales", []))
+
+        # Aquí se ejecutaría el agente real con la entrada compartida y se
+        # compararía su salida con el ground_truth. Como el agente aún no está
+        # integrado como servicio invocable desde este script, dejamos la
+        # estructura lista para cuando se integre.
+        # Por ahora registramos el caso como pendiente con la expectativa.
+        segundos = round(time.monotonic() - caso_inicio, 3)
+
+        resultados.append(
+            {
+                "case_id": case_id,
+                "orden_id": caso.get("orden_id"),
+                "estado": "pendiente",
+                "motivo": "agente no conectado aún",
+                "falla_esperada": falla_esperada,
+                "tarea_esperada": tarea_esperada,
+                "tareas_reales": tareas_reales,
+                "entrada_compartida": entrada_compartida,
+                "segundos": segundos,
+            }
+        )
+
+    total_segundos = round(time.monotonic() - inicio, 3)
+    return {
+        "bateria": "agente_vs_baseline",
+        "version": datos.get("version", 1),
+        "dimensiones": dimensiones,
+        "umbrales": umbrales,
+        "total_casos": len(casos),
+        "aprobados": aprobados,
+        "pendientes": len(casos) - aprobados,
+        "segundos_totales": total_segundos,
+        "resultados": resultados,
+    }
+
+
 def _ejecutar_loops(datos: dict[str, Any]) -> dict[str, Any]:
     """Ejecuta la batería de detección de loops usando el validador real.
 
@@ -450,6 +509,8 @@ def _ejecutar_bateria(nombre: str, datos: dict[str, Any]) -> dict[str, Any]:
     """Ejecuta una batería de evaluación y devuelve su reporte."""
     if nombre == "grounding":
         return _ejecutar_grounding(datos)
+    if nombre == "agente_vs_baseline":
+        return _ejecutar_agente_vs_baseline(datos)
     if nombre == "loops":
         return _ejecutar_loops(datos)
     if nombre == "vision":
