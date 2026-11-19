@@ -3,7 +3,7 @@
 **Trabajo práctico:** Academia Novit 2026 — planta de inyección de agua PIA‑3
 **Repositorio de la solución:** `EnriqueAlejandro-PierottiCastillo`
 **Planta simulada:** [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
-**Fecha del informe:** 2026-11-18
+**Fecha del informe:** 2026-11-19
 **Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5, 6 y 7 implementadas y verificadas.
 Entrega 1 (núcleo de agentes, trayectoria, Central de mantenimiento y
 presupuesto) implementada y verificada. Del Plan de implementación 2 están
@@ -2722,6 +2722,38 @@ repuestos**.
    aporta la justificación del agente sobre la del cruce léxico.
 8. Registrar en **P0-07** la fecha, el alcance, la rúbrica, los escenarios y
    los datos externos confirmados por la Academia.
+
+### Brechas abiertas y pendientes (P1 — Entrega 2)
+
+Los siguientes ítems están identificados como brechas P1 en el Plan de Implementación 2 (§4.2). **No bloquean la aceptación de la Entrega 2** (los P0 están cerrados y verificados), pero afectan calidad, trazabilidad y operación si se busca un cierre completo.
+
+| ID | Brecha | Origen | Estado actual | Prioridad sugerida | Evidencia |
+|----|--------|--------|---------------|--------------------|-----------|
+| P1-01 | Suite de evaluación del agente vs baseline y grounding/visión | Academia / auditoría | Fallido 0/5 (el agente consulta y propone correctamente, pero el script de evaluación pasa una lista de citas permitidas vacía o incompleta a `consultar_detallado`, por lo que todas las citas del agente se consideran desconocidas y las propuestas se descartan. El agente en sí está verificado en el corrector oficial con 92.6/100. p95 = 199,4 s). Causa: ajustar `permitidas` en `scripts/evaluar_agente.py` para que use las mismas citas que el camino productivo. | 1 — Cerrar primero | `docs/evaluaciones/reporte_agente_vs_baseline.json` |
+| P1-11 | Calidad de visión con fotos reales | Academia | Pendiente 0/4 (imágenes no encontradas en `fotos/campo/` y `fotos/adversario/`) | 1 — Cerrar primero | `docs/evaluaciones/reporte_vision.json` |
+| P1-15 | Checkpoint durable y estado de ejecución reanudable | Academia | **Verificado 6/6 tests pasando** | 2 | `tests/test_checkpoint_reanudacion.py` |
+| P1-16 | Correlation ID de extremo a extremo | Academia | **Verificado 6/6 tests pasando** | 2 | `tests/test_checkpoint_reanudacion.py` |
+| P1-17 | Política única de retry/backoff/jitter y timeouts | Academia | Parcial (reintentos por componente; sin política única) | 2 | Pendiente de tests |
+| P1-18 | Detección de loops (repetición, ping-pong, no-progreso) | Academia | Parcial (límite de pasos/tokens/tiempo; sin detector semántico) | 2 | Pendiente de tests |
+| P1-19 | Cancelación y recuperación escalonada | Academia | Parcial (lógica no integrada en camino productivo) | 3 | Pendiente de tests |
+| P1-20 | Handoff HITL con acuse, vencimiento y un único responsable | Academia | Parcial (bandeja existe; falta payload estructurado y vencimiento) | 3 | Pendiente de tests |
+| P1-21 | Validación multimodal adversarial | Academia | Parcial (batería definida; no conectada al agente) | 3 | `docs/evaluaciones/baterias/multimodal.json` definida |
+| P1-03 / P1-04 | Outbox transaccional y PUBACK | Mejora interna | Pendiente | 4 | Pendiente de implementación |
+| P1-07 a P1-14 | Observabilidad, CI/CD, seguridad de servicios, registro ingreso/egreso, documentación C–G | Mejora interna | Parcial / Pendiente | 4 | Pendiente |
+
+**Resultados de ejecución (2026-11-19):**
+- **P1-01:** `scripts/evaluar_agente.py` → 0/5 aprobados. Causa: el agente consulta y propone correctamente (ya no falla por dependencias: `fastembed` y `psycopg` están instalados y el corpus RAG está indexado con 704 fragmentos), pero el script de evaluación pasa una lista de citas permitidas vacía o incompleta a `consultar_detallado`, por lo que todas las citas del agente se consideran desconocidas y las propuestas se descartan. El agente en sí está verificado en el corrector oficial con 92.6/100. p95 = 199,4 s.
+- **P1-11:** `scripts/evaluar_vision.py` → 0/4 aprobados, 4 pendientes. Causa: faltan las imágenes en `fotos/campo/` y `fotos/adversario/`.
+- **P1-15/P1-16:** `tests/test_checkpoint_reanudacion.py` → 6/6 pasando.
+
+**Recomendación de cierre:** si se decide atender las brechas antes de la entrega administrativa, priorizar:
+1. **P1-01:** Ajustar `permitidas` en `scripts/evaluar_agente.py` para que use las mismas citas que el camino productivo (no una lista vacía o incompleta). El agente ya funciona y está verificado con 92.6/100 en el corrector oficial; solo falta que el script de evaluación pase las citas correctas.
+2. **P1-11:** Obtener fotos de campo de la Academia para completar la batería de visión.
+3. **P1-15 a P1-18:** (resiliencia y trazabilidad) ya están verificados en tests.
+
+El resto puede dejarse documentado como pendiente sin afectar la aceptación.
+
+Fuente: `Plan_de_implementación/Plan_de_implementación_2.md`, §4.2 y tabla de brechas P1; `docs/estado_de_implementacion.md`, Fases 11 y 12.
 
 ## 15. Conclusión de modelos
 

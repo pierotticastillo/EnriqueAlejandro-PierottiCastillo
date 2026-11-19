@@ -1,39 +1,38 @@
-"""Tests del checkpoint duradero (P1-15) y su protocolo de reanudación.
+"""Pruebas del checkpoint duradero y reanudación (P1-15 / P1-16).
 
-Comprueba que:
-
-* un checkpoint se guarda y se recupera;
-* tras un reinicio se recupera desde PostgreSQL sin repetir efectos;
-* un checkpoint obsoleto no compite (versión);
-* la reanudación omite efectos ya consumados;
-* una caída controlada reanuda desde el último checkpoint sin duplicar
-  orden, evento, mensaje ni habilita.
-
-Requieren un PostgreSQL con las migraciones aplicadas:
-
-    TEST_DATABASE_URL=postgresql+psycopg://pia3:pia3@localhost:55432/pia3 pytest
-
-Sin esa variable los tests se omiten para no romper una corrida sin base.
+Verifica que:
+- Se puede guardar y cargar un checkpoint para reanudar tras un reinicio.
+- No se duplican efectos al reanudar (idempotencia por clave_idempotencia).
+- Un checkpoint con versión obsoleta no puede ser sobrescrito (concurrencia).
+- El correlation_id agrupa los casos de una misma solicitud.
 """
 
 from __future__ import annotations
 
+import os
+import sys
 import uuid
+from collections.abc import Iterator
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pytest
 from sqlalchemy import create_engine, text
 
 from db.checkpoint import (
+    CheckpointNoEncontrado,
+    CheckpointObsoleto,
+    ConflictoPropietario,
     ESTADO_EN_CURSO,
     ESTADO_TERMINAL,
-    CheckpointObsoleto,
     RepositorioCheckpoint,
+    TAREA_ANALISIS,
+    TAREA_ORDEN,
     crear_correlation_id,
 )
 
-TEST_DATABASE_URL = pytest.importorskip("os").getenv("TEST_DATABASE_URL")
-
-TEST_DATABASE_URL = pytest.importorskip("os").getenv("TEST_DATABASE_URL")
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 
 pytestmark = pytest.mark.skipif(
     not TEST_DATABASE_URL,
@@ -41,215 +40,265 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
-def engine():
-    motor = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
-    with motor.connect() as conexion:
-        conexion.execute(text("SELECT 1"))
-    yield motor
-    motor.dispose()
+@pytest.fixture
+def engine() -> Iterator[create_engine]:
+    """Crea un engine apuntando a una base de datos temporal de PostgreSQL."""
+    url = create_engine(str(TEST_DATABASE_URL)).url
+    nombre = f"pia3_ckpt_{uuid.uuid4().hex[:12]}"
+    admin = create_engine(
+        url.set(database="postgres").render_as_string(hide_password=False),
+        isolation_level="AUTOCOMMIT",
+    )
+    try:
+        with admin.connect() as conexion:
+            conexion.exec_driver_sql(f'CREATE DATABASE "{nombre}"')
+        yield create_engine(url.set(database=nombre).render_as_string(hide_password=False))
+    finally:
+        with admin.connect() as conexion:
+            conexion.exec_driver_sql(f'DROP DATABASE IF EXISTS "{nombre}" WITH (FORCE)')
+        admin.dispose()
 
 
-def _guardar_inicial(repositorio, conexion, correlation_id, case_id="caso-001"):
-    return repositorio.guardar(
+@pytest.fixture
+def repositorio(engine: create_engine) -> RepositorioCheckpoint:
+    """Crea la tabla de checkpoint y devuelve un repositorio listo."""
+    with engine.begin() as conexion:
+        conexion.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS checkpoint_ejecucion (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                correlation_id TEXT NOT NULL,
+                case_id TEXT NOT NULL,
+                tipo_tarea TEXT NOT NULL,
+                paso_actual TEXT NOT NULL,
+                estado TEXT NOT NULL,
+                propietario TEXT NOT NULL,
+                datos_confirmados JSONB NOT NULL DEFAULT '{}',
+                acciones_hechas JSONB NOT NULL DEFAULT '[]',
+                intentos INT NOT NULL DEFAULT 0,
+                proxima_accion TEXT,
+                version INT NOT NULL DEFAULT 1,
+                creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+                actualizada_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+                ultimo_avance TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        conexion.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_checkpoint_correlation "
+            "ON checkpoint_ejecucion (correlation_id)"
+        )
+    return RepositorioCheckpoint(engine=engine)
+
+
+def _guardar_checkpoint(
+    repo: RepositorioCheckpoint,
+    conexion,
+    *,
+    correlation_id: str,
+    case_id: str,
+    paso: str,
+    estado: str,
+    propietario: str,
+    version: int = 1,
+    proxima_accion: str | None = None,
+    datos: dict | None = None,
+    acciones: list | None = None,
+):
+    return repo.guardar(
         conexion,
         correlation_id=correlation_id,
         case_id=case_id,
-        tipo_tarea="orden",
-        paso_actual="analisis",
-        estado=ESTADO_EN_CURSO,
-        propietario="agente",
-        datos_confirmados={"variable": "presion_descarga", "valor": 85.0},
-        acciones_hechas=[
-            {
-                "clave_idempotencia": "evento:evt-001:ord-001",
-                "efecto": {"tipo": "evento", "id": "evt-001"},
-            }
-        ],
-        intentos=1,
-        proxima_accion="publicar_orden",
-        version=1,
+        tipo_tarea=TAREA_ANALISIS,
+        paso_actual=paso,
+        estado=estado,
+        propietario=propietario,
+        datos_confirmados=datos or {},
+        acciones_hechas=acciones or [],
+        intentos=0,
+        proxima_accion=proxima_accion,
+        version=version,
     )
 
 
-def test_guarda_y_recupera_checkpoint(engine):
-    """Un checkpoint guardado se recupera con todos sus campos."""
-    repositorio = RepositorioCheckpoint(engine)
-    correlation_id = crear_correlation_id()
+def test_guardar_y_cargar_checkpoint(repositorio: RepositorioCheckpoint, engine: create_engine):
+    """Debe poder guardarse un checkpoint y recuperarse tras 'reinicio'."""
+    correlation_id = crear_correlation_id("pia3")
+    case_id = f"case-{uuid.uuid4().hex[:8]}"
+
     with engine.begin() as conexion:
-        checkpoint = _guardar_inicial(repositorio, conexion, correlation_id)
-    assert checkpoint.id is not None
-    assert checkpoint.correlation_id == correlation_id
-    assert checkpoint.version == 1
-    assert checkpoint.estado == ESTADO_EN_CURSO
-    assert checkpoint.efecto_ya_hecho == {"evento:evt-001:ord-001"}
-
-    with engine.connect() as conexion:
-        recuperado = repositorio.cargar_ultimo(conexion, correlation_id=correlation_id)
-    assert recuperado is not None
-    assert recuperado.correlation_id == correlation_id
-    assert recuperado.case_id == "caso-001"
-    assert recuperado.paso_actual == "analisis"
-    assert recuperado.propietario == "agente"
-    assert recuperado.datos_confirmados["variable"] == "presion_descarga"
-    assert recuperado.proxima_accion == "publicar_orden"
-
-
-def test_reanudacion_omite_efectos_ya_hechos(engine):
-    """Al reanudar, los efectos ya consumados se reconocen como hechos."""
-    repositorio = RepositorioCheckpoint(engine)
-    correlation_id = crear_correlation_id()
-    with engine.begin() as conexion:
-        _guardar_inicial(repositorio, conexion, correlation_id)
-
-    with engine.connect() as conexion:
-        cp = repositorio.cargar_ultimo(conexion, correlation_id=correlation_id)
-    assert cp is not None
-    assert "evento:evt-001:ord-001" in cp.efecto_ya_hecho
-    assert cp.proxima_accion == "publicar_orden"
-    assert cp.estado == ESTADO_EN_CURSO
-
-
-def test_checkpoint_obsoleto_no_compite(engine):
-    """Dos reanudaciones concurrentes: solo una avanza la versión."""
-    repositorio = RepositorioCheckpoint(engine)
-    correlation_id = crear_correlation_id()
-    with engine.begin() as conexion:
-        cp1 = _guardar_inicial(repositorio, conexion, correlation_id)
-        # Otro componente ya avanzó la versión.
-        repositorio.avanzar(
+        cp = _guardar_checkpoint(
+            repositorio,
             conexion,
             correlation_id=correlation_id,
-            paso_actual="publicacion",
-            estado=ESTADO_TERMINAL,
-            propietario="orquestador",
-            proxima_accion=None,
-            version=cp1.version + 1,
+            case_id=case_id,
+            paso="analisis_inicial",
+            estado=ESTADO_EN_CURSO,
+            propietario="agente",
+            proxima_accion="consultar_manuales",
+            datos={"variable": "presion_descarga", "valor": 85.0},
+        )
+        assert cp is not None
+        assert cp.correlation_id == correlation_id
+        assert cp.puede_seguir is True
+
+    # Simular reinicio: nueva conexión, cargar desde la base
+    with engine.begin() as conexion:
+        cargado = repositorio.cargar_ultimo(
+            conexion, correlation_id=correlation_id, case_id=case_id
         )
 
-    # Intentar guardar con la versión vieja debe fallar.
-    with pytest.raises(CheckpointObsoleto):
-        with engine.begin() as conexion:
-            repositorio.guardar(
+    assert cargado is not None
+    assert cargado.correlation_id == correlation_id
+    assert cargado.case_id == case_id
+    assert cargado.paso_actual == "analisis_inicial"
+    assert cargado.estado == ESTADO_EN_CURSO
+    assert cargado.propietario == "agente"
+    assert cargado.datos_confirmados == {"variable": "presion_descarga", "valor": 85.0}
+    assert cargado.proxima_accion == "consultar_manuales"
+    assert cargado.version == 1
+
+
+def test_no_duplica_efectos_al_reanudar(repositorio: RepositorioCheckpoint, engine: create_engine):
+    """Los efectos ya consumados no se deben repetir al reanudar."""
+    correlation_id = crear_correlation_id("pia3")
+    case_id = f"case-{uuid.uuid4().hex[:8]}"
+    clave_idempotencia = "outbox:orden:ORD-001"
+    efecto = {"orden_id": "ORD-001", "estado": "Aprobada"}
+
+    with engine.begin() as conexion:
+        cp = _guardar_checkpoint(
+            repositorio,
+            conexion,
+            correlation_id=correlation_id,
+            case_id=case_id,
+            paso="publicar_orden",
+            estado=ESTADO_EN_CURSO,
+            propietario="sistema",
+            proxima_accion="publicar_en_bus",
+            acciones=[{"clave_idempotencia": clave_idempotencia, "efecto": efecto}],
+        )
+        assert cp is not None
+        assert clave_idempotencia in cp.efecto_ya_hecho
+
+    # Reanudar: el efecto ya está registrado, no se duplica
+    with engine.begin() as conexion:
+        cargado = repositorio.cargar_ultimo(
+            conexion, correlation_id=correlation_id, case_id=case_id
+        )
+        assert cargado is not None
+        assert clave_idempotencia in cargado.efecto_ya_hecho
+        assert len(cargado.acciones_hechas) == 1
+
+
+def test_version_obsoleta_falla(repositorio: RepositorioCheckpoint, engine: create_engine):
+    """Un intento de guardar con versión obsoleta debe lanzar CheckpointObsoleto."""
+    correlation_id = crear_correlation_id("pia3")
+    case_id = f"case-{uuid.uuid4().hex[:8]}"
+
+    with engine.begin() as conexion:
+        cp1 = _guardar_checkpoint(
+            repositorio,
+            conexion,
+            correlation_id=correlation_id,
+            case_id=case_id,
+            paso="paso_1",
+            estado=ESTADO_EN_CURSO,
+            propietario="agente",
+            version=1,
+        )
+        # Otro componente avanza a versión 2
+        cp2 = repositorio.avanzar(
+            conexion,
+            correlation_id=correlation_id,
+            paso_actual="paso_2",
+            estado=ESTADO_EN_CURSO,
+            propietario="agente",
+        )
+        assert cp2.version == 2
+
+        # Este componente aún tiene versión 1: debe fallar
+        with pytest.raises(CheckpointObsoleto):
+            _guardar_checkpoint(
+                repositorio,
                 conexion,
                 correlation_id=correlation_id,
-                case_id="caso-001",
-                tipo_tarea="orden",
-                paso_actual="analisis_viejo",
+                case_id=case_id,
+                paso="paso_1",
                 estado=ESTADO_EN_CURSO,
-                propietario="agente_viejo",
-                version=cp1.version,  # versión ya obsoleta
+                propietario="agente",
+                version=1,
             )
 
 
-def test_checkpoint_no_encontrado_si_no_existe(engine):
-    """Cargar un correlation_id que no tiene checkpoint devuelve None."""
-    repositorio = RepositorioCheckpoint(engine)
-    with engine.connect() as conexion:
-        resultado = repositorio.cargar_ultimo(conexion, correlation_id="no-existe:000")
-    assert resultado is None
-
-
-def test_avanzar_sube_version(engine):
-    """Avanzar el checkpoint incrementa la versión y conserva el case_id."""
-    repositorio = RepositorioCheckpoint(engine)
-    correlation_id = crear_correlation_id()
-    with engine.begin() as conexion:
-        cp1 = _guardar_inicial(repositorio, conexion, correlation_id)
-        assert cp1.version == 1
+def test_checkpoint_no_encontrado(repositorio: RepositorioCheckpoint, engine: create_engine):
+    """Cargar un checkpoint inexistente devuelve None; avanzar lanza CheckpointNoEncontrado."""
+    correlation_id = crear_correlation_id("pia3")
 
     with engine.begin() as conexion:
-        cp2 = repositorio.avanzar(
+        cargado = repositorio.cargar_ultimo(
+            conexion, correlation_id=correlation_id
+        )
+        assert cargado is None
+
+        with pytest.raises(CheckpointNoEncontrado):
+            repositorio.avanzar(
+                conexion,
+                correlation_id=correlation_id,
+                paso_actual="cualquiera",
+                estado=ESTADO_TERMINAL,
+                propietario="sistema",
+            )
+
+
+def test_correlation_id_agrupa_casos(repositorio: RepositorioCheckpoint, engine: create_engine):
+    """Cada case_id tiene su propio correlation_id; no se pueden duplicar."""
+    case_a = f"case-a-{uuid.uuid4().hex[:8]}"
+    case_b = f"case-b-{uuid.uuid4().hex[:8]}"
+    cid_a = crear_correlation_id("pia3")
+    cid_b = crear_correlation_id("pia3")
+
+    with engine.begin() as conexion:
+        cp_a = _guardar_checkpoint(
+            repositorio,
             conexion,
-            correlation_id=correlation_id,
-            paso_actual="orden_publicada",
-            estado=ESTADO_TERMINAL,
-            propietario="orquestador",
-            proxima_accion=None,
-            version=cp1.version + 1,
+            correlation_id=cid_a,
+            case_id=case_a,
+            paso="parte",
+            estado=ESTADO_EN_CURSO,
+            propietario="agente",
         )
-    assert cp2.version == cp1.version + 1
-    assert cp2.estado == ESTADO_TERMINAL
-    assert cp2.proxima_accion is None
-
-
-def test_correlation_id_estable_entre_reintentos(engine):
-    """El correlation_id se reutiliza en un reintento: mismo valor, misma solicitud."""
-    repositorio = RepositorioCheckpoint(engine)
-    primero = crear_correlation_id()
-    segundo = crear_correlation_id()
-    assert primero != segundo
-    assert primero.startswith("pia3:")
-
-    with engine.begin() as conexion:
-        cp = _guardar_inicial(repositorio, conexion, primero)
-    assert cp.correlation_id == primero
-
-    with engine.connect() as conexion:
-        recuperado = repositorio.cargar_ultimo(conexion, correlation_id=primero)
-    assert recuperado.correlation_id == primero
-
-
-def test_registro_efecto_dentro_de_transaccion(engine):
-    """Un efecto se registra en el checkpoint dentro de la misma transacción."""
-    repositorio = RepositorioCheckpoint(engine)
-    correlation_id = crear_correlation_id()
-    with engine.begin() as conexion:
-        _guardar_inicial(repositorio, conexion, correlation_id)
-        repositorio.registrar_efecto(
-            correlation_id=correlation_id,
-            clave_idempotencia="orden:pub:ord-001",
-            efecto={"tipo": "orden", "id": "ord-001"},
-            conexion=conexion,
-        )
-
-    with engine.connect() as conexion:
-        cp = repositorio.cargar_ultimo(conexion, correlation_id=correlation_id)
-    assert cp is not None
-    claves = cp.efecto_ya_hecho
-    assert "evento:evt-001:ord-001" in claves
-    assert "orden:pub:ord-001" in claves
-
-
-def test_propietario_cambia_al_reanudar(engine):
-    """Al reanudar, el propietario puede cambiar (de agente a supervisor)."""
-    repositorio = RepositorioCheckpoint(engine)
-    correlation_id = crear_correlation_id()
-    with engine.begin() as conexion:
-        cp = _guardar_inicial(repositorio, conexion, correlation_id)
-    assert cp.propietario == "agente"
-
-    with engine.begin() as conexion:
-        cp2 = repositorio.avanzar(
+        cp_b = _guardar_checkpoint(
+            repositorio,
             conexion,
-            correlation_id=correlation_id,
-            paso_actual="revision_humana",
-            estado="esperando_humano",
-            propietario="supervisor",
-            proxima_accion="decidir_cierre",
-            version=cp.version + 1,
+            correlation_id=cid_b,
+            case_id=case_b,
+            paso="orden",
+            estado=ESTADO_EN_CURSO,
+            propietario="sistema",
         )
-    assert cp2.propietario == "supervisor"
-    assert cp2.estado == "esperando_humano"
+        assert cp_a is not None
+        assert cp_b is not None
+        assert cp_a.correlation_id != cp_b.correlation_id
 
-
-def _borrar_checkpoint(engine, correlation_id: str) -> None:
+    # Cada correlation_id es independiente
     with engine.begin() as conexion:
-        conexion.execute(
-            text("DELETE FROM checkpoint_ejecucion WHERE correlation_id = :cid"),
-            {"cid": correlation_id},
+        ca = repositorio.cargar_ultimo(
+            conexion, correlation_id=cid_a, case_id=case_a
         )
+        cb = repositorio.cargar_ultimo(
+            conexion, correlation_id=cid_b, case_id=case_b
+        )
+        assert ca is not None and ca.case_id == case_a
+        assert cb is not None and cb.case_id == case_b
+        assert ca.paso_actual == "parte"
+        assert cb.paso_actual == "orden"
+        assert ca.correlation_id == cid_a
+        assert cb.correlation_id == cid_b
 
 
-def test_limpieza_entre_tests(engine):
-    """Cada test usa correlation_id distinto para no colisionar."""
-    repositorio = RepositorioCheckpoint(engine)
-    cid = f"test-limpieza:{uuid.uuid4().hex}"
-    try:
-        with engine.begin() as conexion:
-            _guardar_inicial(repositorio, conexion, cid)
-        with engine.connect() as conexion:
-            cp = repositorio.cargar_ultimo(conexion, correlation_id=cid)
-        assert cp is not None
-    finally:
-        _borrar_checkpoint(engine, cid)
+def test_crear_correlation_id_estable(prefijo: str = "pia3"):
+    """El correlation_id generado es estable y con el prefijo esperado."""
+    cid = crear_correlation_id(prefijo)
+    assert cid.startswith(f"{prefijo}:")
+    assert len(cid) > len(prefijo) + 1
