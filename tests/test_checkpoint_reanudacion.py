@@ -17,18 +17,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from sqlalchemy import create_engine
+
 import pytest
-from sqlalchemy import create_engine, text
 
 from db.checkpoint import (
     CheckpointNoEncontrado,
     CheckpointObsoleto,
-    ConflictoPropietario,
     ESTADO_EN_CURSO,
     ESTADO_TERMINAL,
     RepositorioCheckpoint,
     TAREA_ANALISIS,
-    TAREA_ORDEN,
     crear_correlation_id,
 )
 
@@ -197,7 +196,7 @@ def test_version_obsoleta_falla(repositorio: RepositorioCheckpoint, engine: crea
     case_id = f"case-{uuid.uuid4().hex[:8]}"
 
     with engine.begin() as conexion:
-        cp1 = _guardar_checkpoint(
+        _guardar_checkpoint(
             repositorio,
             conexion,
             correlation_id=correlation_id,

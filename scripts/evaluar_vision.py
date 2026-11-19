@@ -6,7 +6,9 @@ y emite un reporte reproducible con precisión, recall, tasa de indeterminado.
 
 Uso (desde la raíz del repositorio):
 
-    python scripts/evaluar_vision.py [--entrada docs/evaluaciones/baterias/vision.json] [--salida docs/evaluaciones/reporte_vision.json]
+    python scripts/evaluar_vision.py \\
+        --entrada docs/evaluaciones/baterias/vision.json \\
+        --salida docs/evaluaciones/reporte_vision.json
 
 Requisitos:
 - Las imágenes referenciadas en el JSON deben existir bajo las rutas indicadas.
@@ -140,12 +142,6 @@ def _generar_reporte(
 
     segundos_totales = round(sum(r.get("segundos", 0) for r in resultados), 3)
 
-    danios_esperados = sum(
-        1 for r in resultados if r.get("danio_esperado") is True
-    )
-    danios_detectados = sum(
-        1 for r in resultados if r.get("danio_detectado") is True
-    )
     verdaderos_positivos = sum(
         1
         for r in resultados

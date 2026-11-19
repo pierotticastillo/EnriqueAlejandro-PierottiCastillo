@@ -7,7 +7,9 @@ reproducible con aciertos, costo y latencia por caso.
 
 Uso (desde la raíz del repositorio):
 
-    python scripts/evaluar_agente.py [--entrada docs/evaluaciones/baterias/agente_vs_baseline.json] [--salida docs/evaluaciones/reporte_agente_vs_baseline.json]
+    python scripts/evaluar_agente.py \\
+        --entrada docs/evaluaciones/baterias/agente_vs_baseline.json \\
+        --salida docs/evaluaciones/reporte_agente_vs_baseline.json
 
 Requisitos:
 - Docker Compose levantado (postgres, sistema, mcp).
@@ -29,7 +31,6 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from agente.nucleo import crear_agente  # noqa: E402
 from analisis.catalogo import CatalogoManuales  # noqa: E402
-from analisis.llm import crear_modelo  # noqa: E402
 from analisis.servicio import RecuperadorDiferido  # noqa: E402
 from config import Settings  # noqa: E402
 from tools.cliente import ClientePlanta as ClienteApi  # noqa: E402
@@ -59,7 +60,6 @@ def _construir_agente(settings: Settings) -> Any:
     except Exception:  # noqa: BLE001
         catalogo = CatalogoManuales.desde_documentos([])
     recuperador = RecuperadorDiferido()
-    modelo = crear_modelo(settings)
     return crear_agente(
         settings,
         cliente=cliente_api,
@@ -118,7 +118,8 @@ def _evaluar_caso(
         "Analiza las siguientes mediciones de una parte de recorrida y propone "
         "la falla del catálogo, causas probables, tareas y citas correspondientes:\n"
         + "\n".join(prompt_partes)
-        + "\n\nResponde con una propuesta estructurada: falla, causas, citas, tareas y justificación."
+        + "\n\nResponde con una propuesta estructurada:\n"
+        + "falla, causas, citas, tareas y justificación."
     )
 
     try:
@@ -188,7 +189,13 @@ def _evaluar_caso(
     resultado["motivo"] = (
         "ok"
         if aprobado
-        else f"estado={estado}, falla_ok={falla_correcta}, tarea_ok={tarea_correcta}, tareas_ok={tareas_coinciden}, citas_ok={citas_validas}"
+        else (
+            f"estado={estado}, "
+            f"falla_ok={falla_correcta}, "
+            f"tarea_ok={tarea_correcta}, "
+            f"tareas_ok={tareas_coinciden}, "
+            f"citas_ok={citas_validas}"
+        )
     )
 
     return resultado
