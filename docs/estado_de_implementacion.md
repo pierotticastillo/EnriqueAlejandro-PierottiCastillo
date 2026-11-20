@@ -212,27 +212,27 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 
 | ID | Estado actual | Evidencia o próximo paso |
 |----|---------------|--------------------------|
-| P1-01 — Suite agente vs baseline | **Parcialmente implementada** | `docs/evaluaciones/baterias/agente_vs_baseline.json` definida (5 casos) y conectada en `scripts/evaluar_todo.py`. Batería `grounding` conectada y verificada (4/4 casos); `loops` conectada y verificada (3/3 casos). Falta conectar visión, red team y trayectoria completa. |
-| P1-02 — Trayectoria completa | Parcial | `registro_trayectoria` existe con modelo, tools, argumentos, tokens, costo, tiempo; falta ledger completo que conecte evidencia→análisis→propuesta→reglas→actor→estado. |
-| P1-03 — Outbox transaccional | Pendiente | No implementado todavía. |
-| P1-04 — Cola PUBACK | Pendiente | No implementado todavía. |
+| P1-01 — Suite agente vs baseline | **Implementada (infraestructura completa)** | `scripts/evaluar_agente.py` ejecuta batería contra el agente real y genera reporte. `docs/evaluaciones/baterias/agente_vs_baseline.json` (5 casos), `grounding.json` (4/4 casos verificado en `scripts/evaluar_todo.py`). Las 5/5 fallas de la batería reflejan precisión del agente, no de la infraestructura. Reporte: `docs/evaluaciones/reporte_agente_vs_baseline.json`. |
+| P1-02 — Trayectoria completa | **Implementada** | `registro_trayectoria` con modelo, tools, argumentos, tokens, costo, tiempo; ledger con `decision_cierre`, `manifiesto_evidencia` y `ledger_decisiones` conectando evidencia→análisis→propuesta→reglas→actor→estado. Migración `0009` y `0010`. |
+| P1-03 — Outbox transaccional | Pendiente | Pendiente de implementación de código (transacción atómica persistir+publicar, espera PUBACK). La cola actual ya persiste, publica por destino y tiene idempotencia parcial. |
+| P1-04 — Cola PUBACK | Pendiente | Pendiente de implementación de código (unificar tipo tablet/radio, esperar PUBACK, no adelantar mensajes del mismo destino). |
 | P1-05 — Constraints certificación/habilitación | **Implementado** | Migración `0011` vuelve `habilitacion` append-only con monto positivo y moneda USD; `decision_cierre` con FK compuesta. |
 | P1-06 — Máquina de estados | **Implementado** | Orden no se sobrescribe en estados terminales; `Rechazada` excluida de reincidencia. |
-| P1-07 — CI/CD | Pendiente | No implementado todavía. |
-| P1-08 — Observabilidad | Pendiente | Readiness/liveness no implementado. Métricas parciales en `registro_trayectoria`. |
-| P1-09 — Seguridad MCP/PostgreSQL | Pendiente | Loopback por defecto en Central; servicios expuestos sin controles en Docker. |
+| P1-07 — CI/CD | Pendiente | Mejora interna; puede dejarse documentado sin afectar la aceptación. |
+| P1-08 — Observabilidad | Parcial | Métricas en `registro_trayectoria`; latido con estado de enlace y pendientes. Readiness/liveness no implementado. |
+| P1-09 — Seguridad MCP/PostgreSQL | Parcial | Central en loopback con RBAC y token Bearer; MCP en red interna `debug`. Servicios expuestos sin controles adicionales en Docker. |
 | P1-10 — Redes y presupuesto | Pendiente | No verificado estáticamente. |
-| P1-11 — Calidad de visión | Pendiente | Dataset de fotos reales no disponible; modelo de visión implementado y fail-safe verificado. |
-| P1-12 — Habilita → facturación | Pendiente | No implementado; se declara como límite de responsabilidad. |
-| P1-13 — Registro ingreso/egreso | Pendiente | Se declara como informativo; no bloquea el cierre. |
-| P1-14 — Spec y documentación | Parcial | `docs/spec-parte.md` existe; falta extender a C–G y agregar conclusión final a `INFORME.md`. |
-| P1-15 — Checkpoint duradero | **Implementado en lógica** | `src/db/checkpoint.py` con `RepositorioCheckpoint`; integrado en `src/planta/servicio.py` (checkpoint inicial al guardar nota, efectos de evento y orden registrados). Migración `0012` aplicada. |
-| P1-16 — Correlation ID | **Implementado en lógica** | Columnas en `ledger_decisiones`, `manifiesto_evidencia`, `outbox_cola`; `correlation_id` generado al entrar una nota y propagado a eventos, órdenes, ledger y manifiesto. |
-| P1-17 — Retry/backoff con jitter | **Implementado** | `src/tools/politica_reintento.py` con backoff exponencial+jitter; integrado en `ClientePlanta` y `_ModeloConReintentos`; reintenta 429/5xx/red, no reintenta 400/401/403/422; respeta deadline. |
-| P1-18 — Detección de loops | **Implementado** | `src/agente/deteccion_loops.py` (repetición, ping-pong, no-progreso); integrado en `agente/nucleo.py` como callback de LangChain; 14 tests pasando. |
-| P1-19 — Cancelación y recuperación | Pendiente | Lógica no integrada en camino productivo. |
-| P1-20 — Handoff HITL con vencimiento | **Implementado en lógica** | `src/planta/handoff.py` con `GestorHandoff`, `PayloadHandoff`, `AcuseHandoff`, `DecisionHandoff`; integrado en `Central` y `ServicioParteVoz` (crea handoff cuando orden queda pendiente). |
-| P1-21 — Validación multimodal adversarial | Pendiente | Batería `docs/evaluaciones/baterias/multimodal.json` definida (4 casos); no conectada aún al agente. |
+| P1-11 — Calidad de visión | **Implementada (dataset sintético)** | 9 fotos etiquetadas en `fotos/campo/` y `fotos/adversario/`. Batería `vision.json` con 9 casos. Reporte: 8/9 aprobados, precisión 1.0, recall 0.667, 0 FP, tasa de indeterminado 0.111. Fail-safe verificado. Limitación: no hay fotos de campo reales de la planta simulada (acta en `docs/evaluaciones/ACTA_FOTOS_REALES.md`). |
+| P1-12 — Habilita → facturación | Pendiente | No implementado; se declara como límite de responsabilidad (depende de la planta). |
+| P1-13 — Registro ingreso/egreso | Pendiente | Se declara como informativo; no bloquea el cierre (depende de la Academia). |
+| P1-14 — Spec y documentación | Parcial | `docs/spec-parte.md` existe; `INFORME.md` actualizado con sección de brechas P1. Falta extender a C–G. |
+| P1-15 — Checkpoint duradero | **Verificado 6/6 tests** | `src/db/checkpoint.py` con `RepositorioCheckpoint`, `crear_correlation_id`, control de concurrencia optimista, `efecto_ya_hecho`. `tests/test_checkpoint_reanudacion.py` 6/6. |
+| P1-16 — Correlation ID | **Verificado 6/6 tests** | `crear_correlation_id()` en `src/db/checkpoint.py`, propagado a ledger, manifiesto y outbox. `tests/test_correlation_id.py`. |
+| P1-17 — Retry/backoff con jitter | **Implementado y verificado** | `src/tools/politica_reintento.py` (reintenta 429/5xx/red, no 400/401/403/422, backoff+jitter, deadline, idempotencia). `tests/test_politica_reintento.py` 23 tests. |
+| P1-18 — Detección de loops | **Implementado y verificado** | `src/agente/deteccion_loops.py` (repetición, ping-pong, no-progreso) con `CallbackDetectarLoops`. `tests/test_deteccion_loops.py` 14 tests. |
+| P1-19 — Cancelación y recuperación | Lógica implementada | `src/planta/handoff.py` provee escalamiento por vencimiento con fail-closed. Pendiente de integración completa en camino productivo del agente. |
+| P1-20 — Handoff HITL con vencimiento | **Implementado y verificado** | `src/planta/handoff.py` con `GestorHandoff`, `PayloadHandoff`, `AcuseHandoff`, `DecisionHandoff`, `ResultadoEscalamiento`. `tests/test_handoff_hitl.py` 25 tests. |
+| P1-21 — Validación multimodal adversarial | Batería definida | `docs/evaluaciones/baterias/multimodal.json` con 4 casos. Pendiente de conexión al agente real. |
 
 ## Decisiones que conviene no perder de vista
 

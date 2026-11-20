@@ -2401,6 +2401,8 @@ class Repositorio:
         tipo: str,
         payload: dict[str, Any],
         topico: str = "sistema/tablet",
+        *,
+        conexion: Any | None = None,
     ) -> str:
         """Encola un mensaje para publicar cuando vuelva el enlace.
 
@@ -2412,12 +2414,19 @@ class Repositorio:
 
         Además queda escrito en ``idempotency_key``, que es el registro
         auditable de qué se encoló.
+
+        **Outbox transaccional (P1-03):** si se entrega ``conexion``, la
+        inserción se ejecuta dentro de esa transacción (por ejemplo, la misma
+        que guarda la orden o el evento), de modo que el mensaje y su efecto
+        de negocio se comprometen juntos. Si no se entrega, se abre una
+        transacción propia.
         """
         payload_json = json.dumps(payload, ensure_ascii=False)
-        with self._engine.begin() as conexion:
+
+        def _ejecutar(con: Connection) -> str:
             id_outbox = None
             for _ in range(3):
-                id_outbox = conexion.execute(
+                id_outbox = con.execute(
                     text(
                         """
                         INSERT INTO outbox_cola (tipo, payload, topico, estado)
@@ -2433,7 +2442,7 @@ class Repositorio:
                 # La fila pendiente es la misma orden, no una copia: se
                 # actualiza con el snapshot más reciente para no publicar un
                 # estado viejo cuando vuelva el bus.
-                id_outbox = conexion.execute(
+                id_outbox = con.execute(
                     text(
                         """
                         UPDATE outbox_cola
@@ -2463,7 +2472,7 @@ class Repositorio:
             # El registro de idempotencia deja escrito qué mensaje se
             # encoló y en qué fila: así no se encola dos veces y se puede
             # auditar qué salió de la planta.
-            conexion.execute(
+            con.execute(
                 text(
                     """
                     INSERT INTO idempotency_key (clave, tipo, referencia_id)
@@ -2478,7 +2487,94 @@ class Repositorio:
                     "referencia": str(id_outbox),
                 },
             )
-        return str(id_outbox)
+            return str(id_outbox)
+
+        if conexion is not None:
+            return _ejecutar(conexion)
+        with self._engine.begin() as conexion_nueva:
+            return _ejecutar(conexion_nueva)
+
+    def marcar_outbox_publicando(
+        self, id_outbox: str, *, conexion: Any | None = None
+    ) -> None:
+        """Marca una fila de la cola como "publicando" (bloqueo de drenador).
+
+        Se usa dentro de ``publicar_pendientes`` para que ningún otro
+        drenador toque la misma fila mientras este la publica (P1-03).
+        Si se entrega ``conexion``, se ejecuta dentro de esa transacción.
+        """
+
+        def _ejecutar(con: Connection) -> None:
+            con.execute(
+                text(
+                    """
+                    UPDATE outbox_cola
+                    SET estado = 'publicando'
+                    WHERE id = :id AND estado = 'pendiente'
+                    """
+                ),
+                {"id": id_outbox},
+            )
+
+        if conexion is not None:
+            _ejecutar(conexion)
+        elif self._engine is not None:
+            with self._engine.begin() as conexion_nueva:
+                _ejecutar(conexion_nueva)
+
+    def marcar_outbox_enviado(
+        self, id_outbox: str, *, conexion: Any | None = None
+    ) -> None:
+        """Marca una fila de la cola como enviada.
+
+        Si se entrega ``conexion``, se ejecuta dentro de esa transacción
+        (outbox transaccional: publicar + marcar enviado en una sola
+        transacción, P1-03).
+        """
+
+        def _ejecutar(con: Connection) -> None:
+            con.execute(
+                text(
+                    """
+                    UPDATE outbox_cola
+                    SET estado = 'enviado'
+                    WHERE id = :id
+                    """
+                ),
+                {"id": id_outbox},
+            )
+
+        if conexion is not None:
+            _ejecutar(conexion)
+        elif self._engine is not None:
+            with self._engine.begin() as conexion_nueva:
+                _ejecutar(conexion_nueva)
+
+    def marcar_outbox_error(
+        self, id_outbox: str, *, conexion: Any | None = None
+    ) -> None:
+        """Suma un intento fallido. El mensaje sigue pendiente: se reintenta.
+
+        Si se entrega ``conexion``, se ejecuta dentro de esa transacción.
+        """
+
+        def _ejecutar(con: Connection) -> None:
+            con.execute(
+                text(
+                    """
+                    UPDATE outbox_cola
+                    SET intentos = intentos + 1, proximo_intento = now() + interval '30 seconds'
+                    WHERE id = :id
+                    """
+                ),
+                {"id": id_outbox},
+            )
+
+        if conexion is not None:
+            _ejecutar(conexion)
+        elif self._engine is not None:
+            with self._engine.begin() as conexion_nueva:
+                _ejecutar(conexion_nueva)
 
     def pendientes_outbox(self, limite: int = 50) -> list[tuple[str, str, str, dict[str, Any]]]:
         """Mensajes en cola, en el orden en que se encolaron.
@@ -2552,34 +2648,6 @@ class Repositorio:
             (str(fila["id"]), str(fila["tipo"]), str(fila["topico"]), dict(fila["payload"]))
             for fila in filas
         ]
-
-    def marcar_outbox_enviado(self, id_outbox: str) -> None:
-        with self._engine.begin() as conexion:
-            conexion.execute(
-                text(
-                    """
-                    UPDATE outbox_cola
-                    SET estado = 'enviado'
-                    WHERE id = :id
-                    """
-                ),
-                {"id": id_outbox},
-            )
-
-    def marcar_outbox_error(self, id_outbox: str) -> None:
-        """Suma un intento fallido. El mensaje sigue pendiente: se reintenta."""
-        with self._engine.begin() as conexion:
-            conexion.execute(
-                text(
-                    """
-                    UPDATE outbox_cola
-                    SET intentos = intentos + 1, proximo_intento = now() + interval '30 seconds'
-                    WHERE id = :id
-                    """
-                ),
-                {"id": id_outbox},
-            )
-
 
 def _parte_id_manifiesto(manifiesto: dict[str, Any]) -> str | None:
     """El id real del parte; ``no_disponible`` no es un id."""

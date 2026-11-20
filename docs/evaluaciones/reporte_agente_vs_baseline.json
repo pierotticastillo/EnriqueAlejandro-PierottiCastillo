@@ -26,8 +26,8 @@
   "fallados": 5,
   "errores": 0,
   "pendientes": 0,
-  "segundos_totales": 587.747,
-  "latencia_p95_s": 199.366,
+  "segundos_totales": 353.011,
+  "latencia_p95_s": 108.986,
   "resultado_global": "fallido",
   "resultados": [
     {
@@ -57,9 +57,9 @@
           "diagnostica": true
         }
       ],
-      "segundos": 215.076,
+      "segundos": 118.244,
       "estado_agente": "descartada",
-      "motivo_agente": "cita desconocida: TX350-D §8.14",
+      "motivo_agente": "falla fuera del catálogo: F02-B-102-4",
       "falla_correcta": false,
       "tarea_correcta": false,
       "tareas_coinciden": false,
@@ -85,15 +85,34 @@
           "diagnostica": true
         }
       ],
-      "segundos": 101.062,
-      "estado_agente": "descartada",
-      "motivo_agente": "cita desconocida: TX350-D §8.3, TX350-D §8.4, TX350-D §8.5",
+      "segundos": 71.956,
+      "estado_agente": "aceptada",
+      "motivo_agente": null,
+      "falla_obtenida": "TX-T01",
+      "causas_obtenidas": [
+        "Desgaste normal de los anillos"
+      ],
+      "citas_obtenidas": [
+        "TX350-D §8.3",
+        "TX350-D §8.4",
+        "TX350-D §8.5"
+      ],
+      "tareas_obtenidas": [
+        "T-B-EMP"
+      ],
+      "justificacion": "La alta y creciente presión diferencial sugiere problemas de desgaste en componentes clave o una posible falla en la válvula de seguridad. Las tareas de mantenimiento deben incluir la inspección y posible reemplazo de los componentes desgastados y la revisión de la válvula de seguridad.",
+      "confianza": "media",
+      "citas_descartadas": [],
+      "causas_descartadas": [
+        "Desconexión de la válvula de seguridad",
+        "Frasquito de presión dañado"
+      ],
       "falla_correcta": false,
       "tarea_correcta": false,
       "tareas_coinciden": false,
       "citas_validas": true,
       "estado": "fallido",
-      "motivo": "estado=descartada, falla_ok=False, tarea_ok=False, tareas_ok=False, citas_ok=True"
+      "motivo": "estado=aceptada, falla_ok=False, tarea_ok=False, tareas_ok=False, citas_ok=True"
     },
     {
       "case_id": "eval-baseline-003",
@@ -113,9 +132,9 @@
           "diagnostica": true
         }
       ],
-      "segundos": 136.526,
+      "segundos": 57.608,
       "estado_agente": "descartada",
-      "motivo_agente": "cita desconocida: TX350-D §8.3",
+      "motivo_agente": "falla fuera del catálogo: F02-B-102-4",
       "falla_correcta": false,
       "tarea_correcta": false,
       "tareas_coinciden": false,
@@ -136,15 +155,29 @@
           "diagnostica": false
         }
       ],
-      "segundos": 67.245,
-      "estado_agente": "descartada",
-      "motivo_agente": "cita desconocida: TX350-D §8.3",
-      "falla_correcta": true,
-      "tarea_correcta": true,
-      "tareas_coinciden": true,
+      "segundos": 52.086,
+      "estado_agente": "aceptada",
+      "motivo_agente": null,
+      "falla_obtenida": "TX-T01",
+      "causas_obtenidas": [
+        "Desgaste normal de los anillos"
+      ],
+      "citas_obtenidas": [
+        "TX350-D §8.3"
+      ],
+      "tareas_obtenidas": [
+        "T-B-EMP"
+      ],
+      "justificacion": "La inspección indica que el desgaste normal de los anillos está causando la falla TX-T01. Esta causa se encuentra en la sección 8.3 del manual de instrucciones. La tarea T-B-EMP es la más apropiada para abordar este problema, ya que implica la revisión y mantenimiento de los componentes del sistema de inyección de agua.",
+      "confianza": "alta",
+      "citas_descartadas": [],
+      "causas_descartadas": [],
+      "falla_correcta": false,
+      "tarea_correcta": false,
+      "tareas_coinciden": false,
       "citas_validas": true,
       "estado": "fallido",
-      "motivo": "estado=descartada, falla_ok=True, tarea_ok=True, tareas_ok=True, citas_ok=True"
+      "motivo": "estado=aceptada, falla_ok=False, tarea_ok=False, tareas_ok=False, citas_ok=True"
     },
     {
       "case_id": "eval-baseline-005",
@@ -159,15 +192,29 @@
           "diagnostica": true
         }
       ],
-      "segundos": 67.838,
-      "estado_agente": "descartada",
-      "motivo_agente": "cita desconocida: TX350-D §8.3, TX350-D §8.4",
-      "falla_correcta": true,
-      "tarea_correcta": true,
-      "tareas_coinciden": true,
+      "segundos": 53.117,
+      "estado_agente": "aceptada",
+      "motivo_agente": null,
+      "falla_obtenida": "TX-T01",
+      "causas_obtenidas": [
+        "Desgaste normal de los anillos"
+      ],
+      "citas_obtenidas": [
+        "TX350-D §8.3"
+      ],
+      "tareas_obtenidas": [
+        "T-B-EMP"
+      ],
+      "justificacion": "El caudal no coincide con la suma de las bombas, lo cual puede deberse al desgaste normal de los anillos. Esto puede ser diagnosticado y reparado mediante la tarea T-B-EMP.",
+      "confianza": "alta",
+      "citas_descartadas": [],
+      "causas_descartadas": [],
+      "falla_correcta": false,
+      "tarea_correcta": false,
+      "tareas_coinciden": false,
       "citas_validas": true,
       "estado": "fallido",
-      "motivo": "estado=descartada, falla_ok=True, tarea_ok=True, tareas_ok=True, citas_ok=True"
+      "motivo": "estado=aceptada, falla_ok=False, tarea_ok=False, tareas_ok=False, citas_ok=True"
     }
   ]
 }

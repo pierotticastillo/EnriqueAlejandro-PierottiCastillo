@@ -49,29 +49,72 @@ def _cargar_bateria(ruta: Path) -> dict[str, Any]:
         sys.exit(1)
 
 
+def _citas_permitidas(cliente_api: Any) -> set[str]:
+    """Obtiene las citas de todos los documentos y secciones de la planta.
+
+    Estas son las citas que el agente puede usar con grounding válido, ya que
+    corresponden a secciones reales de los manuales que sirve la planta
+    (fallas, tareas, manuales, contrato).
+    """
+    citas: set[str] = set()
+    try:
+        from tools.manuales import CorpusManuales
+
+        corpus = CorpusManuales(cliente_api)
+        documentos = corpus.documentos()
+        for doc_id in documentos:
+            if not doc_id:
+                continue
+            try:
+                secciones = corpus.secciones(doc_id)
+            except Exception:
+                continue
+            for seccion in secciones:
+                numero = seccion.get("numero") or ""
+                cita = str(seccion.get("id") or f"{doc_id} §{numero}")
+                cita = cita.strip()
+                if cita:
+                    citas.add(cita)
+    except Exception:
+        pass
+    return citas
+
+
 def _construir_agente(settings: Settings) -> Any:
     """Construye el agente usando el factory real del sistema."""
     cliente_api = ClienteApi(
         settings.planta_api_url,
         timeout_s=settings.planta_api_timeout_s,
     )
+    corpus = CorpusManuales(cliente_api)
+    # Carga el catálogo real de la planta (fallas, tareas, repuestos, citas)
+    # desde los documentos que sirve la planta, usando CorpusPlanta que devuelve
+    # objetos DocumentoRag con las citas de cada sección.
+    from rag.corpus import CorpusPlanta
+
+    corpus_planta = CorpusPlanta(cliente_api)
     try:
-        catalogo = CatalogoManuales.desde_documentos([])
+        documentos_rag = corpus_planta.cargar()
+    except Exception:
+        documentos_rag = []
+    try:
+        catalogo = CatalogoManuales.desde_documentos(documentos_rag)
     except Exception:  # noqa: BLE001
         catalogo = CatalogoManuales.desde_documentos([])
     recuperador = RecuperadorDiferido()
     return crear_agente(
         settings,
         cliente=cliente_api,
-        corpus=CorpusManuales(cliente_api),
+        corpus=corpus,
         recuperador=recuperador,
         catalogo=catalogo,
-    )
+    ), cliente_api
 
 
 def _evaluar_caso(
     agente: Any,
     caso: dict[str, Any],
+    cliente_api: Any = None,
 ) -> dict[str, Any]:
     """Ejecuta un caso y compara la propuesta del agente con ground_truth."""
     caso_inicio = time.monotonic()
@@ -122,11 +165,20 @@ def _evaluar_caso(
         + "falla, causas, citas, tareas y justificación."
     )
 
+    # Citas permitidas: las del catálogo real de la planta (fallas, tareas,
+    # manuales, contrato) más las de CONTEXTO_CITAS_PERMITIDAS si existe.
+    permitidas: set[str] = set()
     try:
         from analisis.aprobacion import CONTEXTO_CITAS_PERMITIDAS  # type: ignore
-        permitidas = tuple(CONTEXTO_CITAS_PERMITIDAS)
+
+        permitidas.update(CONTEXTO_CITAS_PERMITIDAS)
     except Exception:
-        permitidas = ()
+        pass
+    try:
+        permitidas.update(_citas_permitidas(cliente_api))
+    except Exception:
+        pass
+    permitidas = tuple(sorted(permitidas))
 
     desde = time.monotonic()
     detalle = agente.consultar_detallado(
@@ -275,11 +327,11 @@ def main() -> None:
 
     bateria = _cargar_bateria(ruta_entrada)
     settings = Settings()
-    agente = _construir_agente(settings)
+    agente, cliente_api = _construir_agente(settings)
 
     resultados: list[dict[str, Any]] = []
     for caso in bateria.get("casos", []):
-        resultado = _evaluar_caso(agente, caso)
+        resultado = _evaluar_caso(agente, caso, cliente_api)
         resultados.append(resultado)
         print(
             f"  [{resultado['case_id']}] {resultado['estado']} - {resultado['motivo']}"

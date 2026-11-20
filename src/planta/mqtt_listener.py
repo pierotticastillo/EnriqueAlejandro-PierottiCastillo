@@ -32,7 +32,14 @@ class ErrorPublicacion(Exception):
 
 
 class ClientePlanta:
-    """Cliente MQTT con suscripciones y publicación de mensajes del sistema."""
+    """Cliente MQTT con suscripciones y publicación de mensajes del sistema.
+
+    Con PUBACK (P1-04): ``publicar_con_puback`` publica con QoS 1 y espera
+    la confirmación de entrega del broker antes de regresar. Los PUBACKs
+    llegados se registran en ``_puback_recibidos`` y se sincronizan con
+    eventos de threading para que el drenador de la cola sepa cuándo un
+    mensaje realmente salió.
+    """
 
     def __init__(
         self,
@@ -61,6 +68,10 @@ class ClientePlanta:
         # pierde, queda en PostgreSQL y sale cuando vuelve.
         self._cola = cola
         self._detenido = threading.Event()
+        # PUBACKs recibidos: mid -> threading.Event que se pone cuando el
+        # broker confirma la entrega (QoS 1).
+        self._puback_recibidos: dict[int, threading.Event] = {}
+        self._puback_candado = threading.Lock()
 
     def _crear_cliente(self) -> mqtt.Client:
         cliente = mqtt.Client(
@@ -70,7 +81,24 @@ class ClientePlanta:
         cliente.reconnect_delay_set(min_delay=1, max_delay=30)
         if self._settings.mqtt_usuario:
             cliente.username_pw_set(self._settings.mqtt_usuario, self._settings.mqtt_password)
+        cliente.on_publish = self._al_publicado
         return cliente
+
+    def _al_publicado(self, _cliente, _userdata, mid: int, _reason_code, _properties) -> None:
+        """El broker confirmó la entrega (PUBACK) de un mensaje QoS 1."""
+        with self._puback_candado:
+            evento = self._puback_recibidos.pop(mid, None)
+        if evento is not None:
+            evento.set()
+
+    def _esperar_puback(self, mid: int, timeout_s: float) -> bool:
+        """Espera el PUBACK de un mensaje publicado con QoS 1."""
+        evento = threading.Event()
+        with self._puback_candado:
+            # Si ya llegó el PUBACK antes de registrar la espera, no bloquear.
+            if mid not in self._puback_recibidos:
+                self._puback_recibidos[mid] = evento
+        return evento.wait(timeout=timeout_s)
 
     def iniciar(self) -> None:
         self._cliente.on_connect = self._al_conectar
@@ -100,6 +128,23 @@ class ClientePlanta:
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             logger.warning("No se pudo publicar en %s (rc=%s)", topico, info.rc)
             raise ErrorPublicacion(f"No se pudo publicar en {topico} (rc={info.rc})")
+
+    def publicar_con_puback(
+        self, topico: str, payload: str, *, qos: int = 1, timeout_s: float = 10.0
+    ) -> bool:
+        """Publica con QoS 1 y espera el PUBACK del broker (P1-04).
+
+        Devuelve True si el broker confirmó la entrega dentro del timeout,
+        False en caso contrario. Si el bus no está conectado, devuelve False
+        sin intentar publicar.
+        """
+        if not self.conectado:
+            return False
+        info = self._cliente.publish(topico, payload, qos=qos)
+        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+            logger.warning("No se pudo publicar en %s (rc=%s)", topico, info.rc)
+            return False
+        return self._esperar_puback(info.mid, timeout_s)
 
     @property
     def conectado(self) -> bool:

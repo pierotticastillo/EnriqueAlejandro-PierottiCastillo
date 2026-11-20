@@ -47,6 +47,10 @@ class RepoFalso:
         self.enviados.append(id_outbox)
         self.pendientes = [p for p in self.pendientes if p[0] != id_outbox]
 
+    def marcar_outbox_publicando(self, id_outbox: str, *, conexion: Any | None = None) -> None:
+        """Marca como publicando (no-op en el falso: no hay concurrencia en tests)."""
+        pass
+
     def marcar_outbox_error(self, id_outbox: str) -> None:
         self.errores.append(id_outbox)
 
@@ -62,6 +66,18 @@ class PublicadorFalso:
         if self.falla:
             raise RuntimeError("no se pudo publicar")
         self.publicados.append((topico, payload))
+
+    def publicar_con_puback(
+        self,
+        topico: str,
+        payload: str,
+        *,
+        qos: int = 1,
+        timeout_s: float = 10.0,
+    ) -> bool:
+        """Publica y simula PUBACK recibido (siempre entrega, salvo falla)."""
+        self.publicar(topico, payload, qos=qos)
+        return True
 
 
 def _mensaje(id_: str) -> MensajeTablet:
