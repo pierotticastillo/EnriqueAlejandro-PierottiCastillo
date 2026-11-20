@@ -8,9 +8,6 @@ Verifica que:
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
-
 from planta.cola import Publicador
 from planta.mqtt_listener import ClientePlanta
 

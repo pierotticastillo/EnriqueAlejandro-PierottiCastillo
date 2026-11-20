@@ -17,17 +17,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import pytest
 from sqlalchemy import create_engine
 
-import pytest
-
 from db.checkpoint import (
-    CheckpointNoEncontrado,
-    CheckpointObsoleto,
     ESTADO_EN_CURSO,
     ESTADO_TERMINAL,
-    RepositorioCheckpoint,
     TAREA_ANALISIS,
+    CheckpointNoEncontrado,
+    CheckpointObsoleto,
+    RepositorioCheckpoint,
     crear_correlation_id,
 )
 
