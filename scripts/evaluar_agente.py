@@ -333,15 +333,11 @@ def main() -> None:
     for caso in bateria.get("casos", []):
         resultado = _evaluar_caso(agente, caso, cliente_api)
         resultados.append(resultado)
-        print(
-            f"  [{resultado['case_id']}] {resultado['estado']} - {resultado['motivo']}"
-        )
+        print(f"  [{resultado['case_id']}] {resultado['estado']} - {resultado['motivo']}")
 
     reporte = _generar_reporte(bateria, resultados)
     ruta_salida.parent.mkdir(parents=True, exist_ok=True)
-    ruta_salida.write_text(
-        json.dumps(reporte, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    ruta_salida.write_text(json.dumps(reporte, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"\nReporte guardado en: {ruta_salida}")
     print(

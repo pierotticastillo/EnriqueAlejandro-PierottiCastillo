@@ -2494,9 +2494,7 @@ class Repositorio:
         with self._engine.begin() as conexion_nueva:
             return _ejecutar(conexion_nueva)
 
-    def marcar_outbox_publicando(
-        self, id_outbox: str, *, conexion: Any | None = None
-    ) -> None:
+    def marcar_outbox_publicando(self, id_outbox: str, *, conexion: Any | None = None) -> None:
         """Marca una fila de la cola como "publicando" (bloqueo de drenador).
 
         Se usa dentro de ``publicar_pendientes`` para que ningún otro
@@ -2522,9 +2520,7 @@ class Repositorio:
             with self._engine.begin() as conexion_nueva:
                 _ejecutar(conexion_nueva)
 
-    def marcar_outbox_enviado(
-        self, id_outbox: str, *, conexion: Any | None = None
-    ) -> None:
+    def marcar_outbox_enviado(self, id_outbox: str, *, conexion: Any | None = None) -> None:
         """Marca una fila de la cola como enviada.
 
         Si se entrega ``conexion``, se ejecuta dentro de esa transacción
@@ -2550,9 +2546,7 @@ class Repositorio:
             with self._engine.begin() as conexion_nueva:
                 _ejecutar(conexion_nueva)
 
-    def marcar_outbox_error(
-        self, id_outbox: str, *, conexion: Any | None = None
-    ) -> None:
+    def marcar_outbox_error(self, id_outbox: str, *, conexion: Any | None = None) -> None:
         """Suma un intento fallido. El mensaje sigue pendiente: se reintenta.
 
         Si se entrega ``conexion``, se ejecuta dentro de esa transacción.
@@ -2648,6 +2642,7 @@ class Repositorio:
             (str(fila["id"]), str(fila["tipo"]), str(fila["topico"]), dict(fila["payload"]))
             for fila in filas
         ]
+
 
 def _parte_id_manifiesto(manifiesto: dict[str, Any]) -> str | None:
     """El id real del parte; ``no_disponible`` no es un id."""

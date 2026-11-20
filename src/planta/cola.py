@@ -162,9 +162,7 @@ def publicar_pendientes(
         publicado = False
         try:
             if esperar_puback:
-                publicado = publicador.publicar_con_puback(
-                    topico, mensaje.model_dump_json(), qos=1
-                )
+                publicado = publicador.publicar_con_puback(topico, mensaje.model_dump_json(), qos=1)
             else:
                 publicador.publicar(topico, mensaje.model_dump_json(), qos=1)
                 publicado = True

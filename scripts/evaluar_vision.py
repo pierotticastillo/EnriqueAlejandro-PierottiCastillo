@@ -168,11 +168,14 @@ def _generar_reporte(
         if (verdaderos_positivos + falsos_negativos) > 0
         else None
     )
-    tasa_indeterminado = round(
-        sum(1 for r in resultados if r.get("estado_vision") == "indeterminado")
-        / total,
-        3,
-    ) if total > 0 else None
+    tasa_indeterminado = (
+        round(
+            sum(1 for r in resultados if r.get("estado_vision") == "indeterminado") / total,
+            3,
+        )
+        if total > 0
+        else None
+    )
 
     return {
         "bateria": "vision",
@@ -198,9 +201,7 @@ def _generar_reporte(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Evalúa la batería de visión con el modelo real."
-    )
+    parser = argparse.ArgumentParser(description="Evalúa la batería de visión con el modelo real.")
     parser.add_argument(
         "--entrada",
         default=str(BATERIA_DEFECTO),
@@ -228,15 +229,11 @@ def main() -> None:
     for caso in bateria.get("casos", []):
         resultado = _evaluar_caso(cliente, caso)
         resultados.append(resultado)
-        print(
-            f"  [{resultado['case_id']}] {resultado['estado']} - {resultado['motivo']}"
-        )
+        print(f"  [{resultado['case_id']}] {resultado['estado']} - {resultado['motivo']}")
 
     reporte = _generar_reporte(bateria, resultados)
     ruta_salida.parent.mkdir(parents=True, exist_ok=True)
-    ruta_salida.write_text(
-        json.dumps(reporte, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    ruta_salida.write_text(json.dumps(reporte, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"\nReporte guardado en: {ruta_salida}")
     print(

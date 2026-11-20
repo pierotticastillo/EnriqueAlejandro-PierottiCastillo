@@ -234,9 +234,7 @@ def test_checkpoint_no_encontrado(repositorio: RepositorioCheckpoint, engine: cr
     correlation_id = crear_correlation_id("pia3")
 
     with engine.begin() as conexion:
-        cargado = repositorio.cargar_ultimo(
-            conexion, correlation_id=correlation_id
-        )
+        cargado = repositorio.cargar_ultimo(conexion, correlation_id=correlation_id)
         assert cargado is None
 
         with pytest.raises(CheckpointNoEncontrado):
@@ -281,12 +279,8 @@ def test_correlation_id_agrupa_casos(repositorio: RepositorioCheckpoint, engine:
 
     # Cada correlation_id es independiente
     with engine.begin() as conexion:
-        ca = repositorio.cargar_ultimo(
-            conexion, correlation_id=cid_a, case_id=case_a
-        )
-        cb = repositorio.cargar_ultimo(
-            conexion, correlation_id=cid_b, case_id=case_b
-        )
+        ca = repositorio.cargar_ultimo(conexion, correlation_id=cid_a, case_id=case_a)
+        cb = repositorio.cargar_ultimo(conexion, correlation_id=cid_b, case_id=case_b)
         assert ca is not None and ca.case_id == case_a
         assert cb is not None and cb.case_id == case_b
         assert ca.paso_actual == "parte"
