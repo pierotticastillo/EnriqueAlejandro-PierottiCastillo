@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "escenario": "tormenta-perfecta",
+  "capturado_en": "2026-11-19T23:46:21-03:00",
+  "alembic_version": "0012",
+  "conteos": {
+    "nota": 13,
+    "evento_sistema": 34,
+    "orden": 4,
+    "cierre": 1,
+    "decision_cierre": 0,
+    "habilitacion": 0,
+    "manifiesto_evidencia": 5,
+    "ledger_decisiones": 57
+  },
+  "trayectoria": {
+    "filas": 17,
+    "llamadas_modelo": 9,
+    "llamadas_herramienta": 5,
+    "errores": 2,
+    "tokens_prompt": 18185,
+    "tokens_completion": 1251,
+    "costo_usd": 0.0,
+    "segundos_modelo": 268.528,
+    "latencia_p50_s": 28.356,
+    "latencia_p95_s": 43.338,
+    "latencia_max_s": 43.338,
+    "segundos_herramientas": 76.178,
+    "por_modelo": {
+      "qwen2.5:3b-instruct": {
+        "llamadas": 8,
+        "tokens_prompt": 18185,
+        "tokens_completion": 1251,
+        "costo_usd": 0.0,
+        "segundos": 250.78,
+        "errores": 0
+      },
+      "no_disponible": {
+        "llamadas": 1,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0.0,
+        "segundos": 17.748,
+        "errores": 1
+      }
+    }
+  },
+  "vision": {
+    "llamadas": 0,
+    "tokens_prompt": 0,
+    "tokens_completion": 0,
+    "costo_usd": 0,
+    "segundos": 0,
+    "llamadas_por_modelo": []
+  },
+  "ledger_por_tipo": [
+    {
+      "tipo": "analisis",
+      "entradas": 11,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "cierre",
+      "entradas": 1,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "evento",
+      "entradas": 11,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "evidencia",
+      "entradas": 11,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "propuesta",
+      "entradas": 11,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "reglas",
+      "entradas": 11,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "trayectoria",
+      "entradas": 1,
+      "tokens_prompt": 13660,
+      "tokens_completion": 980,
+      "costo_usd": "0.000000",
+      "segundos": "211.558"
+    }
+  ],
+  "alcance": {
+    "modelo": "filas de registro_trayectoria con tipo=modelo",
+    "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+    "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+    "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+  }
+}

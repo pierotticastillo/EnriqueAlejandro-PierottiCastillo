@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "escenario": "sin-luz",
+  "capturado_en": "2026-11-19T23:54:25-03:00",
+  "alembic_version": "0012",
+  "conteos": {
+    "nota": 9,
+    "evento_sistema": 25,
+    "orden": 6,
+    "cierre": 1,
+    "decision_cierre": 0,
+    "habilitacion": 0,
+    "manifiesto_evidencia": 7,
+    "ledger_decisiones": 41
+  },
+  "trayectoria": {
+    "filas": 7,
+    "llamadas_modelo": 4,
+    "llamadas_herramienta": 2,
+    "errores": 0,
+    "tokens_prompt": 8698,
+    "tokens_completion": 640,
+    "costo_usd": 0.0,
+    "segundos_modelo": 112.285,
+    "latencia_p50_s": 23.866,
+    "latencia_p95_s": 40.36,
+    "latencia_max_s": 40.36,
+    "segundos_herramientas": 71.751,
+    "por_modelo": {
+      "qwen2.5:3b-instruct": {
+        "llamadas": 4,
+        "tokens_prompt": 8698,
+        "tokens_completion": 640,
+        "costo_usd": 0.0,
+        "segundos": 112.285,
+        "errores": 0
+      }
+    }
+  },
+  "vision": {
+    "llamadas": 0,
+    "tokens_prompt": 0,
+    "tokens_completion": 0,
+    "costo_usd": 0,
+    "segundos": 0,
+    "llamadas_por_modelo": []
+  },
+  "ledger_por_tipo": [
+    {
+      "tipo": "analisis",
+      "entradas": 8,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "cierre",
+      "entradas": 1,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "evento",
+      "entradas": 8,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "evidencia",
+      "entradas": 8,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "propuesta",
+      "entradas": 8,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "reglas",
+      "entradas": 8,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    }
+  ],
+  "alcance": {
+    "modelo": "filas de registro_trayectoria con tipo=modelo",
+    "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+    "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+    "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+  }
+}

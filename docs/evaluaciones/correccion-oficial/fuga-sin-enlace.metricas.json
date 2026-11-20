@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "escenario": "fuga-sin-enlace",
+  "capturado_en": "2026-11-19T23:49:15-03:00",
+  "alembic_version": "0012",
+  "conteos": {
+    "nota": 4,
+    "evento_sistema": 6,
+    "orden": 2,
+    "cierre": 0,
+    "decision_cierre": 0,
+    "habilitacion": 0,
+    "manifiesto_evidencia": 2,
+    "ledger_decisiones": 10
+  },
+  "trayectoria": {
+    "filas": 7,
+    "llamadas_modelo": 4,
+    "llamadas_herramienta": 1,
+    "errores": 2,
+    "tokens_prompt": 6900,
+    "tokens_completion": 650,
+    "costo_usd": 0.0,
+    "segundos_modelo": 122.655,
+    "latencia_p50_s": 28.356,
+    "latencia_p95_s": 41.018,
+    "latencia_max_s": 41.018,
+    "segundos_herramientas": 0.394,
+    "por_modelo": {
+      "no_disponible": {
+        "llamadas": 1,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0.0,
+        "segundos": 15.7,
+        "errores": 1
+      },
+      "qwen2.5:3b-instruct": {
+        "llamadas": 3,
+        "tokens_prompt": 6900,
+        "tokens_completion": 650,
+        "costo_usd": 0.0,
+        "segundos": 106.95500000000001,
+        "errores": 0
+      }
+    }
+  },
+  "vision": {
+    "llamadas": 1,
+    "tokens_prompt": 0,
+    "tokens_completion": 0,
+    "costo_usd": 0.0,
+    "segundos": 0.014693,
+    "llamadas_por_modelo": [
+      {
+        "manifiesto_id": "3fa474d5-9503-44c2-a318-8e758d09221c",
+        "orden_id": "ORD-B-101-TX-T09",
+        "foto_id": "f9be55ce-ebf5-5b23-9545-3127f81d427c",
+        "modelo": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        "estado": "indeterminado",
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "costo_usd": 0.0,
+        "segundos": 0.014692701000967645
+      }
+    ]
+  },
+  "ledger_por_tipo": [
+    {
+      "tipo": "analisis",
+      "entradas": 2,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "evento",
+      "entradas": 2,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "evidencia",
+      "entradas": 2,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.015"
+    },
+    {
+      "tipo": "propuesta",
+      "entradas": 2,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    },
+    {
+      "tipo": "reglas",
+      "entradas": 2,
+      "tokens_prompt": 0,
+      "tokens_completion": 0,
+      "costo_usd": "0.000000",
+      "segundos": "0.000"
+    }
+  ],
+  "alcance": {
+    "modelo": "filas de registro_trayectoria con tipo=modelo",
+    "vision": "manifiestos de orden y bloque fotos.elementos[].vision",
+    "costo": "valor registrado con la tarifa configurada; la visión no tiene tarifa configurada",
+    "redaccion": "la llamada de redacción no tiene registro de tokens propio; no se cuenta"
+  }
+}

@@ -74,3 +74,9 @@ volumes/
 # Informes de evaluación generados (no se entregan)
 # ============================================================
 reporte_evaluacion.json
+
+# ============================================================
+# Logs de ejecución de Docker (ruidosos, no se entregan)
+# ============================================================
+*.log
+build.log
