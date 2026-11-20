@@ -1,9 +1,9 @@
 # Checklist de entrega — PIA-3 · Academia Novit 2026
 
-**Fecha:** 2026-11-19  
-**Commit de referencia:** `4eb00f54b5861c6c3c922aad060de266064012ef`  
+**Fecha:** 2026-11-20  
+**Commit de referencia:** `090a85506ac68c53e4f640efc10db61a7ac74aca`  
 **Corrector oficial:** `ab65b95e911731351dba395817a74a8cc60da2b2`  
-**Alembic:** `0011`
+**Alembic:** `0012`
 
 ---
 
@@ -16,7 +16,7 @@
 | P0-03 | Evidencia y provenance de la orden y del cierre | **Cerrado** | Manifiesto canónico, ledger transaccional, migración 0010 |
 | P0-04 | Autenticación y roles de la Central | **Cerrado** | Token Bearer, RBAC (planificador/supervisor/inspector/lectura) |
 | P0-05 | XSS almacenado en la Central | **Cerrado** | `textContent`/`replaceChildren`, CSP con nonce |
-| P0-06 | Corrida oficial sobre el commit final | **Cerrado** | 92.6/100 — APRUEBA, 0 eliminatorias, 467 mensajes válidos |
+| P0-06 | Corrida oficial sobre el commit final | **Cerrado** | 92.8/100 — APRUEBA, 0 eliminatorias, 0 mensajes inválidos |
 | P0-07 | Alcance, fecha, rúbrica de la Entrega 2 | **Cerrado** | Anexo de Entrega 2: fecha 20/11/2026, módulos 3.1 a 3.4 |
 
 ---
@@ -25,7 +25,7 @@
 
 | Métrica | Valor | Estado |
 |---------|-------|--------|
-| Nota oficial (corrida local con ASR) | **93.4 / 100 — APRUEBA** | ✅ |
+| Nota oficial (corrida local con ASR) | **92.8 / 100 — APRUEBA** | ✅ |
 | Nota oficial anterior (entorno de producción) | **92.6 / 100 — APRUEBA** | ✅ |
 | Eliminatorias | 0 | ✅ |
 | Mensajes inválidos | 0 | ✅ |

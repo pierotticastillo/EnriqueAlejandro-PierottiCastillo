@@ -70,16 +70,14 @@ de órdenes.
       imágenes y manifiesto en
       [`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/README.md).
 
-**Corrector oficial final:** **92,6/100 — APRUEBA** sobre los 7 escenarios de la
-rúbrica (93 de 93 puntos medidos), con **0 eliminatorias**, **467 mensajes
-válidos y 0 inválidos**. El ancla reproducible es el commit
-`4eb00f54b5861c6c3c922aad060de266064012ef`, el corrector oficial
-`ab65b95e911731351dba395817a74a8cc60da2b2` y Alembic `0011`. `D1`, `D2` y
-`G1` quedaron en **100 %** y `A1` en 98,9 %. Los resultados por criterio, las
-métricas, los hashes y los digests están en
-[`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/README.md); la corrida
-diagnóstica anterior (`a13d7cb`, 93,1/100) queda sólo como antecedente de la
-auditoría de integridad. Los SHA-256 se calculan sobre la representación
+**Corrector oficial final:** **92,8/100 — APRUEBA** sobre los 7 escenarios de la
+rúbrica (93 de 93 puntos medidos), con **0 eliminatorias**, **0 mensajes
+inválidos** en todos los escenarios. El ancla reproducible es el commit
+`090a85506ac68c53e4f640efc10db61a7ac74aca`, el corrector oficial
+`ab65b95e911731351dba395817a74a8cc60da2b2` y Alembic `0012`. `D1`, `D2` y
+`G1` quedaron en **100 %**. Los resultados por criterio, las métricas, los
+hashes y los digests están en
+[`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/). Los SHA-256 se calculan sobre la representación
 canónica que Git publica —UTF-8 sin BOM y LF—, fijada por `.gitattributes`;
 así se reproducen descargando los blobs del propio repositorio.
 
@@ -106,22 +104,22 @@ Constatación contra el Anexo de Entregas (cronograma de la Academia Novit 2026)
 
 | Entrega | Fecha | Escenarios que pide el enunciado | Criterios medidos | Estado |
 |---------|-------|----------------------------------|-------------------|--------|
-| 1 | 10/11 | `martes-tranquilo`, `fuga-sin-enlace` | A1–A4b, B1, B2, F1, F2 | **Cumple** — 92,6/100 — APRUEBA (corrida oficial), 0 eliminatorias, 467 mensajes válidos / 0 inválidos |
+| 1 | 10/11 | `martes-tranquilo`, `fuga-sin-enlace` | A1–A4b, B1, B2, F1, F2 | **Cumple** — 92,8/100 — APRUEBA (corrida oficial), 0 eliminatorias, 0 mensajes inválidos |
 | 2 | 20/11 | `tormenta-perfecta`, `sin-luz`, `contratista`, `fuga-sin-enlace` (daño estructural) | D1, D2, F3, G1 | **Cumple** — D1 100 %, D2 100 %, F3 100 %, G1 100 % |
 
-**7 escenarios del corrector oficial** (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`, `contratista`, `ataque`, `libre`): ejecutados contra el repositorio de la Academia local con **93,4/100 — APRUEBA** (mínimo 60), **0 faltas eliminatorias**, 0 mensajes inválidos en todos los escenarios. El modelo ASR `faster-whisper-base` se descargó en `datos/modelos/models--Systran--faster-whisper-base/` para que funcione sin internet en entorno local.
+**7 escenarios del corrector oficial** (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`, `contratista`, `ataque`, `libre`): ejecutados contra el repositorio de la Academia local con **92,8/100 — APRUEBA** (mínimo 60), **0 faltas eliminatorias**, 0 mensajes inválidos en todos los escenarios.
 
 **Resultado detallado por etapa del corrector oficial:**
 
 | Etapa | Nombre | Criterios | Peso total | Puntaje |
 |-------|--------|-----------|------------|---------|
 | **A** | Parte por voz | A1, A2, A3, A4a, A4b | 30 | 24.80 |
-| **B** | Detección en planta | B1, B2 | 20 | 19.87 |
+| **B** | Detección en planta | B1, B2 | 20 | 20.00 |
 | **D** | Órdenes de trabajo | D1, D2 | 25 | 25.00 |
-| **E** | Operación sin enlace | E1, E2, E3 | 10 | 9.20 |
+| **E** | Operación sin enlace | E1, E2, E3 | 10 | 9.82 |
 | **F** | Robustez | F1, F2, F3 | 5 | 5.00 |
 | **G** | Cierre y certificación | G1, G2, G3 | 10 | 3.00 |
-| **Total** | | | **100** | **93.4** |
+| **Total** | | | **100** | **92.8** |
 
 ---
 

@@ -1,6 +1,6 @@
 # Estado de implementación
 
-**Actualizado:** 2026-11-18
+**Actualizado:** 2026-11-20
 **Plan de referencia:** documento interno del curso (no se publica en este
 repositorio). La segunda entrega sigue el **Plan de implementación 2**; el detalle
 de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
