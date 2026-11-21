@@ -261,6 +261,20 @@ flowchart TD
 | Respuesta tablet | `planta/respuestas` | Procesar correcciones, preguntas, confirmaciones |
 | Cierre | `planta/cierres` | Transcribir, comparar vs orden, dejar para decisión humana |
 
+### APIs documentadas (OpenAPI)
+
+Las dos superficies de API del proyecto están especificadas en OpenAPI 3.0 bajo [`docs/openapi/`](docs/openapi/):
+
+| Spec | Qué documenta |
+|------|---------------|
+| [`central-api.openapi.yaml`](docs/openapi/central-api.openapi.yaml) | API REST de la **Central de mantenimiento** (puerto 8200, token Bearer, RBAC: `planificador`, `supervisor`, `inspector`, `lectura`). Endpoints: `/api/sesion`, `/api/ordenes`, `/api/cierres`, `/api/ordenes/{id}/evidencia`, `/api/ordenes/{id}/decision`, `/api/cierres/{id}/decision`. |
+| [`mcp-tools.openapi.yaml`](docs/openapi/mcp-tools.openapi.yaml) | **Servidor MCP** (streamable-http en `/mcp` o stdio). 8 tools de solo lectura: `equipos`, `historial_sensores`, `historial_ordenes`, `inventario`, `lista_materiales`, `catalogo_tareas`, `busqueda_manuales`, `busqueda_rag`. |
+| [`integracion-academia2026-tp.md`](docs/openapi/integracion-academia2026-tp.md) | Integración con el proyecto externo `academia2026-tp` (planta simulada): red `planta-lan`, puertos, contrato REST, tópicos MQTT, contratos Pydantic, cómo levantar ambos proyectos y correr los escenarios del corrector oficial. |
+
+Los specs son fuente de verdad máquina-legible: se abren en Swagger Editor, Redoc, Postman o Insomnia, y se validan con `openapi-spec-validator`. El propósito es preservar el contexto entre sesiones: cualquier agente que retome el proyecto entiende endpoints, esquemas y autenticación sin releer todo el código.
+
+> El listener MQTT no es una API REST, por tanto no tiene spec OpenAPI. Sus tópicos, contratos Pydantic, red, puertos y cómo levantar ambos proyectos (este + `academia2026-tp`) están en [`docs/openapi/integracion-academia2026-tp.md`](docs/openapi/integracion-academia2026-tp.md).
+
 ## Requisitos
 
 - Docker Engine + Docker Compose v2.

@@ -1,0 +1,605 @@
+openapi: 3.0.3
+info:
+  title: PIA-3 · Central de mantenimiento (API REST)
+  version: 1.0.0
+  description: |
+    Canal de decisión humana de la planta de inyección de agua PIA-3
+    (Academia Novit 2026).
+
+    La Central permite al planificador aprobar o rechazar órdenes pendientes,
+    y al supervisor/inspector cerrar, certificar u observar cierres técnicos.
+    Toda API exige un token Bearer opaco, uno por persona. La identidad y el
+    rol salen **exclusivamente del token**; los campos `usuario` y `rol` del
+    cuerpo se ignoran.
+
+    **No es una tool del agente.** No está en el registro de tools del MCP:
+    el agente no puede llegar a este canal. Las reglas de aprobación siguen
+    en código (`src/analisis/aprobacion.py`); la Central sólo registra la
+    decisión humana sobre una orden o un cierre que el sistema dejó pendiente.
+
+    Integración con el proyecto externo: la planta simulada
+    [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
+    corre junto a este sistema dentro de la red Docker `planta-lan`. Este
+    repositorio **no toca nada** de ese proyecto: solo lee su API REST
+    (`GET /api/planta`, `GET /api/historian/{tag}/{variable}`,
+    `GET /api/historial-ordenes`, `GET /api/documentos/*/secciones`) y se
+    suscribe a sus tópicos MQTT (`planta/recorridas`, `planta/respuestas`,
+    `planta/sensores/+/+`, `planta/cierres`). Los escenarios del corrector
+    oficial se ejecutan contra ambos repositorios a la vez.
+
+  contact:
+    name: Equipo PIA-3
+  license:
+    name: MIT
+    url: https://github.com/pierotticastillo/EnriqueAlejandro-PierottiCastillo/blob/main/LICENSE
+
+servers:
+  - url: http://127.0.0.1:8200
+    description: Central de mantenimiento (loopback, solo la planta local)
+  - url: http://0.0.0.0:8200
+    description: Central de mantenimiento (dentro de contenedor Docker)
+
+paths:
+  /:
+    get:
+      summary: Shell HTML público de la Central
+      description: |
+        Página sin datos que puede cargarse sin token. Las APIs que muestran
+        información exigen autenticación. El navegador guarda el token en
+        `sessionStorage` y lo envía en el header `Authorization`.
+      tags: [sesion]
+      operationId: getCentralShell
+      responses:
+        '200':
+          description: Página HTML de la Central
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /api/sesion:
+    get:
+      summary: Identidad y rol del usuario autenticado
+      description: |
+        Resuelve el usuario y el rol a partir del token Bearer enviado en
+        el header `Authorization`. Sin credencial válida responde 401.
+      tags: [sesion]
+      operationId: getSesion
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sesión válida
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - usuario
+                  - rol
+                properties:
+                  usuario:
+                    type: string
+                    example: juan
+                  rol:
+                    type: string
+                    enum: [planificador, supervisor, inspector, lectura]
+                    example: planificador
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /api/ordenes:
+    get:
+      summary: Listar órdenes para la Central
+      description: |
+        Devuelve las órdenes con tareas, repuestos y estado. Accesible para
+        cualquier rol autenticado (`planificador`, `supervisor`,
+        `inspector`, `lectura`).
+      tags: [ordenes]
+      operationId: listarOrdenes
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limite
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+          description: Cantidad máxima de órdenes a devolver.
+      responses:
+        '200':
+          description: Lista de órdenes
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ordenes
+                properties:
+                  ordenes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Orden'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /api/cierres:
+    get:
+      summary: Listar cierres técnicos y sus decisiones humanas
+      description: |
+        Devuelve los cierres técnicos pendientes y las decisiones tomadas
+        (cerrar, certificar, observar). Accesible para cualquier rol
+        autenticado.
+      tags: [cierres]
+      operationId: listarCierres
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limite
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+          description: Cantidad máxima de cierres a devolver.
+      responses:
+        '200':
+          description: Lista de cierres
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - cierres
+                properties:
+                  cierres:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Cierre'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /api/ordenes/{orden_id}/evidencia:
+    get:
+      summary: Evidencia y reconstrucción de una orden
+      description: |
+        Devuelve el manifiesto, el ledger, la trayectoria y el resumen de
+        integridad de una orden (alias `/reconstruccion`). Cualquier rol
+        autenticado puede consultarla.
+      tags: [evidencia]
+      operationId: obtenerEvidenciaOrden
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: orden_id
+          required: true
+          schema:
+            type: string
+          example: ORD-B-102-TX-T01
+      responses:
+        '200':
+          description: Evidencia reconstruida de la orden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenciaOrden'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '503':
+          $ref: '#/components/responses/Error503'
+
+  /api/ordenes/{orden_id}/reconstruccion:
+    get:
+      summary: Alias de /evidencia
+      description: |
+        Mismo endpoint que `/api/ordenes/{orden_id}/evidencia`, expuesto como
+        alias para compatibilidad.
+      tags: [evidencia]
+      operationId: reconstruirOrden
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: orden_id
+          required: true
+          schema:
+            type: string
+          example: ORD-B-102-TX-T01
+      responses:
+        '200':
+          $ref: '#/components/responses/EvidenciaOrden200'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '503':
+          $ref: '#/components/responses/Error503'
+
+  /api/ordenes/{orden_id}/decision:
+    post:
+      summary: Decisión del planificador sobre una orden pendiente
+      description: |
+        El planificador aprueba o rechaza una orden pendiente de aprobación.
+        **Rechazar exige motivo.** La orden ya decidida no se toca. La
+        decisión queda en `aprobacion` con usuario y rol, y se publica por
+        el bus con el mismo id y el estado nuevo.
+      tags: [ordenes]
+      operationId: decidirOrden
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: orden_id
+          required: true
+          schema:
+            type: string
+          example: ORD-B-102-TX-T01
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionOrden'
+            examples:
+              aprobar:
+                summary: Aprobar orden pendiente
+                value:
+                  decision: aprobar
+              rechazar:
+                summary: Rechazar orden con motivo
+                value:
+                  decision: rechazar
+                  motivo: Falta el repuesto TX-EMP-KIT en el yacimiento
+      responses:
+        '200':
+          description: Decisión registrada
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  orden:
+                    $ref: '#/components/schemas/Orden'
+        '400':
+          description: Decisión inválida, motivo faltante o cuerpo mal formado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCuerpo'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          description: El rol no permite esta operación (solo planificador)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCuerpo'
+        '409':
+          description: La orden no está pendiente o ya fue decidida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCuerpo'
+
+  /api/cierres/{orden_id}/decision:
+    post:
+      summary: Decisión humana de cierre (G2/G3)
+      description: |
+        El supervisor cierra trabajo propio (`cerrar`) y el inspector
+        certifica u observa trabajo de contratista (`certificar`, `observar`).
+        Observar exige motivo. La decisión, el actor, el rol, el motivo, la
+        evidencia y la fecha quedan en `decision_cierre`. El habilita
+        `HAB-AAAA-NNNN` se emite únicamente dentro de una certificación.
+      tags: [cierres]
+      operationId: decidirCierre
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: orden_id
+          required: true
+          schema:
+            type: string
+          example: ORD-B-102-TX-T01
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionCierre'
+            examples:
+              cerrar:
+                summary: Supervisor cierra trabajo propio
+                value:
+                  decision: cerrar
+              certificar:
+                summary: Inspector certifica contratista
+                value:
+                  decision: certificar
+                  motivo: Tareas y repuestos coinciden con la orden
+              observar:
+                summary: Inspector observa contratista (exige motivo)
+                value:
+                  decision: observar
+                  motivo: El cierre declara un repuesto no reservado en la orden
+      responses:
+        '200':
+          description: Decisión de cierre registrada
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  orden:
+                    $ref: '#/components/schemas/Orden'
+                  estado:
+                    type: string
+                    example: Certificada
+                  habilita:
+                    type: string
+                    example: HAB-2026-0001
+        '400':
+          description: Decisión inválida, motivo faltante o cuerpo mal formado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCuerpo'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          description: El rol no permite esta operación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorCuerpo'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+      description: |
+        Token Bearer opaco, uno por persona, configurado en
+        `CENTRAL_CREDENCIALES`. Sin credenciales las APIs responden 401.
+
+  schemas:
+    Orden:
+      type: object
+      description: Orden de trabajo tal como la ve la Central.
+      required:
+        - id
+        - equipo
+        - estado
+        - tareas
+        - repuestos
+      properties:
+        id:
+          type: string
+          example: ORD-B-102-TX-T01
+        evento_id:
+          type: string
+          example: EVT-1
+        equipo:
+          type: string
+          example: B-101
+        estado:
+          type: string
+          enum:
+            - Pendiente de aprobacion
+            - Aprobada
+            - Rechazada
+            - Ejecutada
+            - Cerrada
+            - Observada
+            - Certificada
+          example: Pendiente de aprobacion
+        motivo:
+          type: string
+          example: bomba con pérdida
+        costo_estimado:
+          type: number
+          example: 420
+        detencion:
+          type: boolean
+          example: false
+        creada_en:
+          type: string
+          format: date-time
+          example: "2026-11-10T10:00:00Z"
+        actualizada_en:
+          type: string
+          format: date-time
+          example: "2026-11-10T10:00:00Z"
+        tareas:
+          type: array
+          items:
+            type: string
+          example: ["T-B-EMP"]
+        repuestos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Repuesto'
+
+    Repuesto:
+      type: object
+      required:
+        - codigo
+        - cantidad
+      properties:
+        codigo:
+          type: string
+          example: TX-EMP-KIT
+        cantidad:
+          type: number
+          example: 1
+
+    Cierre:
+      type: object
+      description: Cierre técnico de una orden con su decisión humana.
+      required:
+        - orden_id
+        - equipo
+        - estado
+      properties:
+        orden_id:
+          type: string
+          example: ORD-B-102-TX-T01
+        equipo:
+          type: string
+          example: B-101
+        tecnico:
+          type: string
+          example: Juan Pérez
+        empresa:
+          type: string
+          example: propio
+        horas:
+          type: number
+          example: 2.5
+        diferencias:
+          type: array
+          items:
+            type: object
+          example: []
+        estado:
+          type: string
+          enum: [Ejecutada, Cerrada, Observada, Certificada]
+          example: Ejecutada
+        executor:
+          type: string
+          example: propio
+
+    DecisionOrden:
+      type: object
+      required:
+        - decision
+      properties:
+        decision:
+          type: string
+          enum: [aprobar, rechazar]
+          example: aprobar
+        motivo:
+          type: string
+          maxLength: 1000
+          example: Falta el repuesto TX-EMP-KIT en el yacimiento
+
+    DecisionCierre:
+      type: object
+      required:
+        - decision
+      properties:
+        decision:
+          type: string
+          enum: [cerrar, certificar, observar]
+          example: certificar
+        motivo:
+          type: string
+          maxLength: 1000
+          example: Tareas y repuestos coinciden con la orden
+
+    EvidenciaOrden:
+      type: object
+      description: Reconstrucción append-only de una orden (manifiesto + ledger + trayectoria + integridad).
+      required:
+        - orden
+        - manifiestos
+        - ledger
+        - trayectoria
+        - integridad
+      properties:
+        orden:
+          $ref: '#/components/schemas/Orden'
+        evento:
+          type: object
+          description: Evento del sistema que originó la orden.
+        manifiestos:
+          type: array
+          items:
+            type: object
+            description: Manifiesto de evidencia inmutable.
+        ledger:
+          type: array
+          items:
+            type: object
+            description: Cadena append-only de decisiones.
+        trayectoria:
+          type: array
+          items:
+            type: object
+            description: Registro de pasos del agente (modelo, tools, tokens, costo, tiempo).
+        integridad:
+          type: object
+          properties:
+            manifiestos_verificados:
+              type: boolean
+            entradas_ledger:
+              type: integer
+
+    ErrorCuerpo:
+      type: object
+      required:
+        - ok
+        - error
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: El rechazo de una orden necesita un motivo
+        codigo:
+          type: integer
+          example: 400
+
+  responses:
+    Error401:
+      description: Credencial inválida o ausente
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorCuerpo'
+    Error404:
+      description: No encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorCuerpo'
+    Error503:
+      description: La evidencia no está disponible
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorCuerpo'
+    EvidenciaOrden200:
+      description: Evidencia reconstruida de la orden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EvidenciaOrden'
+
+tags:
+  - name: sesion
+    description: Identidad y rol del usuario autenticado.
+  - name: ordenes
+    description: Listado y decisión de órdenes de trabajo.
+  - name: cierres
+    description: Listado y decisión humana de cierres (G2/G3).
+  - name: evidencia
+    description: Evidencia inmutable y reconstrucción de órdenes.

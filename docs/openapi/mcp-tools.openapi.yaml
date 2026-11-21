@@ -1,0 +1,779 @@
+openapi: 3.0.3
+info:
+  title: PIA-3 · Servidor MCP (tools de solo lectura)
+  version: 1.0.0
+  description: |
+    Servidor MCP (Model Context Protocol) de la planta de inyección de agua
+    PIA-3 (Academia Novit 2026). Expone 8 tools de **solo lectura** sobre la
+    API de la planta y los manuales que ella sirve. No escriben nada en la
+    base ni en la planta.
+
+    Transporte: `streamable-http` en `/mcp` (Docker) o `stdio`. Todos los
+    modelos de entrada y salida heredan de `ModeloEstricto`
+    (`extra="forbid"`): una tool que reciba un campo que no conoce falla en
+    vez de ignorarlo en silencio. Las salidas que son listas se envuelven en
+    un objeto con un campo con nombre (por ejemplo `ListaEquipos.equipos`),
+    porque el protocolo MCP exige que `structuredContent` sea un **objeto**,
+    no un arreglo.
+
+    Integración con el proyecto externo: la planta simulada
+    [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
+    corre junto a este sistema dentro de la red Docker `planta-lan`. Este
+    repositorio **no toca nada** de ese proyecto: solo lee su API REST y sus
+    tópicos MQTT. Los escenarios del corrector oficial se ejecutan contra
+    ambos repositorios a la vez.
+
+  contact:
+    name: Equipo PIA-3
+  license:
+    name: MIT
+    url: https://github.com/pierotticastillo/EnriqueAlejandro-PierottiCastillo/blob/main/LICENSE
+
+servers:
+  - url: http://localhost:8000/mcp
+    description: Servidor MCP PIA-3 (streamable-http)
+
+paths:
+  /mcp/tools/equipos:
+    post:
+      summary: Catálogo de equipos
+      description: |
+        Devuelve el catálogo de equipos con nombres de campo, manómetro local
+        y sensores con sus límites de alarma. Fuente: `GET /api/planta`.
+        Filtros opcionales por `tag` y `tipo`.
+      operationId: toolEquipos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultaEquipos'
+            example:
+              tag: B-101
+      responses:
+        '200':
+          description: Lista de equipos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaEquipos'
+        '400':
+          $ref: '#/components/responses/ErrorTool'
+
+  /mcp/tools/historial_sensores:
+    post:
+      summary: Serie histórica de un sensor
+      description: |
+        Devuelve la serie de un sensor con mínimo, máximo, promedio y
+        tendencia de la ventana consultada. Fuente:
+        `GET /api/historian/{tag}/{variable}`.
+      operationId: toolHistorialSensores
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultaHistorialSensores'
+            example:
+              tag: B-102
+              variable: presion_descarga_local
+              desde: "2026-11-01T00:00:00Z"
+              hasta: "2026-11-05T00:00:00Z"
+              limite: 500
+      responses:
+        '200':
+          description: Serie del sensor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistorialSensores'
+        '400':
+          $ref: '#/components/responses/ErrorTool'
+
+  /mcp/tools/historial_ordenes:
+    post:
+      summary: Órdenes del archivo de la planta
+      description: |
+        Devuelve órdenes con equipo, tareas, repuestos y el texto libre de
+        quien hizo el trabajo. Fuente: `GET /api/historial-ordenes`.
+      operationId: toolHistorialOrdenes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultaHistorialOrdenes'
+            example:
+              equipo: B-101
+              desde: "2026-10-01T00:00:00Z"
+              hasta: "2026-11-01T00:00:00Z"
+              limite: 50
+      responses:
+        '200':
+          description: Lista de órdenes del archivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaOrdenes'
+        '400':
+          $ref: '#/components/responses/ErrorTool'
+
+  /mcp/tools/inventario:
+    post:
+      summary: Stock de repuestos por almacén
+      description: |
+        Devuelve el stock de repuestos por almacén (`yacimiento`, `central`),
+        con costo y equipos a los que corresponde cada repuesto.
+        Fuente: MBP-4 §14.2 y §14.3.
+      operationId: toolInventario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultaInventario'
+            example:
+              codigo: TX-EMP-KIT
+              equipo: B-101
+              almacen: yacimiento
+      responses:
+        '200':
+          description: Stock de repuestos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaRepuestos'
+        '400':
+          $ref: '#/components/responses/ErrorTool'
+
+  /mcp/tools/lista_materiales:
+    post:
+      summary: Repuestos que le corresponden a un equipo
+      description: |
+        Devuelve los repuestos que le corresponden a un equipo, según la
+        lista de materiales del manual de buenas prácticas.
+        Fuente: MBP-4 §14.3.
+      operationId: toolListaMateriales
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultaListaMateriales'
+            example:
+              equipo: B-101
+      responses:
+        '200':
+          description: Lista de materiales del equipo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaMateriales'
+        '400':
+          $ref: '#/components/responses/ErrorTool'
+
+  /mcp/tools/catalogo_tareas:
+    post:
+      summary: Tareas estándar y no estándar
+      description: |
+        Devuelve tareas estándar y no estándar: si detienen, horas, ejecutor,
+        repuestos y procedimiento del fabricante. Fuente: MBP-4 §13.1–§13.3.
+      operationId: toolCatalogoTareas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultaCatalogoTareas'
+            example:
+              equipo: B-101
+              codigo: T-B-EMP
+              incluir_no_estandar: true
+      responses:
+        '200':
+          description: Catálogo de tareas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaTareas'
+        '400':
+          $ref: '#/components/responses/ErrorTool'
+
+  /mcp/tools/busqueda_manuales:
+    post:
+      summary: Búsqueda léxica en manuales (respaldo)
+      description: |
+        Devuelve fragmentos de manual con su cita (por ejemplo `MBP-4 §10.2`).
+        Ranking léxico (solapamiento de términos). Queda como respaldo de
+        `busqueda_rag`. Fuente: `/api/documentos/*/secciones`.
+      operationId: toolBusquedaManuales
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultaManuales'
+            example:
+              consulta: cambio de empaquetadura bomba
+              documento: MBP-4
+              top_k: 5
+      responses:
+        '200':
+          description: Fragmentos de manual con cita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaFragmentos'
+        '400':
+          $ref: '#/components/responses/ErrorTool'
+
+  /mcp/tools/busqueda_rag:
+    post:
+      summary: Búsqueda híbrida en manuales, contrato e historial
+      description: |
+        Devuelve fragmentos de manuales, contrato e historial con su cita,
+        ordenados por ranking híbrido (BM25 + embeddings). Si el índice
+        pgvector no está disponible, cae de vuelta a la búsqueda léxica.
+        Fuente: índice pgvector del RAG.
+      operationId: toolBusquedaRAG
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultaManuales'
+            example:
+              consulta: pérdida con proyección de agua
+              documento: MBP-4
+              top_k: 5
+      responses:
+        '200':
+          description: Fragmentos citables (híbrido o léxico)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaFragmentos'
+        '400':
+          $ref: '#/components/responses/ErrorTool'
+
+components:
+  schemas:
+    # ------------------------------------------------------------ consultas
+    ConsultaEquipos:
+      type: object
+      additionalProperties: false
+      properties:
+        tag:
+          type: string
+          example: B-101
+          description: Filtra por tag del equipo.
+        tipo:
+          type: string
+          example: bomba
+          description: Filtra por tipo de equipo.
+
+    ConsultaHistorialSensores:
+      type: object
+      required:
+        - tag
+        - variable
+      additionalProperties: false
+      properties:
+        tag:
+          type: string
+          example: B-101
+          description: Tag del equipo (no el nombre de campo ni de la variable).
+        variable:
+          type: string
+          example: presion_descarga_local
+          description: Variable del sensor (por ejemplo goteo_empaquetadura).
+        desde:
+          type: string
+          format: date-time
+          example: "2026-11-01T00:00:00Z"
+          description: Desde cuándo (ISO 8601).
+        hasta:
+          type: string
+          format: date-time
+          example: "2026-11-05T00:00:00Z"
+          description: Hasta cuándo (ISO 8601).
+        limite:
+          type: integer
+          default: 500
+          minimum: 1
+          maximum: 5000
+          example: 500
+
+    ConsultaHistorialOrdenes:
+      type: object
+      additionalProperties: false
+      properties:
+        equipo:
+          type: string
+          example: B-101
+        desde:
+          type: string
+          format: date-time
+          example: "2026-10-01T00:00:00Z"
+        hasta:
+          type: string
+          format: date-time
+          example: "2026-11-01T00:00:00Z"
+        limite:
+          type: integer
+          default: 50
+          minimum: 1
+          maximum: 500
+
+    ConsultaInventario:
+      type: object
+      additionalProperties: false
+      properties:
+        codigo:
+          type: string
+          example: TX-EMP-KIT
+        equipo:
+          type: string
+          example: B-101
+        almacen:
+          type: string
+          enum: [yacimiento, central]
+          default: yacimiento
+          example: yacimiento
+
+    ConsultaListaMateriales:
+      type: object
+      required:
+        - equipo
+      additionalProperties: false
+      properties:
+        equipo:
+          type: string
+          example: B-101
+
+    ConsultaCatalogoTareas:
+      type: object
+      additionalProperties: false
+      properties:
+        equipo:
+          type: string
+          example: B-101
+        codigo:
+          type: string
+          example: T-B-EMP
+        incluir_no_estandar:
+          type: boolean
+          default: true
+          example: true
+
+    ConsultaManuales:
+      type: object
+      required:
+        - consulta
+      additionalProperties: false
+      properties:
+        consulta:
+          type: string
+          minLength: 2
+          example: cambio de empaquetadura bomba
+        documento:
+          type: string
+          example: MBP-4
+        top_k:
+          type: integer
+          default: 5
+          minimum: 1
+          maximum: 20
+          example: 5
+
+    # ------------------------------------------------------------ salidas
+    ListaEquipos:
+      type: object
+      required:
+        - equipos
+      properties:
+        equipos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Equipo'
+
+    Equipo:
+      type: object
+      required:
+        - tag
+      properties:
+        tag:
+          type: string
+          example: B-101
+        tipo:
+          type: string
+          example: bomba
+        descripcion:
+          type: string
+          example: Bomba de inyección 1
+        fabricante:
+          type: string
+          example: TX
+        modelo:
+          type: string
+          example: TX350-D
+        nombres:
+          type: array
+          items:
+            type: string
+          example: ["la bomba", "bomba 1"]
+        caudal_nominal_m3d:
+          type: number
+          example: 120
+        manometro_local:
+          $ref: '#/components/schemas/ManometroLocal'
+        rol_inicial:
+          type: string
+          example: marcha
+        sensores:
+          type: array
+          items:
+            $ref: '#/components/schemas/Sensor'
+
+    ManometroLocal:
+      type: object
+      properties:
+        unidad:
+          type: string
+          example: kg/cm2
+
+    Sensor:
+      type: object
+      required:
+        - tag
+        - variable
+      properties:
+        tag:
+          type: string
+          example: B-101
+        variable:
+          type: string
+          example: presion_descarga_local
+        unidad:
+          type: string
+          example: psi
+        alarma_baja:
+          type: number
+          example: 100
+        alarma_alta:
+          type: number
+          example: 1700
+        disparo:
+          type: number
+          example: 1800
+
+    HistorialSensores:
+      type: object
+      required:
+        - tag
+        - variable
+        - cantidad
+      properties:
+        tag:
+          type: string
+          example: B-101
+        variable:
+          type: string
+          example: presion_descarga_local
+        unidad:
+          type: string
+          example: psi
+        cantidad:
+          type: integer
+          example: 4320
+        desde:
+          type: string
+          format: date-time
+          example: "2026-11-01T00:00:00Z"
+        hasta:
+          type: string
+          format: date-time
+          example: "2026-11-05T00:00:00Z"
+        minimo:
+          type: number
+          example: 1550
+        maximo:
+          type: number
+          example: 1640
+        promedio:
+          type: number
+          example: 1600
+        tendencia:
+          type: string
+          enum: [estable, alza, baja]
+          example: estable
+        muestras:
+          type: array
+          items:
+            $ref: '#/components/schemas/MuestraSensor'
+
+    MuestraSensor:
+      type: object
+      required:
+        - ts
+      properties:
+        ts:
+          type: string
+          format: date-time
+        valor:
+          type: number
+          example: 1600
+
+    ListaOrdenes:
+      type: object
+      required:
+        - ordenes
+      properties:
+        ordenes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrdenHistorico'
+
+    OrdenHistorico:
+      type: object
+      required:
+        - orden_id
+      properties:
+        orden_id:
+          type: string
+          example: OT-25-0024
+        equipo:
+          type: string
+          example: B-101
+        fecha:
+          type: string
+          format: date-time
+          example: "2025-10-15T10:00:00Z"
+        tareas:
+          type: array
+          items:
+            type: string
+          example: ["T-B-EMP"]
+        ejecutor:
+          type: string
+          example: propio
+        estado:
+          type: string
+          example: Certificada
+        repuestos:
+          type: array
+          items:
+            type: string
+          example: ["TX-EMP-KIT"]
+        texto:
+          type: string
+          example: Cambio de empaquetadura realizado según procedimiento.
+
+    ListaRepuestos:
+      type: object
+      required:
+        - repuestos
+      properties:
+        repuestos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepuestoStock'
+
+    RepuestoStock:
+      type: object
+      required:
+        - codigo
+      properties:
+        codigo:
+          type: string
+          example: TX-EMP-KIT
+        nombre:
+          type: string
+          example: Empaquetadura TX-350
+        unidad:
+          type: string
+          example: kit
+        costo_usd:
+          type: number
+          example: 420
+        stock:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            yacimiento: 5
+            central: 2
+        disponible:
+          type: boolean
+          example: true
+        equipos:
+          type: array
+          items:
+            type: string
+          example: ["B-101", "B-102"]
+
+    ListaMateriales:
+      type: object
+      required:
+        - equipo
+        - materiales
+      properties:
+        equipo:
+          type: string
+          example: B-101
+        materiales:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterialEquipo'
+
+    MaterialEquipo:
+      type: object
+      required:
+        - codigo
+      properties:
+        codigo:
+          type: string
+          example: TX-EMP-KIT
+        nombre:
+          type: string
+          example: Empaquetadura TX-350
+        costo_usd:
+          type: number
+          example: 420
+
+    ListaTareas:
+      type: object
+      required:
+        - tareas
+      properties:
+        tareas:
+          type: array
+          items:
+            $ref: '#/components/schemas/TareaCatalogo'
+
+    TareaCatalogo:
+      type: object
+      required:
+        - codigo
+        - nombre
+      properties:
+        codigo:
+          type: string
+          example: T-B-EMP
+        nombre:
+          type: string
+          example: Cambio de empaquetadura
+        equipos:
+          type: array
+          items:
+            type: string
+          example: ["B-101", "B-102"]
+        detiene:
+          type: boolean
+          example: false
+        horas:
+          type: number
+          example: 2
+        ejecutor:
+          type: string
+          example: propio
+        estandar:
+          type: boolean
+          example: true
+        repuestos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepuestoTarea'
+        costo_repuestos_usd:
+          type: number
+          example: 420
+        procedimiento:
+          type: string
+          example: P-02
+        cita:
+          type: string
+          example: MBP-4 §13.3
+
+    RepuestoTarea:
+      type: object
+      required:
+        - codigo
+        - cantidad
+      properties:
+        codigo:
+          type: string
+          example: TX-EMP-KIT
+        cantidad:
+          type: number
+          example: 1
+
+    ListaFragmentos:
+      type: object
+      required:
+        - fragmentos
+      properties:
+        fragmentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/FragmentoManual'
+
+    FragmentoManual:
+      type: object
+      required:
+        - documento
+        - seccion
+        - cita
+        - texto
+      properties:
+        documento:
+          type: string
+          example: MBP-4
+        seccion:
+          type: string
+          example: §10.2
+        cita:
+          type: string
+          example: MBP-4 §10.2
+        titulo:
+          type: string
+          example: Condiciones inseguras
+        texto:
+          type: string
+          example: Pérdida con proyección de agua a presión...
+        vigente:
+          type: boolean
+          example: true
+        puntaje:
+          type: number
+          example: 0.87
+
+  responses:
+    ErrorTool:
+      description: Error de la tool (ErrorHerramienta)
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - ok
+              - error
+            properties:
+              ok:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "La tool equipos falló: <detalle>"
+              herramienta:
+                type: string
+                example: equipos
+
+tags:
+  - name: equipos
+  - name: historial-sensores
+  - name: historial-ordenes
+  - name: inventario
+  - name: lista-materiales
+  - name: catalogo-tareas
+  - name: busqueda-manuales
+  - name: busqueda-rag

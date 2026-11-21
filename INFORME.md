@@ -1892,6 +1892,8 @@ canal de la decisión**, y ése es el de la Central (`src/planta/central.py`):
 | `POST /api/ordenes/<id>/decision` | `{"decision": "aprobar" \| "rechazar", "motivo": "..."}` para `planificador`. |
 | `POST /api/cierres/<id>/decision` | `{"decision": "cerrar" \| "certificar" \| "observar", "motivo": "..."}` para `supervisor` o `inspector`. |
 
+La API REST completa está especificada en OpenAPI 3.0 en [`docs/openapi/central-api.openapi.yaml`](../../docs/openapi/central-api.openapi.yaml), y las 8 tools de solo lectura del servidor MCP en [`docs/openapi/mcp-tools.openapi.yaml`](../../docs/openapi/mcp-tools.openapi.yaml). Los specs son fuente de verdad máquina-legible para que cualquier sesión que retome el proyecto entienda endpoints, esquemas y autenticación sin releer el código.
+
 Reglas:
 
 - **Todas las APIs exigen un token Bearer opaco**, uno por persona. La
@@ -1986,12 +1988,25 @@ El reintento está en tres capas, para que no rompa nada de lo demás:
   arranca y el corte queda anotado como condición de corte. Un reintento que
   se pasa del timeout global rompería el corte que el anexo pide.
 
-### 12.5 La mini spec
+### 12.5 La mini spec y las especificaciones OpenAPI
 
 [`docs/spec-parte.md`](docs/spec-parte.md) es la especificación corta del
 flujo del parte (Spec-Driven Development): las once etapas, qué decide el
 código y qué decide el modelo, las diez condiciones de corte, el presupuesto
 y los criterios de aceptación con el test que los fija.
+
+Junto a ella, los specs OpenAPI 3.0 en [`docs/openapi/`](../../docs/openapi/)
+documentan las dos superficies de API del proyecto:
+
+| Spec | Qué documenta |
+|------|---------------|
+| [`central-api.openapi.yaml`](../../docs/openapi/central-api.openapi.yaml) | API REST de la Central de mantenimiento (puerto 8200, token Bearer, RBAC): `/api/sesion`, `/api/ordenes`, `/api/cierres`, `/api/ordenes/{id}/evidencia`, `/api/ordenes/{id}/decision`, `/api/cierres/{id}/decision`. |
+| [`mcp-tools.openapi.yaml`](../../docs/openapi/mcp-tools.openapi.yaml) | Servidor MCP (streamable-http en `/mcp` o stdio): 8 tools de solo lectura (`equipos`, `historial_sensores`, `historial_ordenes`, `inventario`, `lista_materiales`, `catalogo_tareas`, `busqueda_manuales`, `busqueda_rag`). |
+
+El propósito de los specs OpenAPI es preservar el contexto entre sesiones:
+cualquier agente que retome el proyecto entiende endpoints, esquemas de datos
+y autenticación sin releer todo el código. Se abren en Swagger Editor, Redoc,
+Postman o Insomnia, y se validan con `openapi-spec-validator`.
 
 ---
 
@@ -2833,8 +2848,10 @@ Todos los modelos locales (ASR, embeddings, LLM) corren dentro del contenedor de
   [`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/README.md).
 - Mini spec del flujo del parte (Spec-Driven Development):
   [`docs/spec-parte.md`](docs/spec-parte.md).
+- Especificaciones OpenAPI (Central REST y servidor MCP) e integración con
+  `academia2026-tp`: [`docs/openapi/`](docs/openapi/).
 - Plan de implementación: documento interno del curso, conservado fuera de este
   repositorio (`Plan_de_implementación/`, ignorado por Git).
 - Contrato: `planta-contrato` 0.2.0, commit
   `ab65b95e911731351dba395817a74a8cc60da2b2`, subdirectorio `contrato`.
-- Planta simulada: `NovitSoftware/academia2026-tp`.
+- Planta simulada: [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp).
