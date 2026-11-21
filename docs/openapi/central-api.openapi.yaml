@@ -6,6 +6,11 @@ info:
     Canal de decisión humana de la planta de inyección de agua PIA-3
     (Academia Novit 2026).
 
+    **Mantener este spec actualizado:** si se modifica alguna ruta, parámetro,
+    esquema de respuesta o método de autenticación en `src/planta/central.py`,
+    actualizar este archivo en consecuencia. Es fuente de verdad para preservar
+    el contexto entre sesiones.
+
     La Central permite al planificador aprobar o rechazar órdenes pendientes,
     y al supervisor/inspector cerrar, certificar u observar cierres técnicos.
     Toda API exige un token Bearer opaco, uno por persona. La identidad y el

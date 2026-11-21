@@ -8,6 +8,11 @@ info:
     API de la planta y los manuales que ella sirve. No escriben nada en la
     base ni en la planta.
 
+    **Mantener este spec actualizado:** si se agrega, modifica o elimina una
+    tool en `src/tools/registro.py` o `src/mcp_server/server.py`, actualizar
+    este archivo en consecuencia. Es fuente de verdad para preservar el
+    contexto entre sesiones.
+
     Transporte: `streamable-http` en `/mcp` (Docker) o `stdio`. Todos los
     modelos de entrada y salida heredan de `ModeloEstricto`
     (`extra="forbid"`): una tool que reciba un campo que no conoce falla en

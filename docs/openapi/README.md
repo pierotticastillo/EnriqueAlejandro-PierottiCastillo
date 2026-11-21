@@ -85,8 +85,25 @@ O abrirlos visualmente en [Swagger Editor](https://editor.swagger.io/) o en
 
 ---
 
-## Estado
+## Estado y mantenimiento
 
 Estos specs reflejan la implementación actual del repositorio (commit de
-referencia en `docs/checklist_entrega.md`). Si se modifica una API, se debe
-actualizar el spec correspondiente para que siga siendo fuente de verdad.
+referencia en `docs/checklist_entrega.md`).
+
+**Si se modifica una API, se debe actualizar el spec correspondiente para que
+siga siendo fuente de verdad:**
+
+| Cambio en el código | Archivo OpenAPI a actualizar |
+|---------------------|------------------------------|
+| Nueva ruta, parámetro o respuesta en `src/planta/central.py` | `central-api.openapi.yaml` |
+| Nueva tool, modelo de entrada/salida o transporte en `src/tools/registro.py` o `src/mcp_server/server.py` | `mcp-tools.openapi.yaml` |
+| Nuevo tópico MQTT o contrato Pydantic en `src/planta/mqtt_listener.py` | `integracion-academia2026-tp.md` (sección de tópicos) |
+
+Después de editar un spec, validar que el YAML siga siendo correcto:
+
+```bash
+python -m openapi_spec_validator docs/openapi/central-api.openapi.yaml
+python -m openapi_spec_validator docs/openapi/mcp-tools.openapi.yaml
+```
+
+O abrirlo en [Swagger Editor](https://editor.swagger.io/) para revisar visualmente.

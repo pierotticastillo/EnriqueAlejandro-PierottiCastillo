@@ -85,7 +85,7 @@
 | P1-10 | Redes y presupuesto | Pendiente | Verificación estática contra el Anexo |
 | P1-12 | Habilita → facturación | Pendiente | Depende de la planta |
 | P1-13 | Registro ingreso/egreso | Pendiente | Depende de la Academia |
-| P1-14 | Spec y documentación | Parcial | `docs/spec-parte.md`, `INFORME.md`, `docs/openapi/central-api.openapi.yaml`, `docs/openapi/mcp-tools.openapi.yaml`, `docs/openapi/integracion-academia2026-tp.md` |
+| P1-14 | Spec y documentación | Parcial | `docs/spec-parte.md`, `INFORME.md`, `docs/openapi/central-api.openapi.yaml`, `docs/openapi/mcp-tools.openapi.yaml`, `docs/openapi/integracion-academia2026-tp.md`. Cada spec incluye una nota al inicio recordando que debe actualizarse si se modifica la API correspondiente. |
 
 ---
 
