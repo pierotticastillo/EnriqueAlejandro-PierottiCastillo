@@ -29,14 +29,14 @@ evidencia está en [`docs/evaluacion_modelo_local.md`](evaluacion_modelo_local.m
 
 La **conversación de tablet** quedó cerrada: la corrección del operador se aplica a la lectura que está corrigiendo (no a la última del equipo), al mover una lectura a otro equipo el valor se convierte, la negación saca una sola lectura y la conversación tiene tope (`PARTE_MAX_CORRECCIONES=5`): si no converge, la nota queda para revisión humana en vez de dar vueltas.
 
-El **corrector oficial final** da **92,6/100 — APRUEBA** sobre los **7
+El **corrector oficial final** da **93,4/100 — APRUEBA** sobre los **7
 escenarios** de la rúbrica (`martes-tranquilo`, `tormenta-perfecta`,
 `fuga-sin-enlace`, `sin-luz`, `contratista`, `ataque` y `libre`), con
 `faster-whisper-base`, el LLM local activo y el modelo de nube con visión
-habilitado: **93 de 93 puntos medidos** (86,08 de 93, reescalados a 100), sin
+habilitado: **93 de 93 puntos medidos** (87,08 de 93, reescalados a 100), sin
 eliminatorias y con **467 mensajes válidos y 0 inválidos**. La corrida está
-anclada al commit auditado `4eb00f54b5861c6c3c922aad060de266064012ef`, al
-corrector oficial `ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic
+anclada al commit `7468015` (Plan de implementación 3 completo + corrección
+escenario ataque), al corrector oficial `ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic
 `0011`. `D1`, `D2` y `G1` quedaron en **100 %**; `A1` quedó en 98,9 %. Los
 criterios restantes dependen del audio regenerado por la planta. La corrida
 diagnóstica anterior (`a13d7cb`, 93,1/100) queda sólo como antecedente porque
@@ -584,12 +584,12 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
   backfill ambiguo fail-closed quedaron verificados.
 - `ruff check src tests migrations scripts`: **sin errores**.
 - `compileall -q src tests migrations scripts` y `git diff --check`: **sin errores**.
-- **Corrector oficial final (7 escenarios)**: **92,6/100 — APRUEBA** sobre
-  `4eb00f54b5861c6c3c922aad060de266064012ef`, corrector
-  `ab65b95e911731351dba395817a74a8cc60da2b2` y Alembic `0011`; sin
-  eliminatorias, 93 de 93 puntos medidos (86,08 de 93) y **467 mensajes
-  válidos / 0 inválidos**. A1 98,9 %, A2 64 %, A3 83 %, A4a 83 %, A4b 99 %,
-  B1 96 %, B2 100 %, D1 100 %, D2 100 %, E1 100 %, E2 75 %, E3 99 %,
+- **Corrector oficial final (7 escenarios)**: **93,4/100 — APRUEBA** sobre
+  `7468015` (Plan de implementación 3 completo + corrección escenario ataque),
+  corrector `ab65b95e911731351dba395817a74a8cc60da2b2` y Alembic `0011`; sin
+  eliminatorias, 93 de 93 puntos medidos (87,08 de 93) y **467 mensajes
+  válidos / 0 inválidos**. A1 99 %, A2 62 %, A3 83 %, A4a 100 %, A4b 100 %,
+  B1 99 %, B2 100 %, D1 100 %, D2 100 %, E1 100 %, E2 75 %, E3 99 %,
   F1 100 %, F2 100 %, F3 100 %, **G1 100 %** (`G2` y `G3` están inactivos en
   la nota oficial y se verifican aparte con 77 pruebas autenticadas).
 
