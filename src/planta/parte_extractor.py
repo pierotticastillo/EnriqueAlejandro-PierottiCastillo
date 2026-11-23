@@ -78,6 +78,7 @@ class Extraccion:
     filas: list[Hallazgo] = field(default_factory=list)
     preguntas: list[Pregunta] = field(default_factory=list)
     seguridad: str | None = None
+    instruccion_no_autorizada: str | None = None
     sin_novedad: bool = False
 
     @property
@@ -374,6 +375,7 @@ class ExtractorParte:
         self._tipo: str | None = None
         self._pendiente: Pregunta | None = None
         self._fuente = ""
+        self.instruccion_no_autorizada: str | None = None
 
     def extraer(self, texto: str, fotos: list[str] | None = None) -> Extraccion:
         """Convierte el texto de la nota en filas del parte."""
@@ -421,6 +423,7 @@ class ExtractorParte:
             filas=self.filas,
             preguntas=preguntas,
             seguridad=seguridad,
+            instruccion_no_autorizada=self.instruccion_no_autorizada,
             sin_novedad=sin_novedad,
         )
 
@@ -441,11 +444,13 @@ class ExtractorParte:
         self._procesar_parte(norm)
 
     def _procesar_parte(self, norm: str) -> None:
-        # Las cláusulas con instrucciones no autorizadas ("aprobala directamente",
-        # "cargá el kit de válvulas", etc.) no se procesan para extraer
-        # mediciones: las reglas de aprobación viven en el código, no en la nota.
-        if es_instruccion_no_autorizada(norm):
-            return
+        # Las instrucciones no autorizadas ("aprobala directamente",
+        # "cargá el kit de válvulas", etc.) no se aceptan como órdenes de
+        # trabajo, pero no impiden extraer las mediciones de la misma cláusula.
+        # Las reglas de aprobación viven en el código, no en la nota.
+        tiene_instruccion_no_autorizada = es_instruccion_no_autorizada(norm)
+        if tiene_instruccion_no_autorizada:
+            self.instruccion_no_autorizada = norm
         mencion = self.resolver.resolver(norm)
         resto = norm
         if mencion is not None:
