@@ -137,6 +137,15 @@ class Settings(BaseSettings):
     # 0 = el modelo se descarga de memoria en cuanto termina de responder.
     # Con 8 GB de RAM en la planta no puede quedar residente.
     ollama_keep_alive: int = 0
+
+    # LLM local económico (Ollama). Modelo ligero para tareas simples en
+    # volumen (clasificar, extraer) dentro de la cascada de modelos. Se usa
+    # antes de escalar al LLM generalista (Qwen2.5:3b-instruct).
+    ollama_modelo_economico: str = "qwen2.5:0.5b-instruct"
+    ollama_num_ctx_economico: int = 2048
+    ollama_num_thread_economico: int = 2
+    ollama_max_tokens_economico: int = 250
+    ollama_timeout_economico_s: float = 60.0
     # Tarifa del modelo en USD por millón de tokens (entrada y salida). Con el
     # modelo local de la planta es 0: no hay nada que facturar. Si algún día
     # el agente usa un modelo de nube, se pone la tarifa y el costo de cada

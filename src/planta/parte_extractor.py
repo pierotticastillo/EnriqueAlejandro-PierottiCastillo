@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from deteccion.seguridad import detectar as _detectar_seguridad
+from deteccion.seguridad import es_instruccion_no_autorizada
 from planta.nombre_resolver import Mencion, ResolutorNombres
 from planta.numeros import NumeroDicho, parsear_numero
 from planta.texto import clausulas, normalizar, oraciones
@@ -91,10 +92,10 @@ _CUE_RODAMIENTO = ("rodamiento",)
 _CUE_MOTOR = ("motor",)
 _CUE_NIVEL = ("nivel", "metros", "metro")
 _CUE_CAUDAL = ("caudal",)
-_CUE_GOTEO = ("gotea", "goteando", "pierde", "chorrea", "empaquetadura")
+_CUE_GOTEO = ("gotea", "goteando", "pierde", "chorrea", "empaquetadura", "pierde bastante")
 _CUE_ACEITE = ("aceite", "visor")
 _CUE_CORREAS = ("correa", "correas")
-_CUE_RUIDO = ("golpeteo", "piedras adentro", "ruido raro", "ruido")
+_CUE_RUIDO = ("golpeteo", "piedras adentro", "ruido raro", "ruido", "hace un golpeteo")
 _CUE_ESTADO = (
     "parada",
     "parado",
@@ -440,6 +441,11 @@ class ExtractorParte:
         self._procesar_parte(norm)
 
     def _procesar_parte(self, norm: str) -> None:
+        # Las cláusulas con instrucciones no autorizadas ("aprobala directamente",
+        # "cargá el kit de válvulas", etc.) no se procesan para extraer
+        # mediciones: las reglas de aprobación viven en el código, no en la nota.
+        if es_instruccion_no_autorizada(norm):
+            return
         mencion = self.resolver.resolver(norm)
         resto = norm
         if mencion is not None:
@@ -956,7 +962,7 @@ def _observacion(
             return "correas desalineadas"
         return "correas en mal estado"
     if variable == "ruido":
-        if _menciona_sintoma(norm, ("golpeteo",)):
+        if _menciona_sintoma(norm, ("golpeteo",)) or _menciona(norm, ("gol peteo", "gropeteo")):
             return "hace un golpeteo metálico"
         if _menciona(norm, ("piedras adentro",)):
             return "suena como si tuviera piedras adentro"

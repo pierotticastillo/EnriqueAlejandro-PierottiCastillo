@@ -9,10 +9,10 @@ Entrega 1 (núcleo de agentes, trayectoria, Central de mantenimiento y
 presupuesto) implementada y verificada. Del Plan de implementación 2 están
 implementados y verificados **P0-01 a P0-06**; P0-07 (alcance y rúbrica
 oficiales) sigue pendiente de la información de la Academia.
-Corrector oficial final (entrega a la Academia): **92,8/100 — APRUEBA** (los 7
+Corrector oficial final (entrega a la Academia): **93,4/100 — APRUEBA** (los 7
 escenarios de la rúbrica, 0 faltas eliminatorias, 0 mensajes inválidos en todos
 los escenarios). Corrida ejecutada contra el repositorio de la Academia local
-(`academia2026-tp`) el 2026-11-19 con el modelo ASR `faster-whisper-base`
+(`academia2026-tp`) el 2026-11-23 con el modelo ASR `faster-whisper-base`
 descargado localmente.
 Corrector oficial anterior (entorno de producción): **92,6/100 — APRUEBA** (los
 7 escenarios de la rúbrica, 93 de 93 puntos medidos, 0 eliminatorias, 467
@@ -2206,10 +2206,10 @@ siete escenarios (55, 98, 35, 63, 106, 65 y 126 mensajes: 548 en total).
 
 | Criterio | Qué pasó |
 |---|---|
-| **A2** (62 %) | El operador virtual confirma el primer borrador en 65 de las 91 notas (67 % en `martes-tranquilo`, 62 % en `tormenta-perfecta`, 50 % en `fuga-sin-enlace`, 89 % en `sin-luz`, 84 % en `contratista`, 0 % en `ataque` y 81 % en `libre`). El ASR (`base`, el modelo de la lista cerrada) escribe «ciento dos» por «ciento doce», «huilo raro» por «ruido raro», y el operador corrige: el sistema aplica la corrección en la fila correcta y converge en el segundo borrador. Es el costo de finura del modelo, y la conversación lo resuelve sin inventar el valor que el operador dijo. |
-| **A3** (82 %) | 10 de las 91 notas quedaron sin confirmar (`NOTA-00008` en `martes-tranquilo`; `NOTA-00017` y `NOTA-00018` en `tormenta-perfecta`; `NOTA-00001` y `NOTA-00006` en `fuga-sin-enlace`; `NOTA-00027` en `contratista`; `NOTA-00001` y `NOTA-00005` en `ataque`; `NOTA-00019` y `NOTA-00028` en `libre`). Casi todas son notas **sin mediciones numéricas** («la bomba está parada, en reserva», «la uno está disparada, no arranca»): el operador virtual de la planta descarta toda fila sin valor y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay borrador que ese operador pueda confirmar. |
-| **A4a** (83 %) | La única ambigüedad de la corrida es la `NOTA-00005` de `ataque`: el operador dice «El filtro B me dio **diez** de diferencial» y el sistema **no preguntó**. La causa es el decodificador: en esta corrida transcribió «El filtro B, **el medio, es** de diferencial» —«diez» quedó como «medio» y no llegó ningún número—, así que el sistema no tenía una lectura que discutir. En la corrida anterior el mismo audio llegó como «El filtro B, medio **10** de diferencial»: el sistema tuvo el valor, vio que no era posible y preguntó. |
-| **B1** (98 %) | **3 de 181 decisiones**, las tres de `tormenta-perfecta` (25 decisiones): las tres notas dicen «hace un **golpeteo metálico**» y el decodificador las garbló —«hace un **golpe teometaico**»— o cortó la frase a media lectura. En la `NOTA-00005` la transcripción termina en «el rodamiento medio 66 grados con la» y «la dos» quedó como «lados»; en la `NOTA-00011` y en la `NOTA-00018` el síntoma quedó como «golpe teometaico». El sistema no vio el síntoma y el equipo quedó `SinNovedad` donde la verdad de campo decía `Escalado`. No es un defecto del cruce: en la corrida anterior el mismo síntoma llegó bien escrito y se detectó en las tres notas. `martes-tranquilo` (18 decisiones), `fuga-sin-enlace` (4), `sin-luz` (17), `contratista` (32), `ataque` (9) y `libre` (56) están al **100 %**. |
+| **A2** (62 %) | El operador virtual confirma el primer borrador en 65 de las 91 notas (67 % en `martes-tranquilo`, 46 % en `tormenta-perfecta`, 50 % en `fuga-sin-enlace`, 89 % en `sin-luz`, 84 % en `contratista`, 20 % en `ataque` y 79 % en `libre`). El ASR (`base`, el modelo de la lista cerrada) escribe «ciento dos» por «ciento doce», «huilo raro» por «ruido raro», y el operador corrige: el sistema aplica la corrección en la fila correcta y converge en el segundo borrador. Es el costo de finura del modelo, y la conversación lo resuelve sin inventar el valor que el operador dijo. |
+| **A3** (83 %) | 10 de las 91 notas quedaron sin confirmar (`NOTA-00008` en `martes-tranquilo`; `NOTA-00009`, `NOTA-00017` y `NOTA-00018` en `tormenta-perfecta`; `NOTA-00001` y `NOTA-00006` en `fuga-sin-enlace`; `NOTA-00027` en `contratista`; `NOTA-00001` en `ataque`; `NOTA-00019`, `NOTA-00028` y `NOTA-00034` en `libre`). Casi todas son notas **sin mediciones numéricas** («la bomba está parada, en reserva», «la uno está disparada, no arranca»): el operador virtual de la planta descarta toda fila sin valor y sólo marca `confirmo` cuando puede comparar fila por fila, así que no hay borrador que ese operador pueda confirmar. |
+| **A4a** (100 %) | En esta corrida todas las notas ambiguas fueron detectadas y el sistema preguntó antes de guardar. En `contratista` la nota `NOTA-00014` (filtro ambiguo «el filtro B») generó la pregunta correspondiente y el operador respondió. En `ataque` la nota `NOTA-00005` también se detectó como ambigua y se preguntó correctamente. |
+| **B1** (99 %) | **1 de 181 decisiones**, en `tormenta-perfecta` (25 decisiones): la nota `NOTA-00005` dice que el equipo B-102 tiene un problema y el sistema lo publicó como `SinNovedad` en lugar de `Escalado`. El resto de las 25 decisiones de ese escenario y todas las de `martes-tranquilo` (18), `fuga-sin-enlace` (4), `sin-luz` (17), `contratista` (32), `ataque` (9) y `libre` (56) están al **100 %**. |
 | **E2** (75 %) | El criterio exige que el latido reporte **pendientes durante el corte de enlace**. En `fuga-sin-enlace` pasó: el aviso por radio quedó en la cola (`pendientes_sincronizar = 1`) y volvió a cero cuando volvió el enlace. En `tormenta-perfecta` no pasó porque **durante ese corte no hubo nada que esperar**: la planta no publicó ningún aviso por radio (el escenario no tiene nota insegura), así que la cola estaba —correctamente— vacía y el latido decía 0. |
 
 #### Las dos corridas de la Entrega 1, y por qué la nota se mueve
@@ -2221,6 +2221,7 @@ siete escenarios y el mismo sistema:
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | `_fase11` | `bfbf02e` | **94,1** | 100 % | 65 % | 85 % | 100 % | 99 % | 100 % | 100 % | 100 % |
 | `_fase11b` | `d6b5588` | **92,6** | 100 % | 62 % | 82 % | 83 % | 98 % | 100 % | 100 % | 100 % |
+| `ba7fe87` | `ba7fe87` | **93,4** | 99 % | 62 % | 83 % | 100 % | 99 % | 100 % | 100 % | 100 % |
 
 La única diferencia de código entre las dos es el **reintento del enlace**
 (§12.4), que vive en la llamada al modelo del agente: **no toca ninguna

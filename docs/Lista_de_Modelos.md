@@ -3,7 +3,8 @@
 1. ASR: `faster-whisper-base` (CTranslate2) para transcripción local rápida y de bajo consumo en CPU.
 2. Embeddings: `paraphrase-multilingual-MiniLM-L12-v2` (384 dim) operando sobre PostgreSQL + pgvector para RAG local eficiente.
 3. LLM de Planta: `Qwen2.5-3B-Instruct` (cuantización Q4_K_M vía Ollama/llama.cpp) para la estructuración y razonamiento auxiliar local sin requerir enlace a la nube.
-4. LLM de Nube (Percepción/Contexto): `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (API de NVIDIA, nube) para tareas de percepción multimodal y razonamiento auxiliar cuando se requiera mayor capacidad. Invocado vía `https://integrate.api.nvidia.com/v1/chat/completions` con `temperature=0`, `max_tokens=800`, timeout de 8 s y salida validada.
+4. LLM de Planta (Económico): `Qwen2.5-0.5B-Instruct` (cuantización Q4_K_M vía Ollama/llama.cpp) para tareas simples en volumen (clasificar, extraer) dentro de la cascada de modelos. Es el modelo barato que se consulta primero antes de escalar al LLM generalista.
+5. LLM de Nube (Percepción/Contexto): `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (API de NVIDIA, nube) para tareas de percepción multimodal y razonamiento auxiliar cuando se requiera mayor capacidad. Invocado vía `https://integrate.api.nvidia.com/v1/chat/completions` con `temperature=0`, `max_tokens=800`, timeout de 8 s y salida validada.
 
 ## Decisión de selección del LLM de planta
 
@@ -24,6 +25,23 @@ de la propuesta:
 Los tres modelos alternativos se evaluaron como candidatos y **no forman parte
 de la lista cerrada**. El modelo activo, su configuración y el verificador
 continúan siendo los definidos en `src/modelos_lista.py`.
+
+## Decisión de selección del LLM económico
+
+**Actualizado:** 2026-11-23. Se agrega `Qwen2.5-0.5B-Instruct` como modelo
+económico para la cascada de modelos (Ítem 3.4 del Plan de implementación 3).
+
+Se probó localmente contra Ollama con las mismas herramientas que el LLM
+principal:
+
+| Modelo evaluado | Resultado | Motivo |
+|---|---|---|
+| **`qwen2.5:0.5b-instruct`** | **Se agrega** | Único candidato ligero que soporta tool calls nativos, responde en ~2.4 s con tools y consume solo ~400 MB de RAM. Ideal para el modelo barato de la cascada. |
+| `qwen2.5:3b-instruct` | Ya en lista | Modelo generalista principal; se mantiene para razonamiento y como modelo caro de la cascada. |
+
+El modelo económico se usa en la cascada (Ítem 3.2) para clasificación y
+extracción simples. Si el validador rechaza su respuesta, se escala al modelo
+generalista (`qwen2.5:3b-instruct`).
 
 El protocolo, las mediciones y las condiciones para revisar la decisión están
 en [`evaluacion_modelo_local.md`](evaluacion_modelo_local.md).

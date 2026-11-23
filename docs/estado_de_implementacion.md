@@ -818,6 +818,126 @@ Detalle completo de la corrida: `academia2026-tp/correccion/corridas/EnriqueAlej
 
 Nota: para volver a correr los 7 escenarios del corrector oficial se necesita el repositorio de la Academia (`NovitSoftware/academia2026-tp`) con el corrector (`corregir.py`, `puntuar.py`, `rubrica.yaml`) y la planta simulada levantada en la red `planta-lan`, además de Ollama con `qwen2.5:3b-instruct`. El wrapper es `scripts/correr_correccion_oficial.py --correccion-dir <academia/repo> --repo . --salida <salida>`.
 
+---
+
+## Plan de implementación 3 — Model Routing, Capability Matrix y Ampliación de la Lista Cerrada
+
+**Estado:** Completado — todos los 6 ítems implementados y verificados
+
+**Referencia:** `Plan_de_implementación/Instrucciones/Plan_de_implementación_3.md`
+
+### Ítem 3.1 — Model Routing por reglas ✅ Implementado
+
+Se creó el paquete `src/routing/` que permite elegir en tiempo de ejecución qué modelo de la lista cerrada atiende cada pedido, sin salir de la lista cerrada (`src/modelos_lista.py`) ni agregar proveedores externos (Azure AI Foundry, fal.ai no están en el alcance del TP).
+
+**Archivos creados:**
+- `src/routing/__init__.py`
+- `src/routing/pedido.py` — dataclass `Pedido` con señales de routing (tipo de tarea, imagen, tokens, requiere tools, etc.)
+- `src/routing/reglas.py` — estrategia de reglas: imagen → visión (Nemotron), ventana grande → modelo capaz, clasificar/extraer → modelo económico, resto → LLM local
+- `src/routing/clasificador.py` — estrategia por clasificación (simple/complejo) como respaldo cuando las reglas no alcanzan
+- `src/routing/capacidad.py` — filtros de capacidad: evita elegir modelos sin visión para imágenes o sin ventana grande para inputs largos
+- `src/routing/latency.py` — historial de latencia por modelo para elegir el más rápido recientemente
+- `src/routing/router.py` — `Router` que combina reglas, clasificación, capacidad y latencia en orden de prioridad
+- `tests/test_routing_reglas.py` — 7 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_routing_reglas.py` → 7 passed
+- `ruff check src/routing/ tests/test_routing_reglas.py` → All checks passed
+- El router es opcional: si no se configura, el sistema usa el comportamiento actual (Qwen2.5:3b para todo, Nemotron para visión)
+
+### Ítems del Plan 3
+
+| Ítem | Prioridad | Estado |
+|---|---|---|
+| 3.1 Model Routing | Crítica | ✅ Implementado |
+| 3.2 Cascada con validador | Alta | ✅ Implementado |
+| 3.3 Capability Matrix | Alta | ✅ Implementado |
+| 3.4 Ampliación de lista cerrada | Media | ✅ Implementado |
+| 3.5 Compliance antes del primer request | Media | ✅ Implementado |
+| 3.6 Medición del router | Baja | ✅ Implementado |
+
+### Ítem 3.2 — Cascada con validador ✅ Implementado
+
+Se agregó la cascada con validador: el sistema prueba primero con el modelo barato y pasa al caro solo si un validador barato y confiable rechaza la respuesta. Sin un validador confiable no hay cascada.
+
+**Archivos creados:**
+- `src/routing/validador.py` — validadores baratos: `valida_json` (JSON válido, opcionalmente contra esquema Pydantic), `valida_no_vacio`, `valida_monto` (compara monto con esperado dentro de tolerancia), `valida_tool_existe` (verifica que las tools invocadas existan en el registro)
+- `src/routing/cascada.py` — `Cascada`: orquesta el flujo barato → validador → caro si es necesario
+- `tests/test_cascada.py` — 13 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_cascada.py` → 13 passed (junto con los 7 de routing = 20 total)
+- `ruff check src/routing/ tests/test_cascada.py tests/test_routing_reglas.py` → All checks passed
+
+### Ítem 3.3 — Capability Matrix ✅ Implementado
+
+Se documentó y midió la matriz de capacidades de los modelos de la lista cerrada con las 8 dimensiones del curso: tool calling, structured output, reasoning, visión, audio, contexto, velocidad y costo.
+
+**Archivos creados:**
+- `src/routing/matriz_capacidades.py` — `CapacidadModelo`, `MATRIZ_CAPACIDADES` (los 4 modelos actuales), y funciones de consulta (`modelo_por_clave`, `modelos_aptos_para`, `modelos_baratos`, `modelos_rapidos`)
+- `docs/capability_matrix.md` — matriz documentada con la tabla de capacidades, qué familia usar para cada tarea de PIA-3 y decisiones de selección
+- `tests/test_matriz_capacidades.py` — 12 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_matriz_capacidades.py` → 12 passed (total Plan 3: 32 tests)
+- `ruff check src/routing/ tests/` → All checks passed
+
+### Ítem 3.4 — Ampliación de lista cerrada ✅ Implementado
+
+Se agregó `Qwen2.5-0.5B-Instruct` (Q4_K_M vía Ollama) como modelo económico para tareas simples en volumen (clasificar, extraer) dentro de la cascada de modelos. Se probó localmente: 2.41 s con tools, tool calls nativos, 397 MB de RAM.
+
+**Archivos modificados:**
+- `src/modelos_lista.py` — clave `CLAVE_ECONOMICO = "economico"` y el modelo en `LISTA_CERRADA`
+- `src/config.py` — configuración `ollama_modelo_economico`, `ollama_num_ctx_economico`, `ollama_num_thread_economico`, `ollama_max_tokens_economico`, `ollama_timeout_economico_s`
+- `src/verificacion_modelos.py` — verificación `_configuracion_llm_economico` para el nuevo modelo
+- `src/routing/capacidad.py` — `MODELO_ECONOMICO` en `CAPACIDADES` (visión=False, ventana_grande=False, tools=True, razonamiento=bajo)
+- `docs/Lista_de_Modelos.md` — modelo como ítem 4 de la lista cerrada y sección de decisión de selección
+- `docs/capability_matrix.md` — modelo en la tabla de capacidades y en la tabla de tareas (clasificar/extraer)
+
+**Verificación:**
+- `qwen2.5:0.5b-instruct` probado en Ollama: 2.41 s con tools, tool calls nativos ✅, 397 MB de RAM
+- `pytest tests/` (Plan 3) → 45 passed (routing 7 + cascada 13 + matriz 12 + compliance 8 + métricas 5)
+- `ruff check src/ tests/` → All checks passed
+- `src/verificacion_modelos.py` verifica el nuevo modelo al arrancar
+
+### Ítem 3.5 — Compliance antes del primer request ✅ Implementado
+
+Se implementó el módulo de compliance que responde y registra las cuatro preguntas antes de enviar cualquier dato a un proveedor de nube:
+
+1. ¿Qué datos viajan?
+2. ¿Qué hace el proveedor? (retención, entrenamiento con datos)
+3. ¿Dónde se procesan? (región y jurisdicción)
+4. ¿Bajo qué términos?
+
+Si alguna respuesta es "no sé" o el proveedor entrena con los datos personales, el envío se bloquea.
+
+**Archivos creados:**
+- `src/compliance/__init__.py`
+- `src/compliance/control.py` — `ControlCompliance`, `DatoViaja`, `TerminosProveedor`, `ResultadoCompliance`, `crear_control_desde_config`
+- `tests/test_compliance.py` — 8 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_compliance.py` → 8 passed
+- `ruff check src/compliance/ tests/test_compliance.py` → All checks passed
+
+### Ítem 3.6 — Medición del router ✅ Implementado
+
+Se implementó el registro de métricas del router: modelo elegido, motivo, costo, resolución y estrategia por cada request. Permite comparar contra líneas base ("siempre el grande" / "siempre el económico").
+
+**Archivos creados:**
+- `src/routing/metricas.py` — `MedicionRouter`, `RegistroMetricasRouter`, `registro_metricas_router` (singleton)
+- `tests/test_metricas_routing.py` — 5 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_metricas_routing.py` → 5 passed
+- `ruff check src/routing/metricas.py tests/test_metricas_routing.py` → All checks passed
+
+### Qué NO entra en el Plan 3 (fuera de alcance del TP)
+
+- **Azure AI Foundry como proveedor:** no está en la lista cerrada ni mencionado en los enunciados del TP.
+- **fal.ai (imágenes, audio, video):** no está en la lista cerrada ni requerido por los enunciados.
+- **Generación de imágenes ni síntesis de voz (TTS):** no forman parte del alcance del TP.
+
 ## Historial
 
 - **2026-11-16 (selección del LLM local):** se compararon

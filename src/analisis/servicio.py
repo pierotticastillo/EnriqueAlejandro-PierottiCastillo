@@ -563,6 +563,17 @@ class ServicioAnalisis:
         lineas.append("")
         lineas.append("CITAS PERMITIDAS (sólo podés usar estas): " + ", ".join(permitidas))
         lineas.append("")
+        # Códigos de falla válidos del catálogo para este tipo de equipo.
+        # El agente no puede inventar códigos: sólo puede usar los de acá.
+        tipo_equipo = self._tipo_de(borrador.equipo)
+        codigos_validos = tuple(
+            f.codigo for f in self._catalogo.fallas.para_tipo(tipo_equipo or "equipo")
+        )
+        lineas.append(
+            "CÓDIGOS DE FALLA PERMITIDOS (sólo estos; no inventes otros): "
+            + ", ".join(codigos_validos)
+        )
+        lineas.append("")
         lineas.append(
             "Consultá los manuales y el historial con las herramientas y después "
             "proponé la falla, las causas y las citas de las que sale. "

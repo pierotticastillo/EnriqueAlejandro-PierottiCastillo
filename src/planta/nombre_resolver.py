@@ -102,7 +102,7 @@ class ResolutorNombres:
             else None
         )
         self._patron_generico = re.compile(
-            r"(?<!\w)(?:(?:la|el)\s+)?(bomba|filtro)(?!\s+(?:uno|dos|tres|[123]|[ab])(?!\w))"
+            r"(?<!\w)(?:(?:la|el|un|una)\s+)?(bomba|filtro)(?!\s+(?:uno|dos|tres|[123]|[ab])(?!\w))"
         )
 
     def resolver(self, texto: str, desde: int = 0) -> Mencion | None:

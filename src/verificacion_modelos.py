@@ -23,6 +23,7 @@ from typing import Any
 from config import Settings
 from modelos_lista import (
     CLAVE_ASR,
+    CLAVE_ECONOMICO,
     CLAVE_EMBEDDINGS,
     CLAVE_LLM,
     CLAVE_VISION,
@@ -71,6 +72,7 @@ def verificar_configuracion(settings: Settings) -> list[Resultado]:
     resultados.append(_configuracion_asr(settings, por_clave(CLAVE_ASR)))
     resultados.append(_configuracion_embeddings(settings, por_clave(CLAVE_EMBEDDINGS)))
     resultados.append(_configuracion_llm(settings, por_clave(CLAVE_LLM)))
+    resultados.append(_configuracion_llm_economico(settings, por_clave(CLAVE_ECONOMICO)))
     resultados.append(_configuracion_vision(settings))
     return resultados
 
@@ -161,6 +163,40 @@ def _configuracion_llm(settings: Settings, modelo: ModeloPermitido) -> Resultado
         detalle=(
             f"{settings.ollama_modelo} · {modelo.cuantizacion} · ctx {settings.ollama_num_ctx} "
             f"· {settings.ollama_num_thread} hilo(s) · timeout {settings.ollama_timeout_s:g} s"
+        ),
+    )
+
+
+def _configuracion_llm_economico(settings: Settings, modelo: ModeloPermitido) -> Resultado:
+    """El modelo económico local: verifica que esté en la lista cerrada."""
+    if not settings.ollama_modelo_economico:
+        return Resultado(
+            clave=modelo.clave,
+            modelo=modelo.nombre,
+            estado=DESHABILITADO,
+            detalle=(
+                "OLLAMA_MODELO_ECONOMICO no está configurado: el modelo "
+                "económico no se usará en la cascada."
+            ),
+        )
+    if not modelo.coincide(settings.ollama_modelo_economico):
+        return Resultado(
+            clave=modelo.clave,
+            modelo=modelo.nombre,
+            estado=FUERA_DE_LISTA,
+            detalle=(
+                f"OLLAMA_MODELO_ECONOMICO={settings.ollama_modelo_economico!r} no está "
+                f"en la lista cerrada; permitido: {', '.join(modelo.identificadores)}"
+            ),
+        )
+    return Resultado(
+        clave=modelo.clave,
+        modelo=modelo.nombre,
+        estado=OK,
+        detalle=(
+            f"{settings.ollama_modelo_economico} · {modelo.cuantizacion} · ctx "
+            f"{settings.ollama_num_ctx_economico} · {settings.ollama_num_thread_economico} "
+            f"hilo(s) · timeout {settings.ollama_timeout_economico_s:g} s"
         ),
     )
 
