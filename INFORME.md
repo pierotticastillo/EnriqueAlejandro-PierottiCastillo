@@ -3,22 +3,18 @@
 **Trabajo práctico:** Academia Novit 2026 — planta de inyección de agua PIA‑3
 **Repositorio de la solución:** `EnriqueAlejandro-PierottiCastillo`
 **Planta simulada:** [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp)
-**Fecha del informe:** 2026-11-19
+**Fecha del informe:** 2026-11-24
 **Estado:** Fases 0, 0.5, 1, 2, 3, 4, 5, 6 y 7 implementadas y verificadas.
 Entrega 1 (núcleo de agentes, trayectoria, Central de mantenimiento y
 presupuesto) implementada y verificada. Del Plan de implementación 2 están
 implementados y verificados **P0-01 a P0-06**; P0-07 (alcance y rúbrica
 oficiales) sigue pendiente de la información de la Academia.
-Corrector oficial final (entrega a la Academia): **93,4/100 — APRUEBA** (los 7
+Corrector oficial final (entrega a la Academia): **92,8/100 — APRUEBA** (los 7
 escenarios de la rúbrica, 0 faltas eliminatorias, 0 mensajes inválidos en todos
 los escenarios). Corrida ejecutada contra el repositorio de la Academia local
-(`academia2026-tp`) el 2026-11-23 con el modelo ASR `faster-whisper-base`
-descargado localmente.
-Corrector oficial anterior (entorno de producción): **92,6/100 — APRUEBA** (los
-7 escenarios de la rúbrica, 93 de 93 puntos medidos, 0 eliminatorias, 467
-mensajes válidos y 0 inválidos), anclado al commit
-`4eb00f54b5861c6c3c922aad060de266064012ef`, al corrector
-`ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic `0011`. La evidencia
+(`academia2026-tp`) el 2026-11-24 con el modelo ASR `faster-whisper-base`
+descargado localmente. Anclada al commit `626858d`, al corrector oficial
+`ab65b95e911731351dba395817a74a8cc60da2b2` y a Alembic `0012`. La evidencia
 auditable está en [`docs/evaluaciones/correccion-oficial/`](docs/evaluaciones/correccion-oficial/README.md).
 
 ---

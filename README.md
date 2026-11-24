@@ -73,7 +73,7 @@ de órdenes.
 **Corrector oficial final:** **92,8/100 — APRUEBA** sobre los 7 escenarios de la
 rúbrica (93 de 93 puntos medidos), con **0 eliminatorias**, **0 mensajes
 inválidos** en todos los escenarios. El ancla reproducible es el commit
-`090a85506ac68c53e4f640efc10db61a7ac74aca`, el corrector oficial
+`626858d`, el corrector oficial
 `ab65b95e911731351dba395817a74a8cc60da2b2` y Alembic `0012`. `D1`, `D2` y
 `G1` quedaron en **100 %**. Los resultados por criterio, las métricas, los
 hashes y los digests están en
