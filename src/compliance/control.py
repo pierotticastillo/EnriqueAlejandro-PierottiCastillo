@@ -108,9 +108,7 @@ class ControlCompliance:
 
         # Datos personales: aplicar reglas estrictas
         desconocidas = [
-            k
-            for k, v in preguntas.items()
-            if "desconocida" in v or v.strip().lower() == "no sé"
+            k for k, v in preguntas.items() if "desconocida" in v or v.strip().lower() == "no sé"
         ]
 
         if self._terminos.entrena_con_datos == "sí":
