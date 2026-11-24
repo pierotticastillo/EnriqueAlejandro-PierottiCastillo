@@ -138,9 +138,7 @@ def modelo_por_clave(clave: str) -> CapacidadModelo | None:
 
 def modelos_aptos_para(tarea: str) -> list[str]:
     """Devuelve las claves de modelos aptos para una tarea."""
-    return [
-        clave for clave, cap in MATRIZ_CAPACIDADES.items() if cap.apto_para(tarea)
-    ]
+    return [clave for clave, cap in MATRIZ_CAPACIDADES.items() if cap.apto_para(tarea)]
 
 
 def modelos_baratos() -> list[str]:

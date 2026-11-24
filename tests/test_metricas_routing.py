@@ -42,16 +42,31 @@ def test_resumen_con_varias_mediciones():
     """El resumen agrega correctamente múltiples mediciones."""
     registro = RegistroMetricasRouter()
     registro.registrar(
-        pedido_id="p1", modelo_elegido="economico", motivo="reglas",
-        costo_usd=0.001, resuelto=True, estrategia="reglas", llamadas=1,
+        pedido_id="p1",
+        modelo_elegido="economico",
+        motivo="reglas",
+        costo_usd=0.001,
+        resuelto=True,
+        estrategia="reglas",
+        llamadas=1,
     )
     registro.registrar(
-        pedido_id="p2", modelo_elegido="generalista", motivo="cascada: falló validador",
-        costo_usd=0.011, resuelto=True, estrategia="clasificacion", llamadas=2,
+        pedido_id="p2",
+        modelo_elegido="generalista",
+        motivo="cascada: falló validador",
+        costo_usd=0.011,
+        resuelto=True,
+        estrategia="clasificacion",
+        llamadas=2,
     )
     registro.registrar(
-        pedido_id="p3", modelo_elegido="economico", motivo="reglas",
-        costo_usd=0.001, resuelto=False, estrategia="reglas", llamadas=1,
+        pedido_id="p3",
+        modelo_elegido="economico",
+        motivo="reglas",
+        costo_usd=0.001,
+        resuelto=False,
+        estrategia="reglas",
+        llamadas=1,
     )
     resumen = registro.resumen()
     assert resumen["total_pedidos"] == 3
@@ -69,12 +84,22 @@ def test_comparar_con_linea_base():
     """La comparación contra línea base calcula ahorro y diferencia de resolución."""
     registro = RegistroMetricasRouter()
     registro.registrar(
-        pedido_id="p1", modelo_elegido="economico", motivo="reglas",
-        costo_usd=0.001, resuelto=True, estrategia="reglas", llamadas=1,
+        pedido_id="p1",
+        modelo_elegido="economico",
+        motivo="reglas",
+        costo_usd=0.001,
+        resuelto=True,
+        estrategia="reglas",
+        llamadas=1,
     )
     registro.registrar(
-        pedido_id="p2", modelo_elegido="generalista", motivo="cascada",
-        costo_usd=0.011, resuelto=True, estrategia="clasificacion", llamadas=2,
+        pedido_id="p2",
+        modelo_elegido="generalista",
+        motivo="cascada",
+        costo_usd=0.011,
+        resuelto=True,
+        estrategia="clasificacion",
+        llamadas=2,
     )
     comparacion = registro.comparar_con_linea_base(
         costo_grande_por_pedido=0.08,

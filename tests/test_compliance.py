@@ -25,9 +25,7 @@ def test_datos_no_personales_siempre_se_envian():
         region_procesamiento=None,
         jurisdiccion=None,
     )
-    control = ControlCompliance(
-        proveedor="NVIDIA", datos=datos, terminos=terminos
-    )
+    control = ControlCompliance(proveedor="NVIDIA", datos=datos, terminos=terminos)
     resultado = control.evaluar()
     assert resultado.puede_enviar is True
 
@@ -45,9 +43,7 @@ def test_datos_personales_con_todos_los_datos_conocidos_se_envian():
         region_procesamiento="us-east-1",
         jurisdiccion="EE. UU.",
     )
-    control = ControlCompliance(
-        proveedor="NVIDIA", datos=datos, terminos=terminos
-    )
+    control = ControlCompliance(proveedor="NVIDIA", datos=datos, terminos=terminos)
     resultado = control.evaluar()
     assert resultado.puede_enviar is True
 
@@ -65,9 +61,7 @@ def test_datos_personales_con_entrenamiento_no_se_envian():
         region_procesamiento="us-east-1",
         jurisdiccion="EE. UU.",
     )
-    control = ControlCompliance(
-        proveedor="NVIDIA", datos=datos, terminos=terminos
-    )
+    control = ControlCompliance(proveedor="NVIDIA", datos=datos, terminos=terminos)
     resultado = control.evaluar()
     assert resultado.puede_enviar is False
     assert "entrena con los datos" in resultado.motivo
@@ -86,9 +80,7 @@ def test_datos_personales_con_region_desconocida_no_se_envian():
         region_procesamiento=None,
         jurisdiccion=None,
     )
-    control = ControlCompliance(
-        proveedor="NVIDIA", datos=datos, terminos=terminos
-    )
+    control = ControlCompliance(proveedor="NVIDIA", datos=datos, terminos=terminos)
     resultado = control.evaluar()
     assert resultado.puede_enviar is False
     assert "región de procesamiento desconocida" in resultado.motivo
@@ -107,9 +99,7 @@ def test_datos_personales_con_retencion_desconocida_no_se_envian():
         region_procesamiento="us-east-1",
         jurisdiccion="EE. UU.",
     )
-    control = ControlCompliance(
-        proveedor="NVIDIA", datos=datos, terminos=terminos
-    )
+    control = ControlCompliance(proveedor="NVIDIA", datos=datos, terminos=terminos)
     resultado = control.evaluar()
     assert resultado.puede_enviar is False
     assert "retención desconocida" in resultado.motivo
@@ -128,9 +118,7 @@ def test_respuestas_desconocidas_se_registran():
         region_procesamiento=None,
         jurisdiccion=None,
     )
-    control = ControlCompliance(
-        proveedor="NVIDIA", datos=datos, terminos=terminos
-    )
+    control = ControlCompliance(proveedor="NVIDIA", datos=datos, terminos=terminos)
     resultado = control.evaluar()
     assert len(resultado.respuesta_unknown) > 0
 
@@ -148,9 +136,7 @@ def test_cuatro_preguntas_estan_presentes():
         region_procesamiento="sa-east-1",
         jurisdiccion="Argentina",
     )
-    control = ControlCompliance(
-        proveedor="NVIDIA", datos=datos, terminos=terminos
-    )
+    control = ControlCompliance(proveedor="NVIDIA", datos=datos, terminos=terminos)
     resultado = control.evaluar()
     assert "¿Qué datos viajan?" in resultado.preguntas
     assert "¿Qué hace el proveedor?" in resultado.preguntas

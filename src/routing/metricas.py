@@ -187,18 +187,12 @@ class RegistroMetricasRouter:
             "ahorro_vs_grande_pct": round(ahorro_vs_grande / costo_grande_total * 100, 2)
             if costo_grande_total > 0
             else 0.0,
-            "diferencia_resolucion_vs_grande": round(
-                tasa_router - resolucion_grande, 4
-            ),
+            "diferencia_resolucion_vs_grande": round(tasa_router - resolucion_grande, 4),
             "ahorro_vs_economico_usd": round(ahorro_vs_economico, 4),
-            "ahorro_vs_economico_pct": round(
-                ahorro_vs_economico / costo_economico_total * 100, 2
-            )
+            "ahorro_vs_economico_pct": round(ahorro_vs_economico / costo_economico_total * 100, 2)
             if costo_economico_total > 0
             else 0.0,
-            "diferencia_resolucion_vs_economico": round(
-                tasa_router - resolucion_economico, 4
-            ),
+            "diferencia_resolucion_vs_economico": round(tasa_router - resolucion_economico, 4),
         }
 
     def exportar_json(self) -> str:
