@@ -45,8 +45,7 @@ MODELO_ECONOMICO = ModeloPermitido(
     motor="Ollama (llama.cpp)",
     ubicacion="planta",
     configuracion=(
-        "Q4_K_M, num_ctx 2048, num_thread 2, temperature 0, "
-        "keep_alive 0 (a demanda), timeout 60 s"
+        "Q4_K_M, num_ctx 2048, num_thread 2, temperature 0, keep_alive 0 (a demanda), timeout 60 s"
     ),
     identificadores=("qwen2.5:0.5b-instruct",),
     cuantizacion="Q4_K_M",
