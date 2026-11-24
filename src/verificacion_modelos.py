@@ -23,6 +23,7 @@ from typing import Any
 from config import Settings
 from modelos_lista import (
     CLAVE_ASR,
+    CLAVE_ECONOMICO,
     CLAVE_EMBEDDINGS,
     CLAVE_LLM,
     CLAVE_VISION,
@@ -33,29 +34,6 @@ from modelos_lista import (
 )
 
 logger = logging.getLogger("modelos.verificacion")
-
-# Modelo económico: no está en LISTA_CERRADA (la lista publicada del curso solo
-# tiene ASR, embeddings, LLM y visión), pero el sistema lo usa en la cascada.
-# Se verifica por separado con su propia entrada.
-MODELO_ECONOMICO = ModeloPermitido(
-    clave="economico",
-    nombre="Qwen2.5-0.5B-Instruct",
-    familia="Qwen2.5",
-    version="0.5b-instruct",
-    motor="Ollama (llama.cpp)",
-    ubicacion="planta",
-    configuracion=(
-        "Q4_K_M, num_ctx 2048, num_thread 2, temperature 0, keep_alive 0 (a demanda), timeout 60 s"
-    ),
-    identificadores=("qwen2.5:0.5b-instruct",),
-    cuantizacion="Q4_K_M",
-    nota=(
-        "Modelo económico para tareas simples en volumen (clasificar, "
-        "extraer). Muy ligero (~400 MB), rápido y soporta tool calls "
-        "nativos. Se usa en la cascada como modelo barato antes de escalar "
-        "al LLM generalista."
-    ),
-)
 
 # Estados posibles de una comprobación.
 OK = "ok"
@@ -94,7 +72,7 @@ def verificar_configuracion(settings: Settings) -> list[Resultado]:
     resultados.append(_configuracion_asr(settings, por_clave(CLAVE_ASR)))
     resultados.append(_configuracion_embeddings(settings, por_clave(CLAVE_EMBEDDINGS)))
     resultados.append(_configuracion_llm(settings, por_clave(CLAVE_LLM)))
-    resultados.append(_configuracion_llm_economico(settings, MODELO_ECONOMICO))
+    resultados.append(_configuracion_llm_economico(settings, por_clave(CLAVE_ECONOMICO)))
     resultados.append(_configuracion_vision(settings))
     return resultados
 

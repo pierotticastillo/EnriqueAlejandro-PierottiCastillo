@@ -14,6 +14,7 @@ from pathlib import Path
 from config import Settings
 from modelos_lista import (
     CLAVE_ASR,
+    CLAVE_ECONOMICO,
     CLAVE_EMBEDDINGS,
     CLAVE_LLM,
     CLAVE_VISION,
@@ -102,7 +103,7 @@ def _estado(resultados, clave: str) -> str:
 
 def test_la_lista_tiene_los_cuatro_modelos_del_curso() -> None:
     claves = [modelo.clave for modelo in LISTA_CERRADA]
-    assert claves == [CLAVE_ASR, CLAVE_EMBEDDINGS, CLAVE_LLM, CLAVE_VISION]
+    assert claves == [CLAVE_ASR, CLAVE_EMBEDDINGS, CLAVE_LLM, CLAVE_ECONOMICO, CLAVE_VISION]
 
 
 def test_los_modelos_locales_son_los_de_la_lista_publicada() -> None:
@@ -134,6 +135,7 @@ def test_la_tabla_alcanza_para_documentar() -> None:
         CLAVE_ASR,
         CLAVE_EMBEDDINGS,
         CLAVE_LLM,
+        CLAVE_ECONOMICO,
         CLAVE_VISION,
     }
 

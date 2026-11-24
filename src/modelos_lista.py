@@ -115,6 +115,26 @@ LISTA_CERRADA: tuple[ModeloPermitido, ...] = (
         ),
     ),
     ModeloPermitido(
+        clave=CLAVE_ECONOMICO,
+        nombre="Qwen2.5-0.5B-Instruct",
+        familia="Qwen2.5",
+        version="0.5b-instruct",
+        motor="Ollama (llama.cpp)",
+        ubicacion="planta",
+        configuracion=(
+            "Q4_K_M, num_ctx 2048, num_thread 2, temperature 0, "
+            "keep_alive 0 (a demanda), timeout 60 s"
+        ),
+        identificadores=("qwen2.5:0.5b-instruct",),
+        cuantizacion="Q4_K_M",
+        nota=(
+            "Modelo económico para tareas simples en volumen (clasificar, "
+            "extraer). Muy ligero (~400 MB), rápido y soporta tool calls "
+            "nativos. Se usa en la cascada como modelo barato antes de escalar "
+            "al LLM generalista."
+        ),
+    ),
+    ModeloPermitido(
         clave=CLAVE_VISION,
         nombre="Nemotron 3 Nano Omni 30B A3B",
         familia="Nemotron",
