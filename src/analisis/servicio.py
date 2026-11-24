@@ -30,6 +30,7 @@ from analisis.aprobacion import Contexto, evaluar
 from analisis.catalogo import CatalogoManuales
 from analisis.causas import causalizar
 from analisis.estado import EstadoBombas
+from analisis.evaluacion.historico import MAPA_FALLAS_SIMULADOR
 from analisis.evidencia import Evidencia, TendenciaEvidencia, reunir_parte, reunir_texto
 from analisis.historial import es_reincidencia
 from analisis.llm import AnalysisModel
@@ -41,6 +42,14 @@ from rag.contexto import ContextoAnalisis, construir_contexto
 from tools.cliente import ClientePlanta, ErrorHerramienta
 
 logger = logging.getLogger("analisis.servicio")
+
+# Mapeo de códigos de falla del simulador (ej. "F02-B-102-4") a códigos del catálogo (ej. "TX-T02").
+# Se extrae el prefijo "FXX" del código del simulador y se busca en MAPA_FALLAS_SIMULADOR.
+# Esto permite que el agente use códigos del simulador y el sistema los traduzca al catálogo.
+MAPA_FALLAS_SIMULADOR_A_CATALOGO: dict[str, str] = {}
+for codigo_simulador, codigo_catalogo in MAPA_FALLAS_SIMULADOR.items():
+    prefijo = codigo_simulador.split("-")[0]
+    MAPA_FALLAS_SIMULADOR_A_CATALOGO[prefijo] = codigo_catalogo
 
 
 class RecuperadorDiferido:
@@ -613,6 +622,14 @@ class ServicioAnalisis:
                 falla = self._catalogo.fallas.por_codigo(causa.falla)
                 if falla is not None:
                     return falla
+                # El código no está en el catálogo: puede ser un código del simulador
+                # (ej. "F02-B-102-4"). Extraemos el prefijo "F02" y buscamos en el mapa.
+                prefijo = causa.falla.split("-")[0]
+                codigo_cat = MAPA_FALLAS_SIMULADOR_A_CATALOGO.get(prefijo)
+                if codigo_cat is not None:
+                    falla = self._catalogo.fallas.por_codigo(codigo_cat)
+                    if falla is not None:
+                        return falla
         return None
 
     def _tarea_de(self, falla: FallaCatalogo | None, equipo: str, causas: tuple):
