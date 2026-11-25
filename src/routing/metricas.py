@@ -89,20 +89,28 @@ class RegistroMetricasRouter:
 
         for m in self.mediciones:
             entry_modelo = por_modelo.setdefault(
-                m.modelo_elegido, {"cantidad": 0, "costo_usd": 0.0, "resueltos": 0}
+                m.modelo_elegido,
+                {"cantidad": 0, "costo_usd": 0.0, "resueltos": 0},
             )
             entry_modelo["cantidad"] += 1
             entry_modelo["costo_usd"] += m.costo_usd
             if m.resuelto:
                 entry_modelo["resueltos"] += 1
+            entry_modelo["costo_por_resolucion_usd"] = round(
+                entry_modelo["costo_usd"] / entry_modelo["resueltos"], 6
+            ) if entry_modelo["resueltos"] > 0 else 0.0
 
             entry_est = por_estrategia.setdefault(
-                m.estrategia, {"cantidad": 0, "costo_usd": 0.0, "resueltos": 0}
+                m.estrategia,
+                {"cantidad": 0, "costo_usd": 0.0, "resueltos": 0},
             )
             entry_est["cantidad"] += 1
             entry_est["costo_usd"] += m.costo_usd
             if m.resuelto:
                 entry_est["resueltos"] += 1
+            entry_est["costo_por_resolucion_usd"] = round(
+                entry_est["costo_usd"] / entry_est["resueltos"], 6
+            ) if entry_est["resueltos"] > 0 else 0.0
 
         return {
             "total_pedidos": total,
@@ -110,6 +118,9 @@ class RegistroMetricasRouter:
             "costo_promedio_usd": round(costo_total / total, 4),
             "resueltos": resueltos,
             "tasa_resolucion": round(resueltos / total, 4),
+            "costo_por_resolucion_usd": round(costo_total / resueltos, 6)
+            if resueltos > 0
+            else 0.0,
             "por_modelo": por_modelo,
             "por_estrategia": por_estrategia,
         }
@@ -170,18 +181,33 @@ class RegistroMetricasRouter:
                 "costo_promedio_usd": round(costo_grande_por_pedido, 4),
                 "resueltos": resueltos_grande,
                 "tasa_resolucion": resolucion_grande,
+                "costo_por_resolucion_usd": round(
+                    costo_grande_total / resueltos_grande, 6
+                )
+                if resueltos_grande > 0
+                else 0.0,
             },
             "linea_base_economico": {
                 "costo_total_usd": round(costo_economico_total, 4),
                 "costo_promedio_usd": round(costo_economico_por_pedido, 4),
                 "resueltos": resueltos_economico,
                 "tasa_resolucion": resolucion_economico,
+                "costo_por_resolucion_usd": round(
+                    costo_economico_total / resueltos_economico, 6
+                )
+                if resueltos_economico > 0
+                else 0.0,
             },
             "router": {
                 "costo_total_usd": costo_router,
                 "costo_promedio_usd": resumen_router["costo_promedio_usd"],
                 "resueltos": resueltos_router,
                 "tasa_resolucion": tasa_router,
+                "costo_por_resolucion_usd": round(
+                    costo_router / resueltos_router, 6
+                )
+                if resueltos_router > 0
+                else 0.0,
             },
             "ahorro_vs_grande_usd": round(ahorro_vs_grande, 4),
             "ahorro_vs_grande_pct": round(ahorro_vs_grande / costo_grande_total * 100, 2)

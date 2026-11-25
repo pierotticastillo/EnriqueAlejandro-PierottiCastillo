@@ -8,6 +8,28 @@ operan exclusivamente sobre modelos de la lista cerrada (`src/modelos_lista.py`)
 from .capacidad import capacidad_filtrada
 from .cascada import Cascada, ResultadoCascada
 from .clasificador import etiquetar_complejidad
+from .costos import PrecioModelo, TablaCostos, tabla_costos
+from .costo_resolucion import (
+    CalculadoraCostoResolucion,
+    ComparacionCostoResolucion,
+    CostoPorResolucion,
+    calculadora_costo_resolucion,
+)
+from .cadena_fallback import CadenaFallback
+from .fallback_nivel import (
+    CADENA_COMPLETA,
+    NivelFallback,
+    ResultadoCadena,
+    ResultadoNivel,
+)
+from .metricas_tokens import (
+    MetricaTokensPorSegundo,
+    calcular_tokens_por_segundo,
+    registrar_metrica_tokens,
+    resumen_velocidad,
+    metricas_tokens_por_segundo,
+)
+from .batching import BatchNoUrgente, ItemBatch, ResultadoBatch
 from .latency import proveedor_por_latencia
 from .matriz_capacidades import (
     MATRIZ_CAPACIDADES,
@@ -33,6 +55,30 @@ from .validador import (
     valida_no_vacio,
     valida_tool_existe,
 )
+from .cache_respuestas import (
+    CacheRespuestas,
+    ResultadoConsultaCache,
+    cache_respuestas,
+)
+from .cache_tools import (
+    CacheTools,
+    ResultadoConsultaCacheTool,
+    cache_tools,
+)
+from .degradacion import (
+    NivelDegradacion,
+    NivelDegradacionInfo,
+    NIVELES,
+    NIVELES_DEGRADACION,
+    anterior_nivel,
+    siguiente_nivel,
+    info_para_nivel,
+)
+from .gestor_degradacion import (
+    GestorDegradacion,
+    ResultadoDegradacion,
+    gestor_degradacion,
+)
 
 __all__ = [
     "Cascada",
@@ -44,10 +90,20 @@ __all__ = [
     "MODELO_LLM",
     "MODELO_VISION",
     "Pedido",
+    "PrecioModelo",
     "RegistroMetricasRouter",
     "ResultadoCascada",
     "ResultadoValidacion",
     "Router",
+    "TablaCostos",
+    "CalculadoraCostoResolucion",
+    "ComparacionCostoResolucion",
+    "CostoPorResolucion",
+    "CadenaFallback",
+    "CADENA_COMPLETA",
+    "NivelFallback",
+    "ResultadoCadena",
+    "ResultadoNivel",
     "capacidad_filtrada",
     "elegir_por_reglas",
     "etiquetar_complejidad",
@@ -58,8 +114,34 @@ __all__ = [
     "obtener_validador",
     "proveedor_por_latencia",
     "registro_metricas_router",
+    "tabla_costos",
+    "calculadora_costo_resolucion",
+    "MetricaTokensPorSegundo",
+    "calcular_tokens_por_segundo",
+    "registrar_metrica_tokens",
+    "resumen_velocidad",
+    "metricas_tokens_por_segundo",
+    "BatchNoUrgente",
+    "ItemBatch",
+    "ResultadoBatch",
     "valida_json",
     "valida_monto",
     "valida_no_vacio",
     "valida_tool_existe",
+    "CacheRespuestas",
+    "ResultadoConsultaCache",
+    "cache_respuestas",
+    "CacheTools",
+    "ResultadoConsultaCacheTool",
+    "cache_tools",
+    "NivelDegradacion",
+    "NivelDegradacionInfo",
+    "NIVELES",
+    "NIVELES_DEGRADACION",
+    "anterior_nivel",
+    "siguiente_nivel",
+    "info_para_nivel",
+    "GestorDegradacion",
+    "ResultadoDegradacion",
+    "gestor_degradacion",
 ]
