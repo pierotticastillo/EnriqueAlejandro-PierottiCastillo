@@ -18,14 +18,14 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 #: Tipo de los datos de un request (qué se envía al modelo).
 T = TypeVar("T")
 
 
 @dataclass
-class ItemBatch(Generic[T]):
+class ItemBatch[T]:
     """Un elemento acumulado en el batch."""
 
     request_id: str
@@ -43,7 +43,7 @@ class ResultadoBatch:
     motivo: str
 
 
-class BatchNoUrgente(Generic[T]):
+class BatchNoUrgente[T]:
     """Acumulador de requests no urgentes para envío en batch.
 
     Se dispara el envío cuando se alcanza el umbral de tamaño o el umbral de
