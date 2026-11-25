@@ -1,0 +1,24 @@
+{
+  "alumno": "EnriqueAlejandro-PierottiCastillo",
+  "repo": "C:\\Users\\pierotticastillo\\Documents\\GitHub\\EnriqueAlejandro-PierottiCastillo",
+  "commit": "097f6b88087a031430eb055cdd4713021797c61d",
+  "fecha": "2026-11-25T17:59:20",
+  "corrida": {
+    "reloj": {
+      "modo": "eventos",
+      "rapida": 1800,
+      "lenta": 5,
+      "silencio_s": 5,
+      "minimo_s": 3,
+      "maximo_s": 120
+    },
+    "velocidad": 120,
+    "espera_arranque_s": 180,
+    "gracia_final_s": 60
+  },
+  "escenarios": [
+    "contratista",
+    "ataque",
+    "libre"
+  ]
+}

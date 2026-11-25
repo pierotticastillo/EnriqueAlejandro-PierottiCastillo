@@ -15,7 +15,7 @@ nivel 5, se avisa explícitamente (nunca degradar en silencio).
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from .fallback_nivel import (
     CADENA_COMPLETA,

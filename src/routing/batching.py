@@ -16,8 +16,9 @@ Este módulo implementa un acumulador que:
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Generic, TypeVar
+from typing import Generic, TypeVar
 
 #: Tipo de los datos de un request (qué se envía al modelo).
 T = TypeVar("T")

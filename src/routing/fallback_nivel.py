@@ -18,7 +18,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-
 #: Niveles de la cadena, en orden de ejecución.
 NivelFallback = Literal[
     "reintentar",

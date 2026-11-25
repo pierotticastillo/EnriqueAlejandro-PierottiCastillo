@@ -17,7 +17,7 @@ trayectoria la usan para calcular el costo de cada request.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

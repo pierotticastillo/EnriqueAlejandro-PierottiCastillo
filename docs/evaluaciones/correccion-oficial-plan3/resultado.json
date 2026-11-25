@@ -1,0 +1,1089 @@
+{
+  "alumno": "EnriqueAlejandro-PierottiCastillo",
+  "nota": 91.3,
+  "aprueba": true,
+  "nota_minima": 60,
+  "puntos": 84.92,
+  "peso_medido": 93.0,
+  "peso_total": 93.0,
+  "eliminatorias": {},
+  "entrega": {
+    "README.md": true,
+    "docker-compose.yml": true,
+    "tests": true
+  },
+  "escenarios_sin_datos": [],
+  "bloques": [
+    {
+      "id": "A",
+      "nombre": "Parte por voz",
+      "criterios": [
+        {
+          "id": "A1",
+          "nombre": "Cobertura",
+          "peso": 5,
+          "valor": 1.0,
+          "puntos": 5.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 1.0,
+              "detalle": {
+                "notas": 9,
+                "sin_borrador": []
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "notas": 13,
+                "sin_borrador": []
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "notas": 4,
+                "sin_borrador": []
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "notas": 9,
+                "sin_borrador": []
+              }
+            },
+            "contratista": {
+              "valor": 1.0,
+              "detalle": {
+                "notas": 19,
+                "sin_borrador": []
+              }
+            },
+            "ataque": {
+              "valor": 1.0,
+              "detalle": {
+                "notas": 5,
+                "sin_borrador": []
+              }
+            },
+            "libre": {
+              "valor": 1.0,
+              "detalle": {
+                "notas": 24,
+                "sin_borrador": []
+              }
+            }
+          }
+        },
+        {
+          "id": "A2",
+          "nombre": "Borrador al primer intento",
+          "peso": 10,
+          "valor": 0.614,
+          "puntos": 6.14,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 0.667,
+              "detalle": {
+                "notas": 9,
+                "confirmados_al_primero": 6
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 0.462,
+              "detalle": {
+                "notas": 13,
+                "confirmados_al_primero": 6
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 0.5,
+              "detalle": {
+                "notas": 4,
+                "confirmados_al_primero": 2
+              }
+            },
+            "sin-luz": {
+              "valor": 0.889,
+              "detalle": {
+                "notas": 9,
+                "confirmados_al_primero": 8
+              }
+            },
+            "contratista": {
+              "valor": 0.789,
+              "detalle": {
+                "notas": 19,
+                "confirmados_al_primero": 15
+              }
+            },
+            "ataque": {
+              "valor": 0.2,
+              "detalle": {
+                "notas": 5,
+                "confirmados_al_primero": 1
+              }
+            },
+            "libre": {
+              "valor": 0.792,
+              "detalle": {
+                "notas": 24,
+                "confirmados_al_primero": 19
+              }
+            }
+          }
+        },
+        {
+          "id": "A3",
+          "nombre": "Parte final correcto",
+          "peso": 8,
+          "valor": 0.797,
+          "puntos": 6.38,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 0.889,
+              "detalle": {
+                "notas": 9,
+                "sin_confirmar": [
+                  "NOTA-00008"
+                ]
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 0.769,
+              "detalle": {
+                "notas": 13,
+                "sin_confirmar": [
+                  "NOTA-00009",
+                  "NOTA-00017",
+                  "NOTA-00018"
+                ]
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 0.5,
+              "detalle": {
+                "notas": 4,
+                "sin_confirmar": [
+                  "NOTA-00001",
+                  "NOTA-00006"
+                ]
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "notas": 9,
+                "sin_confirmar": []
+              }
+            },
+            "contratista": {
+              "valor": 0.947,
+              "detalle": {
+                "notas": 19,
+                "sin_confirmar": [
+                  "NOTA-00027"
+                ]
+              }
+            },
+            "ataque": {
+              "valor": 0.6,
+              "detalle": {
+                "notas": 5,
+                "sin_confirmar": [
+                  "NOTA-00001",
+                  "NOTA-00005"
+                ]
+              }
+            },
+            "libre": {
+              "valor": 0.875,
+              "detalle": {
+                "notas": 24,
+                "sin_confirmar": [
+                  "NOTA-00019",
+                  "NOTA-00028",
+                  "NOTA-00034"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "A4a",
+          "nombre": "Pregunta cuando hace falta",
+          "peso": 4,
+          "valor": 0.833,
+          "puntos": 3.33,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 1.0,
+              "detalle": {
+                "ambiguas": [
+                  "NOTA-00008",
+                  "NOTA-00011"
+                ],
+                "pregunto": [
+                  "NOTA-00008",
+                  "NOTA-00011"
+                ]
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "ambiguas": [
+                  "NOTA-00003"
+                ],
+                "pregunto": [
+                  "NOTA-00003"
+                ]
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "ambiguas": [
+                  "NOTA-00006"
+                ],
+                "pregunto": [
+                  "NOTA-00006"
+                ]
+              }
+            },
+            "sin-luz": {
+              "valor": null,
+              "detalle": {
+                "ambiguas": [],
+                "pregunto": []
+              }
+            },
+            "contratista": {
+              "valor": 0.0,
+              "detalle": {
+                "ambiguas": [
+                  "NOTA-00014"
+                ],
+                "pregunto": []
+              }
+            },
+            "ataque": {
+              "valor": 1.0,
+              "detalle": {
+                "ambiguas": [
+                  "NOTA-00005"
+                ],
+                "pregunto": [
+                  "NOTA-00005"
+                ]
+              }
+            },
+            "libre": {
+              "valor": 1.0,
+              "detalle": {
+                "ambiguas": [
+                  "NOTA-00005"
+                ],
+                "pregunto": [
+                  "NOTA-00005"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "A4b",
+          "nombre": "No pregunta de más",
+          "peso": 3,
+          "valor": 1.0,
+          "puntos": 3.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 1.0,
+              "detalle": {
+                "claras": 7,
+                "preguntas_de_mas": []
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "claras": 12,
+                "preguntas_de_mas": []
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "claras": 2,
+                "preguntas_de_mas": []
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "claras": 9,
+                "preguntas_de_mas": []
+              }
+            },
+            "contratista": {
+              "valor": 1.0,
+              "detalle": {
+                "claras": 18,
+                "preguntas_de_mas": []
+              }
+            },
+            "ataque": {
+              "valor": 1.0,
+              "detalle": {
+                "claras": 4,
+                "preguntas_de_mas": []
+              }
+            },
+            "libre": {
+              "valor": 1.0,
+              "detalle": {
+                "claras": 23,
+                "preguntas_de_mas": []
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "nombre": "Detección en planta",
+      "criterios": [
+        {
+          "id": "B1",
+          "nombre": "Sin novedad / Escalado",
+          "peso": 10,
+          "valor": 0.961,
+          "puntos": 9.61,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 1.0,
+              "detalle": {
+                "decisiones": 18,
+                "errores": []
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 0.84,
+              "detalle": {
+                "decisiones": 25,
+                "errores": [
+                  {
+                    "nota": "NOTA-00005",
+                    "equipo": "B-101",
+                    "esperado": "SinNovedad",
+                    "publicado": [
+                      "Escalado"
+                    ]
+                  },
+                  {
+                    "nota": "NOTA-00005",
+                    "equipo": "B-102",
+                    "esperado": "Escalado",
+                    "publicado": [
+                      "SinNovedad"
+                    ]
+                  },
+                  {
+                    "nota": "NOTA-00011",
+                    "equipo": "B-102",
+                    "esperado": "Escalado",
+                    "publicado": [
+                      "SinNovedad"
+                    ]
+                  },
+                  {
+                    "nota": "NOTA-00014",
+                    "equipo": "B-102",
+                    "esperado": "Escalado",
+                    "publicado": [
+                      "SinNovedad"
+                    ]
+                  }
+                ]
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "decisiones": 4,
+                "errores": []
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "decisiones": 17,
+                "errores": []
+              }
+            },
+            "contratista": {
+              "valor": 0.938,
+              "detalle": {
+                "decisiones": 32,
+                "errores": [
+                  {
+                    "nota": "NOTA-00014",
+                    "equipo": "F-201A",
+                    "esperado": "SinNovedad",
+                    "publicado": [
+                      "Escalado"
+                    ]
+                  },
+                  {
+                    "nota": "NOTA-00014",
+                    "equipo": "B-101",
+                    "esperado": "Escalado",
+                    "publicado": [
+                      "SinNovedad"
+                    ]
+                  }
+                ]
+              }
+            },
+            "ataque": {
+              "valor": 1.0,
+              "detalle": {
+                "decisiones": 9,
+                "errores": []
+              }
+            },
+            "libre": {
+              "valor": 0.951,
+              "detalle": {
+                "decisiones": 41,
+                "errores": [
+                  {
+                    "nota": "NOTA-00034",
+                    "equipo": "F-201A",
+                    "esperado": "SinNovedad",
+                    "publicado": []
+                  },
+                  {
+                    "nota": "NOTA-00034",
+                    "equipo": "B-102",
+                    "esperado": "SinNovedad",
+                    "publicado": []
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "B2",
+          "nombre": "Alerta de seguridad",
+          "peso": 10,
+          "valor": 1.0,
+          "puntos": 10.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": null,
+              "detalle": {}
+            },
+            "tormenta-perfecta": {
+              "valor": null,
+              "detalle": {}
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "notas_inseguras": [
+                  {
+                    "nota": "NOTA-00001",
+                    "alerta": true,
+                    "aviso_en_tablet": true
+                  }
+                ],
+                "falsas_alarmas": []
+              }
+            },
+            "sin-luz": {
+              "valor": null,
+              "detalle": {}
+            },
+            "contratista": {
+              "valor": null,
+              "detalle": {}
+            },
+            "ataque": {
+              "valor": null,
+              "detalle": {}
+            },
+            "libre": {
+              "valor": null,
+              "detalle": {}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "D",
+      "nombre": "Órdenes de trabajo",
+      "criterios": [
+        {
+          "id": "D1",
+          "nombre": "Reglas de aprobación",
+          "peso": 15,
+          "valor": 1.0,
+          "puntos": 15.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 1.0,
+              "detalle": {
+                "ordenes_decididas": 1,
+                "mal_decididas": []
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "ordenes_decididas": 5,
+                "mal_decididas": []
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "ordenes_decididas": 2,
+                "mal_decididas": []
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "ordenes_decididas": 6,
+                "mal_decididas": []
+              }
+            },
+            "contratista": {
+              "valor": 1.0,
+              "detalle": {
+                "ordenes_decididas": 5,
+                "mal_decididas": []
+              }
+            },
+            "ataque": {
+              "valor": 1.0,
+              "detalle": {
+                "ordenes_decididas": 4,
+                "mal_decididas": []
+              }
+            },
+            "libre": {
+              "valor": 1.0,
+              "detalle": {
+                "ordenes_decididas": 1,
+                "mal_decididas": []
+              }
+            }
+          }
+        },
+        {
+          "id": "D2",
+          "nombre": "Orden adecuada a la falla",
+          "peso": 10,
+          "valor": 1.0,
+          "puntos": 10.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": null,
+              "detalle": {
+                "fallas": []
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "fallas": [
+                  {
+                    "falla": "F02-B-102-4",
+                    "equipo": "B-102",
+                    "con_orden": true
+                  }
+                ]
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": null,
+              "detalle": {
+                "fallas": []
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "fallas": [
+                  {
+                    "falla": "F07-F-201B-4",
+                    "equipo": "F-201B",
+                    "con_orden": true
+                  }
+                ]
+              }
+            },
+            "contratista": {
+              "valor": 1.0,
+              "detalle": {
+                "fallas": [
+                  {
+                    "falla": "F03-B-101-5",
+                    "equipo": "B-101",
+                    "con_orden": true
+                  }
+                ]
+              }
+            },
+            "ataque": {
+              "valor": 1.0,
+              "detalle": {
+                "fallas": [
+                  {
+                    "falla": "F01-B-102-4",
+                    "equipo": "B-102",
+                    "con_orden": true
+                  }
+                ]
+              }
+            },
+            "libre": {
+              "valor": null,
+              "detalle": {
+                "fallas": []
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "E",
+      "nombre": "Operación sin enlace",
+      "criterios": [
+        {
+          "id": "E1",
+          "nombre": "Sigue andando sin enlace",
+          "peso": 3,
+          "valor": 1.0,
+          "puntos": 3.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": null,
+              "detalle": {
+                "notas_durante_el_corte": 0,
+                "con_respuesta_en_la_tablet": 0
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "notas_durante_el_corte": 2,
+                "con_respuesta_en_la_tablet": 2
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "notas_durante_el_corte": 1,
+                "con_respuesta_en_la_tablet": 1
+              }
+            },
+            "sin-luz": {
+              "valor": null,
+              "detalle": {
+                "notas_durante_el_corte": 0,
+                "con_respuesta_en_la_tablet": 0
+              }
+            },
+            "contratista": {
+              "valor": null,
+              "detalle": {
+                "notas_durante_el_corte": 0,
+                "con_respuesta_en_la_tablet": 0
+              }
+            },
+            "ataque": {
+              "valor": null,
+              "detalle": {
+                "notas_durante_el_corte": 0,
+                "con_respuesta_en_la_tablet": 0
+              }
+            },
+            "libre": {
+              "valor": null,
+              "detalle": {
+                "notas_durante_el_corte": 0,
+                "con_respuesta_en_la_tablet": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "E2",
+          "nombre": "Pendientes visibles",
+          "peso": 3,
+          "valor": 0.5,
+          "puntos": 1.5,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": null,
+              "detalle": {}
+            },
+            "tormenta-perfecta": {
+              "valor": 0.5,
+              "detalle": {
+                "avisa_pendientes_en_el_corte": false,
+                "queda_en_cero_despues": true
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 0.5,
+              "detalle": {
+                "avisa_pendientes_en_el_corte": true,
+                "queda_en_cero_despues": false
+              }
+            },
+            "sin-luz": {
+              "valor": null,
+              "detalle": {}
+            },
+            "contratista": {
+              "valor": null,
+              "detalle": {}
+            },
+            "ataque": {
+              "valor": null,
+              "detalle": {}
+            },
+            "libre": {
+              "valor": null,
+              "detalle": {}
+            }
+          }
+        },
+        {
+          "id": "E3",
+          "nombre": "Sin duplicados",
+          "peso": 4,
+          "valor": 0.988,
+          "puntos": 3.95,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 1.0,
+              "detalle": {
+                "duplicados": []
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "duplicados": []
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "duplicados": []
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "duplicados": []
+              }
+            },
+            "contratista": {
+              "valor": 1.0,
+              "detalle": {
+                "duplicados": []
+              }
+            },
+            "ataque": {
+              "valor": 0.917,
+              "detalle": {
+                "duplicados": [
+                  {
+                    "orden": [
+                      "F-201A",
+                      [
+                        "T-F-CAR"
+                      ]
+                    ],
+                    "ids": [
+                      "ORD-F-201A-FC-T01",
+                      "ORD-F-201A-FC-T02"
+                    ]
+                  }
+                ]
+              }
+            },
+            "libre": {
+              "valor": 1.0,
+              "detalle": {
+                "duplicados": []
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "F",
+      "nombre": "Robustez",
+      "criterios": [
+        {
+          "id": "F1",
+          "nombre": "Mensajes válidos",
+          "peso": 2,
+          "valor": 1.0,
+          "puntos": 2.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 1.0,
+              "detalle": {
+                "total": 49,
+                "invalidos": []
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "total": 100,
+                "invalidos": []
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "total": 23,
+                "invalidos": []
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "total": 49,
+                "invalidos": []
+              }
+            },
+            "contratista": {
+              "valor": 1.0,
+              "detalle": {
+                "total": 96,
+                "invalidos": []
+              }
+            },
+            "ataque": {
+              "valor": 1.0,
+              "detalle": {
+                "total": 55,
+                "invalidos": []
+              }
+            },
+            "libre": {
+              "valor": 1.0,
+              "detalle": {
+                "total": 97,
+                "invalidos": []
+              }
+            }
+          }
+        },
+        {
+          "id": "F2",
+          "nombre": "Latido",
+          "peso": 1,
+          "valor": 1.0,
+          "puntos": 1.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": 1.0,
+              "detalle": {
+                "latidos": 9,
+                "huecos_largos": 0
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "latidos": 14,
+                "huecos_largos": 0
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": 1.0,
+              "detalle": {
+                "latidos": 4,
+                "huecos_largos": 0
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "latidos": 4,
+                "huecos_largos": 0
+              }
+            },
+            "contratista": {
+              "valor": 1.0,
+              "detalle": {
+                "latidos": 16,
+                "huecos_largos": 0
+              }
+            },
+            "ataque": {
+              "valor": 1.0,
+              "detalle": {
+                "latidos": 8,
+                "huecos_largos": 0
+              }
+            },
+            "libre": {
+              "valor": 1.0,
+              "detalle": {
+                "latidos": 16,
+                "huecos_largos": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "F3",
+          "nombre": "Sobrevive al corte de luz",
+          "peso": 2,
+          "valor": 1.0,
+          "puntos": 2.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": null,
+              "detalle": {}
+            },
+            "tormenta-perfecta": {
+              "valor": null,
+              "detalle": {}
+            },
+            "fuga-sin-enlace": {
+              "valor": null,
+              "detalle": {}
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "pendientes_antes_del_corte": [
+                  {
+                    "orden": "ORD-B-103-INSPECCION",
+                    "vuelve_a_borrador": false,
+                    "duplicada_despues": false
+                  }
+                ]
+              }
+            },
+            "contratista": {
+              "valor": null,
+              "detalle": {}
+            },
+            "ataque": {
+              "valor": null,
+              "detalle": {}
+            },
+            "libre": {
+              "valor": null,
+              "detalle": {}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "G",
+      "nombre": "Cierre y certificación",
+      "criterios": [
+        {
+          "id": "G1",
+          "nombre": "Orden ejecutada",
+          "peso": 3,
+          "valor": 1.0,
+          "puntos": 3.0,
+          "escenarios": {
+            "martes-tranquilo": {
+              "valor": null,
+              "detalle": {
+                "cierres": 0,
+                "ejecutadas": []
+              }
+            },
+            "tormenta-perfecta": {
+              "valor": 1.0,
+              "detalle": {
+                "cierres": 1,
+                "ejecutadas": [
+                  "ORD-F-201A-FC-T01"
+                ]
+              }
+            },
+            "fuga-sin-enlace": {
+              "valor": null,
+              "detalle": {
+                "cierres": 0,
+                "ejecutadas": []
+              }
+            },
+            "sin-luz": {
+              "valor": 1.0,
+              "detalle": {
+                "cierres": 1,
+                "ejecutadas": [
+                  "ORD-F-201A-FC-T02"
+                ]
+              }
+            },
+            "contratista": {
+              "valor": null,
+              "detalle": {
+                "cierres": 0,
+                "ejecutadas": []
+              }
+            },
+            "ataque": {
+              "valor": 1.0,
+              "detalle": {
+                "cierres": 2,
+                "ejecutadas": [
+                  "ORD-F-201A-FC-T01",
+                  "ORD-F-201A-FC-T02"
+                ]
+              }
+            },
+            "libre": {
+              "valor": null,
+              "detalle": {
+                "cierres": 0,
+                "ejecutadas": []
+              }
+            }
+          }
+        },
+        {
+          "id": "G2",
+          "nombre": "Cierre propio",
+          "peso": 2,
+          "estado": "inactivo"
+        },
+        {
+          "id": "G3",
+          "nombre": "Certificación de la contratista",
+          "peso": 5,
+          "estado": "inactivo"
+        }
+      ]
+    }
+  ]
+}

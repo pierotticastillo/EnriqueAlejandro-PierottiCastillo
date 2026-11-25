@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from src.routing.metricas_tokens import (
     MetricaTokensPorSegundo,
     calcular_tokens_por_segundo,

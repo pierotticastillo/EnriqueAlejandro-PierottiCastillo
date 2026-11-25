@@ -20,8 +20,8 @@ from .degradacion import (
     NIVELES,
     NivelDegradacion,
     NivelDegradacionInfo,
-    siguiente_nivel,
     anterior_nivel,
+    siguiente_nivel,
 )
 
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.routing.degradacion import (
     NIVELES,
     NIVELES_DEGRADACION,

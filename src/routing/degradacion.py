@@ -18,7 +18,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-
 NivelDegradacion = Literal["completo", "reducido", "minimo", "derivacion"]
 
 #: Niveles de degradación, en orden de calidad (de mejor a peor).

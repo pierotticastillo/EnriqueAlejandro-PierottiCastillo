@@ -16,8 +16,8 @@ caro", "router con cascada").
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from src.routing.metricas import MedicionRouter, RegistroMetricasRouter
 
@@ -37,7 +37,11 @@ class CostoPorResolucion:
         if self.total_pedidos > 0:
             object.__setattr__(self, "tasa_resolucion", self.resueltos / self.total_pedidos)
         if self.resueltos > 0:
-            object.__setattr__(self, "costo_por_resolucion_usd", self.costo_total_usd / self.resueltos)
+            object.__setattr__(
+                self,
+                "costo_por_resolucion_usd",
+                self.costo_total_usd / self.resueltos,
+            )
 
 
 @dataclass(frozen=True)
@@ -120,7 +124,7 @@ class CalculadoraCostoResolucion:
     @classmethod
     def desde_registro(
         cls, registro: RegistroMetricasRouter
-    ) -> "CalculadoraCostoResolucion":
+    ) -> CalculadoraCostoResolucion:
         """Crea una calculadora a partir de un RegistroMetricasRouter."""
         return cls(registro.mediciones)
 

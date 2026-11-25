@@ -822,7 +822,7 @@ Nota: para volver a correr los 7 escenarios del corrector oficial se necesita el
 
 ## Plan de implementación 3 — Model Routing, Capability Matrix y Ampliación de la Lista Cerrada
 
-**Estado:** Completado — todos los 6 ítems implementados y verificados
+**Estado:** Completado — todos los 13 ítems implementados y verificados
 
 **Referencia:** `Plan_de_implementación/Instrucciones/Plan_de_implementación_3.md`
 
@@ -855,6 +855,13 @@ Se creó el paquete `src/routing/` que permite elegir en tiempo de ejecución qu
 | 3.4 Ampliación de lista cerrada | Media | ✅ Implementado |
 | 3.5 Compliance antes del primer request | Media | ✅ Implementado |
 | 3.6 Medición del router | Baja | ✅ Implementado |
+| 3.7 Tabla de costos por request | Media | ✅ Implementado |
+| 3.8 Costo por resolución | Alta | ✅ Implementado |
+| 3.9 Batching de requests no urgentes | Baja | ✅ Implementado |
+| 3.10 Caché de respuestas y tools | Media | ✅ Implementado |
+| 3.11 Cadena de fallback de 5 niveles | Alta | ✅ Implementado |
+| 3.12 Degradación controlada en 4 niveles | Media | ✅ Implementado |
+| 3.13 Métrica de tokens por segundo | Media | ✅ Implementado |
 
 ### Ítem 3.2 — Cascada con validador ✅ Implementado
 
@@ -931,6 +938,105 @@ Se implementó el registro de métricas del router: modelo elegido, motivo, cost
 **Verificación:**
 - `pytest tests/test_metricas_routing.py` → 5 passed
 - `ruff check src/routing/metricas.py tests/test_metricas_routing.py` → All checks passed
+
+### Ítem 3.7 — Tabla de costos por request ✅ Implementado
+
+Se creó la tabla de costos por request con precios de entrada y salida por modelo (USD por millón de tokens), aplicando la fórmula `(entrada × precio_entrada + salida × precio_salida) / 1.000.000`. Los modelos locales tienen precio 0; el modelo de nube con visión tiene USD 3 entrada / USD 15 salida por millón de tokens.
+
+**Archivos creados:**
+- `src/routing/costos.py` — `TablaCostos` con precios de entrada y salida por modelo, `PrecioModelo` y singleton `tabla_costos`
+- `src/routing/__init__.py` — exporta `TablaCostos`, `PrecioModelo`, `tabla_costos`
+- `tests/test_costos.py` — 12 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_costos.py` → 12 passed
+- `python -c "from src.routing import TablaCostos, tabla_costos"` → Import OK
+- Modelos locales (`asr`, `embeddings`, `llm`, `economico`): precio USD 0 entrada / USD 0 salida
+- Modelo de nube con visión (`vision`): USD 3 entrada / USD 15 salida por millón de tokens
+
+### Ítem 3.8 — Costo por resolución ✅ Implementado
+
+Se implementó el cálculo de costo por resolución (costo total ÷ tareas resueltas) para comparar estrategias ("siempre el barato", "siempre el caro", "router con cascada") y determinar cuándo el modelo barato sale más caro por resolución.
+
+**Archivos creados/modificados:**
+- `src/routing/costo_resolucion.py` — `CalculadoraCostoResolucion`, `CostoPorResolucion`, `ComparacionCostoResolucion`, `calculadora_costo_resolucion`
+- `src/routing/metricas.py` — extendido con `costo_por_resolucion_usd` en `resumen()`, `por_modelo`, `por_estrategia` y `comparar_con_linea_base()`
+- `src/routing/__init__.py` — exporta `CalculadoraCostoResolucion`, `CostoPorResolucion`, `ComparacionCostoResolucion`, `calculadora_costo_resolucion`
+- `tests/test_costo_resolucion.py` — 7 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_costo_resolucion.py` → 7 passed
+- `pytest tests/test_costos.py tests/test_costo_resolucion.py` → 19 passed (ítems 3.7 + 3.8)
+- Importación de `src.routing` con todas las nuevas exportaciones: OK
+
+### Ítem 3.9 — Batching de requests no urgentes ✅ Implementado
+
+Se creó un acumulador que agrupa requests no urgentes (evaluaciones, clasificación de reseñas, indexación de documentos, reportes nocturnos) en un solo llamado para reducir overhead y RPM. Los requests urgentes (chat, voz, espera de usuario) se envían inmediatamente.
+
+**Archivos creados:**
+- `src/routing/batching.py` — `BatchNoUrgente` con acumulador, envío diferido por umbral de tamaño o tiempo, y `enviar_ahora()`
+- `tests/test_batching.py` — 16 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_batching.py` → 16 passed
+- `ruff check src/routing/batching.py tests/test_batching.py` → All checks passed
+
+### Ítem 3.10 — Caché de respuestas y tools ✅ Implementado
+
+Se implementó un caché de respuestas completas con TTL e invalidación (para no llamar al modelo si una petición idéntica ya fue respondida) y un caché de resultados de tools (para no volver a ejecutar una herramienta con los mismos argumentos). Ambas cachés tienen clave canónica, TTL configurable, invalidación por clave y por modelo/herramienta, y limpieza de expirados.
+
+**Archivos creados:**
+- `src/routing/cache_respuestas.py` — `CacheRespuestas`, `ResultadoConsultaCache`, `cache_respuestas` (singleton)
+- `src/routing/cache_tools.py` — `CacheTools`, `ResultadoConsultaCacheTool`, `cache_tools` (singleton)
+- `src/routing/__init__.py` — exporta todas las nuevas clases e instancias globales
+- `tests/test_cache_respuestas.py` — 16 tests unitarios, todos pasando
+- `tests/test_cache_tools.py` — 15 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_cache_respuestas.py` → 16 passed
+- `pytest tests/test_cache_tools.py` → 15 passed
+- `ruff check src/routing/cache_respuestas.py src/routing/cache_tools.py tests/test_cache_respuestas.py tests/test_cache_tools.py` → All checks passed
+
+### Ítem 3.11 — Cadena de fallback de 5 niveles ✅ Implementado
+
+Se implementó la cadena de fallback de 5 niveles que se recorre ante errores 429/5xx/timeout/filtro de contenido: reintento → otra región/mismo proveedor → modelo alternativo similar → modelo chico/local → degradar respuesta reducida. Cada nivel responde peor que el anterior, pero responde; se avisa explícitamente al llegar al nivel 5.
+
+**Archivos creados:**
+- `src/routing/fallback_nivel.py` — `NivelFallback` (5 niveles), `CADENA_COMPLETA`, `ResultadoNivel`, `ResultadoCadena`
+- `src/routing/cadena_fallback.py` — `CadenaFallback` que recorre los 5 niveles hasta que uno tenga éxito
+- `src/routing/__init__.py` — exporta `CadenaFallback`, `CADENA_COMPLETA`, `NivelFallback`, `ResultadoCadena`, `ResultadoNivel`
+- `tests/test_cadena_fallback.py` — 10 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_cadena_fallback.py` → 10 passed
+- Los 5 niveles implementados: `reintentar`, `otra_region`, `modelo_alternativo`, `modelo_chico`, `degradar`
+
+### Ítem 3.12 — Degradación controlada en 4 niveles ✅ Implementado
+
+Se implementó la degradación controlada con 4 niveles predefinidos: (1) completo — modelo principal con todas las tools, (2) reducido — modelo más chico sin lo costoso, (3) mínimo — caché o plantilla, (4) derivación — mensaje claro a una persona. Cada degradación se avisa explícitamente (nunca en silencio) para pagos, salud o acciones irreversibles.
+
+**Archivos creados:**
+- `src/routing/degradacion.py` — `NivelDegradacion`, `NivelDegradacionInfo`, `NIVELES`, `NIVELES_DEGRADACION`, `siguiente_nivel()`, `anterior_nivel()`, `info_para_nivel()`
+- `src/routing/gestor_degradacion.py` — `GestorDegradacion` con `degradar()`, `recuperar()`, `estado_actual()`, `historial()`, `resumen()`; instancia global `gestor_degradacion`
+- `src/routing/__init__.py` — exporta todos los nuevos tipos y el gestor global
+- `tests/test_degradacion.py` — 13 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_degradacion.py` → 13 passed
+- `ruff check src/routing/degradacion.py src/routing/gestor_degradacion.py tests/test_degradacion.py` → All checks passed
+
+### Ítem 3.13 — Métrica de tokens por segundo ✅ Implementado
+
+Se implementó la medición de tokens por segundo (velocidad de lectura de entrada y de generación de salida) con clasificación de velocidad (incómodo <5, aceptable 5-10, fluido 10-20, agente >20).
+
+**Archivos creados:**
+- `src/routing/metricas_tokens.py` — `MetricaTokensPorSegundo`, `calcular_tokens_por_segundo()`, `registrar_metrica_tokens()`, `resumen_velocidad()`
+- `src/routing/__init__.py` — exporta `MetricaTokensPorSegundo`, `calcular_tokens_por_segundo`, `registrar_metrica_tokens`, `resumen_velocidad`, `metricas_tokens_por_segundo`
+- `tests/test_metricas_tokens.py` — 10 tests unitarios, todos pasando
+
+**Verificación:**
+- `pytest tests/test_metricas_tokens.py` → 10 passed
+- Importación de `src.routing` con todas las nuevas exportaciones: OK
 
 ### Qué NO entra en el Plan 3 (fuera de alcance del TP)
 

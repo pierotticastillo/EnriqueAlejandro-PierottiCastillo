@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from src.routing.cadena_fallback import CadenaFallback
 from src.routing.fallback_nivel import (
     CADENA_COMPLETA,
@@ -38,7 +36,6 @@ def test_exito_principal_sin_fallback():
     cadena = CadenaFallback()
     resultado = cadena.ejecutar_con_fallback(lambda: "ok")
     assert resultado.exito is True
-    resultado_nivel = None
     assert resultado.nivel_alcanzado is None
     assert resultado.respuesta == "ok"
     assert resultado.cantidad_niveles_probados == 0
