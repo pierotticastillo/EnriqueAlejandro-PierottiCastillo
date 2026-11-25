@@ -51,7 +51,7 @@ def test_costo_por_resolucion_modelo_barato_vs_caro():
     for i in range(40):
         mediciones.append(
             _medicion(
-                pedido_id=f"b-{i+60}",
+                pedido_id=f"b-{i + 60}",
                 modelo_elegido="barato",
                 estrategia="clasificacion",
                 costo_usd=0.02,
@@ -73,7 +73,7 @@ def test_costo_por_resolucion_modelo_barato_vs_caro():
     for i in range(15):
         mediciones.append(
             _medicion(
-                pedido_id=f"c-{i+85}",
+                pedido_id=f"c-{i + 85}",
                 modelo_elegido="caro",
                 estrategia="reglas",
                 costo_usd=0.08,

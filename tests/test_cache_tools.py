@@ -47,9 +47,7 @@ def test_guardar_y_obtener_golpe():
     clave = cache.guardar(
         nombre_tool="calcular_costo", valor={"total": 15.5}, argumentos={"monto": 100}
     )
-    resultado = cache.obtener(
-        nombre_tool="calcular_costo", argumentos={"monto": 100}
-    )
+    resultado = cache.obtener(nombre_tool="calcular_costo", argumentos={"monto": 100})
     assert resultado.golpe is True
     assert resultado.valor == {"total": 15.5}
     assert resultado.clave == clave

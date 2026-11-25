@@ -122,9 +122,7 @@ class CalculadoraCostoResolucion:
         )
 
     @classmethod
-    def desde_registro(
-        cls, registro: RegistroMetricasRouter
-    ) -> CalculadoraCostoResolucion:
+    def desde_registro(cls, registro: RegistroMetricasRouter) -> CalculadoraCostoResolucion:
         """Crea una calculadora a partir de un RegistroMetricasRouter."""
         return cls(registro.mediciones)
 

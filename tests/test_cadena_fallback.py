@@ -20,14 +20,14 @@ def _callback_exitoso(nivel: NivelFallback, respuesta: str = "respuesta"):
         return ResultadoNivel(
             nivel=nivel, exito=True, respuesta=respuesta, motivo=f"éxito en {nivel}"
         )
+
     return cb
 
 
 def _callback_fallido(nivel: NivelFallback, motivo: str = "falló"):
     def cb(error: Exception) -> ResultadoNivel:
-        return ResultadoNivel(
-            nivel=nivel, exito=False, motivo=motivo, error_original=str(error)
-        )
+        return ResultadoNivel(nivel=nivel, exito=False, motivo=motivo, error_original=str(error))
+
     return cb
 
 
@@ -106,6 +106,7 @@ def test_degradar_sin_callback_devuelve_fallo():
 
 def test_callback_que_lanza_excepcion():
     """Si un callback lanza excepción, se registra y se sigue al siguiente nivel."""
+
     def cb_que_falla(error: Exception) -> ResultadoNivel:
         raise RuntimeError("callback explotó")
 
@@ -156,9 +157,7 @@ def test_resultado_nivel_con_error_original():
 
 def test_propiedad_se_degrado():
     """se_degrado es True solo si se llegó al nivel degradar."""
-    exito_temprano = ResultadoCadena(
-        exito=True, nivel_alcanzado="otra_region", respuesta="ok"
-    )
+    exito_temprano = ResultadoCadena(exito=True, nivel_alcanzado="otra_region", respuesta="ok")
     assert exito_temprano.se_degrado is False
 
     degradado = ResultadoCadena(
@@ -166,7 +165,5 @@ def test_propiedad_se_degrado():
     )
     assert degradado.se_degrado is True
 
-    fallo_total = ResultadoCadena(
-        exito=False, nivel_alcanzado="degradar", respuesta=None
-    )
+    fallo_total = ResultadoCadena(exito=False, nivel_alcanzado="degradar", respuesta=None)
     assert fallo_total.se_degrado is True

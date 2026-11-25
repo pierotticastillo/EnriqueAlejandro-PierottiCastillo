@@ -77,9 +77,7 @@ class CacheRespuestas:
         self, *, tipo_tarea: str, datos: Any, modelo: str, **kwargs: Any
     ) -> ResultadoConsultaCache:
         """Devuelve el valor cacheado si existe y no expiró, si no un fallo."""
-        clave = self.clave(
-            tipo_tarea=tipo_tarea, datos=datos, modelo=modelo, **kwargs
-        )
+        clave = self.clave(tipo_tarea=tipo_tarea, datos=datos, modelo=modelo, **kwargs)
         entrada = self._entradas.get(clave)
 
         if entrada is None:
@@ -104,9 +102,7 @@ class CacheRespuestas:
         self, *, tipo_tarea: str, datos: Any, valor: Any, modelo: str, **kwargs: Any
     ) -> str:
         """Almacena una respuesta bajo su clave canónica y devuelve la clave."""
-        clave = self.clave(
-            tipo_tarea=tipo_tarea, datos=datos, modelo=modelo, **kwargs
-        )
+        clave = self.clave(tipo_tarea=tipo_tarea, datos=datos, modelo=modelo, **kwargs)
         ahora = time.monotonic()
         self._entradas[clave] = EntradaCache(
             valor=valor,

@@ -60,9 +60,7 @@ def test_envio_al_alcanzar_umbral_tamano():
 def test_envio_al_alcanzar_umbral_tiempo():
     """Cuando se alcanza el umbral de tiempo, se envía el batch aunque no llene el tamaño."""
     envios, callback = _envio_registrado()
-    batch = BatchNoUrgente(
-        callback_envio=callback, umbral_tamano=10, umbral_tiempo_s=0.05
-    )
+    batch = BatchNoUrgente(callback_envio=callback, umbral_tamano=10, umbral_tiempo_s=0.05)
 
     batch.agregar(request_id="n1", datos="a", urgente=False)
 

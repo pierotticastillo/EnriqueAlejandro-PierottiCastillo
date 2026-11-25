@@ -80,12 +80,8 @@ def calcular_tokens_por_segundo(
     Si los segundos de una fase son 0, su tasa se declara 0 (no se puede
     dividir por cero).
     """
-    prompt_eval_rate = (
-        tokens_prompt / segundos_prompt if segundos_prompt > 0 else 0.0
-    )
-    eval_rate = (
-        tokens_completion / segundos_completion if segundos_completion > 0 else 0.0
-    )
+    prompt_eval_rate = tokens_prompt / segundos_prompt if segundos_prompt > 0 else 0.0
+    eval_rate = tokens_completion / segundos_completion if segundos_completion > 0 else 0.0
     return MetricaTokensPorSegundo(
         paso=paso,
         modelo=modelo,

@@ -31,9 +31,7 @@ def test_clave_distinta_si_cambian_datos():
 def test_obtener_sin_entrada_es_fallo():
     """obtener() de una clave inexistente devuelve golpe=False."""
     cache = CacheRespuestas()
-    resultado = cache.obtener(
-        tipo_tarea="resumen", datos=_pedido(), modelo="llm"
-    )
+    resultado = cache.obtener(tipo_tarea="resumen", datos=_pedido(), modelo="llm")
     assert resultado.golpe is False
     assert resultado.valor is None
     assert resultado.clave != ""
@@ -48,9 +46,7 @@ def test_guardar_y_obtener_golpe():
         valor="texto resumido",
         modelo="llm",
     )
-    resultado = cache.obtener(
-        tipo_tarea="resumen", datos=_pedido(), modelo="llm"
-    )
+    resultado = cache.obtener(tipo_tarea="resumen", datos=_pedido(), modelo="llm")
     assert resultado.golpe is True
     assert resultado.valor == "texto resumido"
     assert resultado.clave == clave
@@ -60,9 +56,7 @@ def test_guardar_y_obtener_golpe():
 def test_hits_se_incrementan():
     """Cada obtención exitosa incrementa el contador de hits."""
     cache = CacheRespuestas()
-    cache.guardar(
-        tipo_tarea="resumen", datos=_pedido(), valor="v", modelo="llm"
-    )
+    cache.guardar(tipo_tarea="resumen", datos=_pedido(), valor="v", modelo="llm")
     cache.obtener(tipo_tarea="resumen", datos=_pedido(), modelo="llm")
     cache.obtener(tipo_tarea="resumen", datos=_pedido(), modelo="llm")
     assert cache.cantidad() == 1
@@ -74,9 +68,7 @@ def test_hits_se_incrementan():
 def test_expiracion_ttl():
     """Después del TTL, obtener() devuelve fallo y descarta la entrada."""
     cache = CacheRespuestas(ttl_s=0.05)
-    cache.guardar(
-        tipo_tarea="resumen", datos=_pedido(), valor="v", modelo="llm"
-    )
+    cache.guardar(tipo_tarea="resumen", datos=_pedido(), valor="v", modelo="llm")
     assert cache.obtener(tipo_tarea="resumen", datos=_pedido(), modelo="llm").golpe is True
 
     time.sleep(0.1)
@@ -88,9 +80,7 @@ def test_expiracion_ttl():
 def test_invalidar_por_clave():
     """invalidar(clave) borra la entrada y devuelve True si existía."""
     cache = CacheRespuestas()
-    clave = cache.guardar(
-        tipo_tarea="resumen", datos=_pedido(), valor="v", modelo="llm"
-    )
+    clave = cache.guardar(tipo_tarea="resumen", datos=_pedido(), valor="v", modelo="llm")
     assert cache.invalidar(clave) is True
     assert cache.invalidar(clave) is False  # ya no existe
     assert cache.cantidad() == 0

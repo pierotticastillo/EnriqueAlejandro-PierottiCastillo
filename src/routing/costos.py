@@ -92,9 +92,7 @@ class TablaCostos:
             raise KeyError(f"No hay precio registrado para el modelo: {clave}")
         return precio.precio_salida_usd_por_millon
 
-    def costo_usd(
-        self, *, clave: str, tokens_entrada: int, tokens_salida: int
-    ) -> float:
+    def costo_usd(self, *, clave: str, tokens_entrada: int, tokens_salida: int) -> float:
         """Costo de un request en USD.
 
         Fórmula: (entrada × precio_entrada + salida × precio_salida) / 1.000.000

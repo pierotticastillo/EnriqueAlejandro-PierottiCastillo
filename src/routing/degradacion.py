@@ -69,8 +69,7 @@ NIVELES: dict[NivelDegradacion, NivelDegradacionInfo] = {
         nivel="derivacion",
         descripcion="Derivación a una persona (operador humano).",
         aviso_usuario=(
-            "No se pudo procesar automáticamente. Se ha derivado su solicitud "
-            "a un operador humano."
+            "No se pudo procesar automáticamente. Se ha derivado su solicitud a un operador humano."
         ),
         requiere_confirmacion=True,
     ),
