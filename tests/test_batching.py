@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 
 import pytest
-
 from src.routing.batching import BatchNoUrgente, ItemBatch, ResultadoBatch
 
 
