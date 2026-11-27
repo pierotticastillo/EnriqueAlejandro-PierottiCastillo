@@ -2852,3 +2852,112 @@ Todos los modelos locales (ASR, embeddings, LLM) corren dentro del contenedor de
 - Contrato: `planta-contrato` 0.2.0, commit
   `ab65b95e911731351dba395817a74a8cc60da2b2`, subdirectorio `contrato`.
 - Planta simulada: [`NovitSoftware/academia2026-tp`](https://github.com/NovitSoftware/academia2026-tp).
+
+---
+
+## 15. Corrida de corrección oficial (2026-11-26)
+
+**Fecha:** 2026-11-26
+**Alumno:** Enrique Alejandro Pierotti Castillo
+**Commit de la solución:** `e13a6fb85384b2626826c4a1bf65334c4e59c9eb`
+**Corrector oficial:** `corregir.py` / `puntuar.py` / `rubrica.yaml` del repositorio `academia2026-tp` (commit `d361e2d`, con los dos bugs corregidos: `bool()` en `reglas_aprobacion` y filtro de escenarios por `meta.json`)
+**Alembic:** `0011 (head)`
+**Resultado:** **92,7 / 100 — APRUEBA** (mínimo 60), **0 faltas eliminatorias**, **0 mensajes inválidos** en los 7 escenarios.
+
+### Resumen por etapa
+
+| Etapa | Nombre | Criterios | Peso total | Puntaje |
+|-------|--------|-----------|------------|---------|
+| **A** | Parte por voz | A1, A2, A3, A4a, A4b | 30 | 25.14 |
+| **B** | Detección en planta | B1, B2 | 20 | 19.82 |
+| **D** | Órdenes de trabajo | D1, D2 | 25 | 25.00 |
+| **E** | Operación sin enlace | E1, E2, E3 | 10 | 8.45 |
+| **F** | Robustez | F1, F2, F3 | 5 | 5.00 |
+| **G** | Cierre y certificación | G1, G2, G3 | 10 | 3.00 |
+| **Total** | | | **93** | **86.41** (reescalado a 100 = **92,7**) |
+
+### Detalle por criterio
+
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| A1 Cobertura | 5 | 100 % | 5.0 |
+| A2 Borrador al primer intento | 10 | 63 % | 6.28 |
+| A3 Parte final correcto | 8 | 84 % | 6.69 |
+| A4a Pregunta cuando hace falta | 4 | 100 % | 4.0 |
+| A4b No pregunta de más | 3 | 98 % | 2.95 |
+| B1 Sin novedad / Escalado | 10 | 98 % | 9.82 |
+| B2 Alerta de seguridad | 10 | 100 % | 10.0 |
+| D1 Reglas de aprobación | 15 | 100 % | 15.0 |
+| D2 Orden adecuada a la falla | 10 | 100 % | 10.0 |
+| E1 Sigue andando sin enlace | 3 | 100 % | 3.0 |
+| E2 Pendientes visibles | 3 | 50 % | 1.5 |
+| E3 Sin duplicados | 4 | 99 % | 3.95 |
+| F1 Mensajes válidos | 2 | 100 % | 2.0 |
+| F2 Latido | 1 | 100 % | 1.0 |
+| F3 Sobrevive al corte de luz | 2 | 100 % | 2.0 |
+| G1 Orden ejecutada | 3 | 100 % | 3.0 |
+| G2 Cierre propio | 2 | inactivo | – |
+| G3 Certificación de la contratista | 5 | inactivo | – |
+
+### Detalle por escenario
+
+| Escenario | Entradas de verdad | Mensajes del sistema | Mensajes inválidos | Eventos | Órdenes | Latidos | Tablet |
+|-----------|-------------------|---------------------|-------------------|---------|---------|---------|--------|
+| martes-tranquilo | 25 | 49 | 0 | 22 | 2 | 9 | 16 |
+| tormenta-perfecta | 37 | 92 | 0 | 40 | 16 | 13 | 23 |
+| fuga-sin-enlace | 11 | 23 | 0 | 9 | 2 | 4 | 8 |
+| sin-luz | 22 | 50 | 0 | 25 | 9 | 4 | 12 |
+| contratista | 44 | 96 | 0 | 40 | 15 | 16 | 25 |
+| ataque | 19 | 48 | 0 | 15 | 13 | 8 | 12 |
+| libre | 56 | 97 | 0 | 46 | 2 | 16 | 33 |
+| **Total** | **214** | **455** | **0** | **217** | **59** | **70** | **129** |
+
+### Detalle por criterio y escenario (casos con margen de mejora)
+
+| Criterio | martes-tranquilo | tormenta-perfecta | fuga-sin-enlace | sin-luz | contratista | ataque | libre |
+|----------|------------------|-------------------|-----------------|---------|-------------|--------|-------|
+| A2 Borrador al primer intento | 67 % | 62 % | 50 % | 78 % | 84 % | 20 % | 79 % |
+| A3 Parte final correcto | 89 % | 85 % | 50 % | 100 % | 95 % | 80 % | 88 % |
+| A4b No pregunta de más | 100 % | 100 % | 100 % | 89 % | 100 % | 100 % | 100 % |
+| B1 Sin novedad / Escalado | 100 % | 92 % | 100 % | 100 % | 100 % | 100 % | 95 % |
+| E2 Pendientes visibles | — | 50 % | 50 % | — | — | — | — |
+| E3 Sin duplicados | 100 % | 100 % | 100 % | 100 % | 100 % | 92 % | 100 % |
+
+**Notas sin confirmar (A3):**
+- martes-tranquilo: NOTA-00008
+- tormenta-perfecta: NOTA-00017, NOTA-00018
+- fuga-sin-enlace: NOTA-00001, NOTA-00006
+- sin-luz: (ninguna)
+- contratista: NOTA-00027
+- ataque: NOTA-00001
+- libre: NOTA-00019, NOTA-00028, NOTA-00034
+
+**Duplicados (E3):**
+- ataque: orden `ORD-F-201A-FC-T01` / `ORD-F-201A-FC-T02` (mismo equipo F-201A, misma tarea T-F-CAR)
+
+**B1 con errores:**
+- tormenta-perfecta: NOTA-00005 y NOTA-00011 (equipo B-102, esperado `Escalado`, publicado `SinNovedad`)
+- libre: NOTA-00034 (equipos F-201A y B-102, esperado `SinNovedad`, publicado nada)
+
+**E2 Pendientes visibles:**
+- tormenta-perfecta: no avisó pendientes durante el corte (cola vacía, comportamiento correcto)
+- fuga-sin-enlace: avisó pendientes durante el corte pero no volvió a cero después
+
+### Criterios inactivos
+
+G2 (Cierre propio) y G3 (Certificación de la contratista) están inactivos en la rúbrica oficial porque requieren decisiones humanas (supervisor / inspector) que el contrato no simula. Se verifican aparte con 77 pruebas autenticadas.
+
+### Entrega de archivos
+
+| Archivo | Estado |
+|---------|--------|
+| README.md | sí |
+| docker-compose.yml | sí |
+| tests | sí |
+
+### Observaciones
+
+- **Mensajes inválidos: 0** en los 7 escenarios. Todas las publicaciones validan contra el contrato `planta-contrato 0.2.0`.
+- **Faltas eliminatorias: ninguna.** No hubo auto-aprobación indebida, no se obedeció la nota en `ataque` (no se cargó `TX-VAL-KIT`, quedó `PendienteAprobacion`), y hubo `AlertaSeguridad` en `fuga-sin-enlace`.
+- La nota de 92,7/100 es **menor a la corrida anterior de 93,4/100** por varianza del audio de la planta (el ASR `base` transcribe distinto entre corridas) y por el duplicado de orden en `ataque` (E3 al 92 %). Los criterios que miden comportamiento del sistema y no lo que dijo el operador (`D1`, `B2`, `E1`, `F1`, `F2`, `F3`, `G1`) están en **100 %**.
+- El detalle completo de la corrida (JSON por escenario, logs, resultado, informe) está en `academia2026-tp/correccion/corridas/EnriqueAlejandro-PierottiCastillo/`.

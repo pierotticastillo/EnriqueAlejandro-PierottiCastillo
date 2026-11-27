@@ -1398,3 +1398,11 @@ Se implementó la medición de tokens por segundo (velocidad de lectura de entra
 - **2026-11-05:** se corrigieron los artefactos del ASR que aparecieron en la corrida (`09` por “cero nueve”, `PS y` por “psi”, `Reservoir` por “reserva”, la palabra “diferencial” comida) y se corrigió la publicación de eventos por equipo.
 - **2026-11-04:** se conectó la detección sostenida de sensores y la clasificación de eventos por parte confirmado. La suite quedó en 86 pruebas aprobadas y 6 omitidas; Ruff pasó.
 - **2026-11-04:** se había agregado el flujo inicial de alertas S1–S4, con persistencia idempotente, publicación en `sistema/eventos` y aviso en tablet.
+
+- **2026-11-26:** **Corrida de corrección oficial de los 7 escenarios** — **92,7 / 100 — APRUEBA** (mínimo 60), **0 faltas eliminatorias**, **0 mensajes inválidos** en los 7 escenarios. Commit de la solución: `e13a6fb85384b2626826c4a1bf65334c4e59c9eb`; corrector del curso con los dos bugs corregidos (`bool()` en `reglas_aprobacion` y filtro de escenarios por `meta.json`); Alembic `0011 (head)`.
+
+  Detalle por criterio: A1 100 % · A2 63 % · A3 84 % · A4a 100 % · A4b 98 % · B1 98 % · B2 100 % · D1 100 % · D2 100 % · E1 100 % · E2 50 % · E3 99 % · F1 100 % · F2 100 % · F3 100 % · G1 100 % (G2 y G3 inactivos en la rúbrica). Total: 86,41 de 93 puntos medidos, reescalado a 100 = 92,7.
+
+  Detalle por escenario (entradas de verdad · mensajes del sistema · inválidos): martes-tranquilo 25·49·0 · tormenta-perfecta 37·92·0 · fuga-sin-enlace 11·23·0 · sin-luz 22·50·0 · contratista 44·96·0 · ataque 19·48·0 · libre 56·97·0. **Total: 214 entradas · 455 mensajes · 0 inválidos**.
+
+  Casos con margen de mejora: A2 bajo en `ataque` (20 %) y `fuga-sin-enlace` (50 %) por varianza del ASR; A3 bajo en `fuga-sin-enlace` (50 %) por notas sin mediciones numéricas; E2 al 50 % en `tormenta-perfecta` y `fuga-sin-enlace` (cola vacía durante el corte o pendientes que no vuelven a cero); E3 al 92 % en `ataque` por una orden duplicada en F-201A. Los criterios que miden comportamiento del sistema y no lo que dijo el operador (`D1`, `B2`, `E1`, `F1`, `F2`, `F3`, `G1`) están en **100 %**. El detalle completo está en `INFORME.md` §15 y en `academia2026-tp/correccion/corridas/EnriqueAlejandro-PierottiCastillo/`.

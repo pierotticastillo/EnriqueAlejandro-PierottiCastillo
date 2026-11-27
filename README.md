@@ -1513,3 +1513,53 @@ La planta no tiene GPU: 4 núcleos y 8 GB. Los topes del compose se bajaron
 (`postgres` 1,5 GB, `sistema` 3 GB, `mcp` 0,5 GB) para que entre el pico del
 modelo local (~2,1 GB con ctx 2048), que corre **a demanda**: `keep_alive=0`
 hace que se descargue de memoria en cuanto termina de responder.
+
+---
+
+## Corrida de corrección oficial (2026-11-26)
+
+La corrida oficial de los **7 escenarios** del corrector de la Academia Novit
+2026 se ejecutó contra este repositorio el **2026-11-26**, con el modelo ASR
+`faster-whisper-base` (lista cerrada), el LLM local `Qwen2.5-3B-Instruct`
+activo y el modelo de nube con visión habilitado.
+
+**Resultado: 92,7 / 100 — APRUEBA** (mínimo 60), **0 faltas eliminatorias**,
+**0 mensajes inválidos** en los 7 escenarios.
+
+| Criterio | Peso | Valor | Puntos |
+|----------|------|-------|--------|
+| A1 Cobertura | 5 | 100 % | 5.0 |
+| A2 Borrador al primer intento | 10 | 63 % | 6.28 |
+| A3 Parte final correcto | 8 | 84 % | 6.69 |
+| A4a Pregunta cuando hace falta | 4 | 100 % | 4.0 |
+| A4b No pregunta de más | 3 | 98 % | 2.95 |
+| B1 Sin novedad / Escalado | 10 | 98 % | 9.82 |
+| B2 Alerta de seguridad | 10 | 100 % | 10.0 |
+| D1 Reglas de aprobación | 15 | 100 % | 15.0 |
+| D2 Orden adecuada a la falla | 10 | 100 % | 10.0 |
+| E1 Sigue andando sin enlace | 3 | 100 % | 3.0 |
+| E2 Pendientes visibles | 3 | 50 % | 1.5 |
+| E3 Sin duplicados | 4 | 99 % | 3.95 |
+| F1 Mensajes válidos | 2 | 100 % | 2.0 |
+| F2 Latido | 1 | 100 % | 1.0 |
+| F3 Sobrevive al corte de luz | 2 | 100 % | 2.0 |
+| G1 Orden ejecutada | 3 | 100 % | 3.0 |
+| G2 Cierre propio | 2 | inactivo | – |
+| G3 Certificación de la contratista | 5 | inactivo | – |
+
+**Detalle por escenario** (entradas de verdad · mensajes del sistema · inválidos):
+
+| Escenario | Verdad | Mensajes | Inválidos |
+|-----------|--------|----------|-----------|
+| martes-tranquilo | 25 | 49 | 0 |
+| tormenta-perfecta | 37 | 92 | 0 |
+| fuga-sin-enlace | 11 | 23 | 0 |
+| sin-luz | 22 | 50 | 0 |
+| contratista | 44 | 96 | 0 |
+| ataque | 19 | 48 | 0 |
+| libre | 56 | 97 | 0 |
+| **Total** | **214** | **455** | **0** |
+
+El detalle completo (JSON por escenario, logs, resultado y informe) está en
+`academia2026-tp/correccion/corridas/EnriqueAlejandro-PierottiCastillo/`. La
+sección §15 de `INFORME.md` tiene el desglose por criterio y escenario.
