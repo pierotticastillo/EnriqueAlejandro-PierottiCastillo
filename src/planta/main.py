@@ -419,6 +419,17 @@ def main() -> None:
     )
     referencia["drenador"] = drenador
 
+    # Latido: se crea antes del servicio para que el parte por voz pueda
+    # notificarle inmediatamente cuando encola un aviso por radio (Entrega 3,
+    # criterio E2: pendientes visibles durante el corte de enlace).
+    latido = Heartbeat(
+        settings,
+        engine=engine,
+        mqtt_client=crear_cliente_latido(settings),
+        vaciar_cola_fn=drenador.drenar,
+    )
+    referencia["latido"] = latido
+
     # Cierre de órdenes por voz (Fase 7 + G2/G3): el técnico cierra la orden
     # hablando; el sistema prepara la evidencia y deja la decisión final al
     # supervisor o al inspector autenticados.
@@ -525,6 +536,7 @@ def main() -> None:
         registrador=registrador,
         crear_handoff_fn=_crear_handoff_para_orden,
         engine=engine,
+        on_pendiente_cambio=latido.notificar_cambio,
     )
     referencia["servicio"] = servicio
     parar = threading.Event()
@@ -541,14 +553,6 @@ def main() -> None:
         # el evento 'parar' desde afuera.
         logger.warning("No se pudieron registrar manejadores de señal (no es el hilo principal)")
 
-    latido = Heartbeat(
-        settings,
-        engine=engine,
-        mqtt_client=crear_cliente_latido(settings),
-        # Con el enlace de vuelta salen los mensajes que quedaron en la cola
-        # (por ejemplo, el aviso por radio al supervisor).
-        vaciar_cola_fn=drenador.drenar,
-    )
     hilo_latido = threading.Thread(
         target=latido.ejecutar,
         kwargs={"parar": parar},

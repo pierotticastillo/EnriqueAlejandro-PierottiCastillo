@@ -4,6 +4,11 @@ La fuente de verdad es ``GET /api/planta``: cada equipo trae ``nombres`` con
 los alias que se dicen en campo ("la uno", "la del medio", "el pulmón", ...).
 Si el operador dice solo "la bomba" o "el filtro", la mención queda ambigua y
 el sistema tiene que preguntar.
+
+El ASR a menudo garbla los nombres ("la dos" → "Lados", "la bomba" → "el
+aboma"). El patrón de alias con espacios opcionales ya cubre el primer caso.
+Para el segundo, se agrega un fallback de distancia de edición (Levenshtein)
+que reconoce el alias más cercano cuando la coincidencia exacta falla.
 """
 
 from __future__ import annotations
@@ -106,13 +111,68 @@ class ResolutorNombres:
         )
 
     def resolver(self, texto: str, desde: int = 0) -> Mencion | None:
-        """Devuelve la primera mención (explícita o genérica) desde ``desde``."""
+        """Devuelve la primera mención (explícita o genérica) desde ``desde``.
+
+        Primero busca coincidencia exacta con el patrón de alias (incluyendo
+        palabras juntas, ej. "Lados" por "la dos"). Si no encuentra nada,
+        aplica fuzzy matching (distancia de edición ≤ 2) para reconocer
+        nombres garblados por el ASR (ej. "el aboma" por "la bomba").
+        """
         normalizado = normalizar(texto)
         desde = max(0, min(desde, len(normalizado)))
         explicita = self._buscar_explicita(normalizado, desde)
         if explicita is not None:
             return explicita
+        # Fallback: fuzzy matching cuando el ASR sustituyó palabras
+        fuzzy = self._buscar_fuzzy(normalizado, desde)
+        if fuzzy is not None:
+            return fuzzy
         return self._buscar_generica(normalizado, desde)
+
+    def _buscar_fuzzy(self, texto: str, desde: int) -> Mencion | None:
+        """Busca el alias más cercano por distancia de edición.
+
+        Fallback conservador para cuando el ASR sustituyó palabras ("el aboma"
+        por "la bomba"). Se divide el texto en tokens y se compara cada token
+        con los alias conocidos. Solo se acepta una coincidencia si:
+
+        * el token tiene al menos 4 caracteres (evita confundir "dos"/"uno"/"tres"),
+        * la distancia es ≤ 1 para tokens de 4-5 caracteres,
+        * la distancia es ≤ 2 para tokens de 6+ caracteres.
+
+        Esto evita falsos positivos como asociar "dos" con "uno" o "bomba"
+        con cualquier alias corto.
+        """
+        if not self._alias:
+            return None
+
+        mejor_tag: str | None = None
+        mejor_distancia = 99
+        mejor_inicio = -1
+        mejor_fin = -1
+
+        tokens = re.findall(r"\w+", texto)
+        for token in tokens:
+            if len(token) < 4:
+                continue
+            umbral = 1 if len(token) <= 5 else 2
+            for alias_normalizado, tag in self._alias.items():
+                distancia = _distancia_edicion(token, alias_normalizado)
+                if distancia <= umbral and distancia < mejor_distancia:
+                    mejor_distancia = distancia
+                    mejor_tag = tag
+                    idx = texto.find(token)
+                    mejor_inicio = idx
+                    mejor_fin = idx + len(token)
+
+        if mejor_tag is not None:
+            return Mencion(
+                tag=mejor_tag,
+                texto=texto[mejor_inicio:mejor_fin] if mejor_inicio >= 0 else "",
+                inicio=mejor_inicio,
+                fin=mejor_fin,
+            )
+        return None
 
     def resolver_tag(self, texto: str) -> str | None:
         """Tag de la primera mención explícita, o ``None``."""
@@ -207,3 +267,32 @@ def _desde_planta(
 def desde_api(planta: dict[str, Any]) -> ResolutorNombres:
     """Construye el resolutor con la respuesta de ``/api/planta``."""
     return ResolutorNombres(planta.get("equipos") or [])
+
+
+def _distancia_edicion(uno: str, otro: str) -> int:
+    """Distancia de Levenshtein entre dos strings.
+
+    Se usa para reconocer alias garblados por el ASR: "aboma" por "bomba"
+    tiene distancia 1, "lados" por "dos" tiene distancia 2, etc.
+    """
+    if uno == otro:
+        return 0
+    if not uno:
+        return len(otro)
+    if not otro:
+        return len(uno)
+    anterior = list(range(len(otro) + 1))
+    for i, letra in enumerate(uno, start=1):
+        actual = [i]
+        for j, otra in enumerate(otro, start=1):
+            coste = 0 if letra == otra else 1
+            valor = min(
+                actual[-1] + 1,
+                anterior[j] + 1,
+                anterior[j - 1] + coste,
+            )
+            if i > 1 and j > 1 and letra == otro[j - 2] and uno[i - 2] == otra:
+                valor = min(valor, anterior[j - 2] + 1)
+            actual.append(valor)
+        anterior = actual
+    return anterior[-1]

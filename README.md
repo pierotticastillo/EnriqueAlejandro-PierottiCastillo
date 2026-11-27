@@ -105,6 +105,7 @@ Constatación contra el Anexo de Entregas (cronograma de la Academia Novit 2026)
 |---------|-------|----------------------------------|-------------------|--------|
 | 1 | 10/11 | `martes-tranquilo`, `fuga-sin-enlace` | A1–A4b, B1, B2, F1, F2 | **Cumple** — 92,8/100 — APRUEBA (corrida oficial), 0 eliminatorias, 0 mensajes inválidos |
 | 2 | 20/11 | `tormenta-perfecta`, `sin-luz`, `contratista`, `fuga-sin-enlace` (daño estructural) | D1, D2, F3, G1 | **Cumple** — D1 100 %, D2 100 %, F3 100 %, G1 100 % |
+| 3 | 1/12 | `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz` | E1, E2 | **Pendiente** — matriz de capacidades, medición de arranque tras corte de luz, presupuesto 1.000 notas, criterios E1/E2 |
 
 **7 escenarios del corrector oficial** (`martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`, `contratista`, `ataque`, `libre`): ejecutados contra el repositorio de la Academia local con **91,3/100 — APRUEBA** (mínimo 60), **0 faltas eliminatorias**, 0 mensajes inválidos en todos los escenarios.
 
@@ -191,6 +192,55 @@ Detalle completo de la corrida: `academia2026-tp/correccion/corridas/EnriqueAlej
 - **P0-07**: cerrado con información del Anexo Entrega 2 (fecha 20/11, módulos 3.1 a 3.4, escenarios tormenta-perfecta/sin-luz/contratista/fuga-sin-enlace, eliminación `aprobacion_indebida`, G2/G3 revisados a mano e inactivos en la rúbrica).
 
 Nota: para volver a correr los 7 escenarios del corrector oficial se necesita el repositorio de la Academia (`NovitSoftware/academia2026-tp`) con el corrector (`corregir.py`, `puntuar.py`, `rubrica.yaml`) y la planta simulada levantada en la red `planta-lan`, además de Ollama con `qwen2.5:3b-instruct`. El wrapper es `scripts/correr_correccion_oficial.py --correccion-dir <academia/repo> --repo . --salida <salida>`.
+
+## Criterios E1 y E2 — Entrega 3 (módulos 4.1 a 4.4)
+
+**Fuente:** `Academia _2026_Anexo_Entrega_3.txt`, sección Cómo se verifica  
+**Escenarios:** `tormenta-perfecta` (4 h sin enlace), `fuga-sin-enlace`, `sin-luz`  
+**Criterios medidos:** E1 y E2
+
+### E1 — Sigue andando sin enlace
+
+| Métrica | Valor objetivo | Estado | Medición |
+|---|---|---|---|
+| Parte por voz funciona sin enlace | Sí | Implementado | ASR local, extracción determinista, tablet local |
+| Detección S1–S4 funciona sin enlace | Sí | Implementado | Detector local, sin LLM, sin nube |
+| Alerta de seguridad se publica sin enlace | Sí, < 30 s reales | Implementado | Publica `AlertaSeguridad` en < 30 s |
+| Reglas de aprobación funcionan sin enlace | Sí | Implementado | Evaluadas en código, sin modelo |
+| Cola persistida cuando enlace caído | Sí | Implementado | `outbox_cola` en PostgreSQL |
+| `pendientes_sincronizar` visible en latido | Sí | Implementado | Publicado cada 30 s y ante cambios |
+| `enlace_ok` refleja estado real del enlace | Sí | Implementado | Evaluado contra `ENLACE_CHECK_URL` |
+
+### E2 — Pendientes visibles
+
+| Métrica | Valor objetivo | Estado | Medición |
+|---|---|---|---|
+| Cola se drena en orden al volver el enlace | Sí | Implementado | Hilo `cola-salida`, `COLA_SONDEO_S=5` |
+| Sin duplicados al volver el enlace | Sí | Implementado | Índice parcial `WHERE estado='pendiente'` |
+| `pendientes_sincronizar` vuelve a 0 después | Sí | Implementado | Contador en latido |
+| Aviso por radio espera al enlace | Sí | Implementado | Radio espera, eventos y órdenes no |
+
+### Tabla de mediciones (README — Entrega 3)
+
+| Escenario | E1 (sigue andando) | E2 (pendientes visibles) | Tiempo de arranque tras corte de luz | Presupuesto 1.000 notas |
+|---|---|---|---|---|
+| `tormenta-perfecta` (4 h sin enlace) | Pendiente de medición oficial | Pendiente de medición oficial | Pendiente (script: `scripts/medir_arranque_corte_luz.py`) | Pendiente (ver `docs/evaluaciones/entrega3/presupuesto_1000_notas_entrega3.md`) |
+| `fuga-sin-enlace` | Pendiente de medición oficial | Pendiente de medición official | Pendiente | Pendiente |
+| `sin-luz` | Pendiente de medición oficial | Pendiente de medición official | Pendiente | Pendiente |
+
+### Archivos de evaluación (Entrega 3)
+
+| Tarea | Dataset | Modelo | Métricas |
+|---|---|---|---|
+| Transcripción | `docs/evaluaciones/entrega3/dataset_entrega3_transcripcion.json` | `faster-whisper-base` | acierto, latencia, costo, memoria |
+| Extracción del parte | `docs/evaluaciones/entrega3/dataset_entrega3_extraccion_parte.json` | `Qwen2.5-0.5B-Instruct` | acierto, latencia, costo, memoria |
+| Interpretación de respuestas | `docs/evaluaciones/entrega3/dataset_entrega3_interpretacion_respuestas.json` | `Qwen2.5-3B-Instruct` | acierto, latencia, costo, memoria |
+| Alerta de seguridad | `docs/evaluaciones/entrega3/dataset_entrega3_alerta.json` | Determinista (sin LLM) | acierto, latencia, costo, memoria |
+| Análisis de anomalía | `docs/evaluaciones/entrega3/dataset_entrega3_analisis.json` | `Qwen2.5-3B-Instruct` + RAG | acierto, latencia, costo, memoria |
+| Visión | `docs/evaluaciones/entrega3/dataset_entrega3_vision.json` | `nemotron-3-nano-omni-30b-a3b` | acierto, latencia, costo, memoria |
+| Cierre y certificación | `docs/evaluaciones/entrega3/dataset_entrega3_cierre.json` | Determinista + humano | acierto, latencia, costo, memoria |
+
+---
 
 ## Arquitectura: workflow fijo y agente
 
@@ -965,6 +1015,38 @@ el cierre en la Central.
 |-------|-----------|
 | **Planta** (contenedor `sistema`) | ASR (`faster-whisper-base`), extracción determinista, detección S1–S4, reglas de aprobación, control del cierre y del habilita, RAG con embeddings locales (`paraphrase-multilingual-MiniLM-L12-v2`), redacción con el LLM local (`Qwen2.5-3B-Instruct` en Ollama), cola en PostgreSQL, latido y publicación al bus. |
 | **Nube** (por el proxy del enlace) | **sólo** la descripción de la foto con el modelo de visión de NVIDIA. Es un **auxiliar**: describe, no decide ni aprueba. |
+
+### Justificación (Entrega 3, módulos 4.1 a 4.4)
+
+**En la PC de planta** (4 CPU / 8 GB, sin GPU) corre todo lo que debe ser
+local, determinista y funcionar sin enlace:
+
+- **Transcripción** (`faster-whisper-base`): debe ser local desde ahora,
+  porque en fuga-sin-enlace el enlace se cae a los 10 minutos.
+- **Extracción del parte** (`Qwen2.5-0.5B-Instruct`): determinista, sin LLM
+  en el camino de decisión.
+- **Detección S1–S4**: detector local, sin nube, publica `AlertaSeguridad` en
+  menos de 30 s reales.
+- **Reglas de aprobación**: se evalúan en código, nunca el LLM decide.
+- **RAG local**: embeddings `paraphrase-multilingual-MiniLM-L12-v2` en
+  pgvector, índice híbrido BM25 + denso.
+- **Cola de salida**: `outbox_cola` en PostgreSQL, persiste lo que no puede
+  salir y lo drena cuando vuelve el enlace.
+- **Latido**: `sistema/estado` cada 30 s con `enlace_ok` y
+  `pendientes_sincronizar`.
+
+**En la nube** (solo por el proxy del enlace, `enlace:3128`) corre lo que no
+puede ser local:
+
+- **Visión** (`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`): descripción
+  de fotos para daño estructural. Es auxiliar, fall-safe: sin enlace o sin
+  clave queda indeterminado y el sistema sigue igual.
+
+**Por qué esta separación:** el hardware de planta tiene 4 CPU y 8 GB sin
+GPU, suficiente para los modelos locales de la lista cerrada. El modelo de
+visión de NVIDIA requiere GPU y no entra en ese presupuesto. Además, el
+sistema debe seguir operando con el enlace caído, por lo que todo el camino
+crítico (parte, detección, alerta, reglas de aprobación) debe ser local.
 
 - El sistema **no depende de la nube**: con el enlace caído o sin clave, la
   descripción de la foto queda **indeterminada** (nunca «no hay daño») y el

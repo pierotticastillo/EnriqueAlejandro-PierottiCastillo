@@ -712,6 +712,22 @@ por el proxy del enlace (`OLLAMA_PROXY=http://enlace:3128`), que ya es la
 | `scripts/probar_cola.py` | prueba en vivo de la cola de salida: encola un radio, un evento y una orden, y comprueba que salen en orden, por su tópico y que llegan a la planta |
 | `scripts/probar_cierre.py` | prueba en vivo del cierre: publica una orden de contratista, escucha `planta/cierres`, verifica que el cierre técnico deja `Ejecutada` y, si se entrega un token y una decisión explícita, registra la decisión humana autenticada y muestra el estado final, la auditoría y el habilita |
 
+## Entrega 3 (módulos 4.1 a 4.4) — cronograma 1/12
+
+El Anexo de Entrega 3 pide: matriz de capacidades con dataset de evaluación por tarea (transcripción, extracción del parte, interpretación de respuestas, alerta, análisis, visión, cierre), router con escalamiento, ejecución local dentro de 4 CPU / 8 GB sin GPU, operación sin enlace, costos (costo por nota, presupuesto para 1.000 notas, caching y reducción de contexto, degradación controlada), registro de cada decisión (modelo, tools, argumentos, tokens, costo y tiempo) y verificación con criterios E1 y E2 (tormenta-perfecta, fuga-sin-enlace, sin-luz).
+
+| Punto del anexo | Estado | Evidencia |
+|---|---|---|
+| Matriz de capacidades por tarea | Documentado (datos estimados) | `docs/evaluaciones/entrega3/dataset_entrega3_*.json` (7 datasets), `Plan_de_implementación/datasets_entrega3_indice.md` |
+| Router con escalamiento | Implementado | `src/routing/` (ítem 3.1 Plan 3), README §Qué corre en planta y qué en nube |
+| Ejecución local (4.3) | Medido | `docs/evaluaciones/entrega3/medicion_arranque_corte_luz.json` (promedio 120.34 s, 3 iteraciones) |
+| Operación sin enlace | Implementado | `outbox_cola`, `pendientes_sincronizar`, `enlace_ok` en latido; aviso por radio en cola si enlace caído |
+| Costos (4.4) | Metodología definida | `docs/evaluaciones/entrega3/presupuesto_1000_notas_entrega3.md` (datos reales de 7 corridas del corrector oficial) |
+| Registro de cada decisión | Implementado | `registro_trayectoria` (migración 0007) |
+| Criterios E1 y E2 | Documentado y probado | README §Criterios E1 y E2; 3 escenarios ejecutados (tormenta-perfecta 89.0, fuga-sin-enlace 86.5, sin-luz 98.5) |
+
+**Pendiente de medición real:** presupuesto para 1.000 notas con valores medidos (no estimados) y mapeo explícito en `docs/capability_matrix.md` a las 7 tareas del anexo.
+
 ## Próximos pasos
 
 1. Reindexar el corpus con `docker compose --profile rag run --rm rag-indexar` cuando cambie la planta.

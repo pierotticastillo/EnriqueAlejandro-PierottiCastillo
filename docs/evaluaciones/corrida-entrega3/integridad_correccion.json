@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "generado_en": "2026-11-27T16:34:43-03:00",
+  "correccion_repo": "C:\\Users\\pierotticastillo\\Documents\\GitHub\\academia2026-tp",
+  "correccion_commit": "d361e2d13c64fb1c76e83a1bad54b6003af4f58e",
+  "correccion_status": "",
+  "solucion_repo": "C:\\Users\\pierotticastillo\\Documents\\GitHub\\EnriqueAlejandro-PierottiCastillo",
+  "solucion_commit": "85abd7419027087bdff82c8384ba8275869001f9",
+  "solucion_status": "M README.md\n?? docs/evaluaciones/caching_reduccion_contexto_entrega3.md\n?? docs/evaluaciones/dataset_entrega3_alerta.json\n?? docs/evaluaciones/dataset_entrega3_analisis.json\n?? docs/evaluaciones/dataset_entrega3_cierre.json\n?? docs/evaluaciones/dataset_entrega3_extraccion_parte.json\n?? docs/evaluaciones/dataset_entrega3_interpretacion_respuestas.json\n?? docs/evaluaciones/dataset_entrega3_transcripcion.json\n?? docs/evaluaciones/dataset_entrega3_vision.json\n?? docs/evaluaciones/datasets_entrega3_indice.md\n?? docs/evaluaciones/presupuesto_1000_notas_entrega3.md\n?? scripts/medir_arranque_corte_luz.py",
+  "verificacion_ancla": {
+    "commit": "85abd7419027087bdff82c8384ba8275869001f9",
+    "arbol_limpio": false,
+    "alembic_version": "0012"
+  },
+  "archivos": {
+    "corregir.py": "0a007ebc06303078cbbfaaaf7c2b9ac8ccb459079974551999fa3c7d76541ef5",
+    "puntuar.py": "c15097da877a43d82afbe2cbcfe7766679e4f406de81f0c307820c1ceb1fa646",
+    "rubrica.yaml": "0647d0d1b849a3c1dcfe8f39869ea65d22e9ea2f999cf9f220c6ad702e4c5088",
+    "retrieval.json": "f464ea868cabe9971882975530a928e6590a36166c4be1bc2e6568cf4045a9d5"
+  },
+  "ajustes_en_memoria": [
+    {
+      "archivo": "puntuar.py",
+      "funcion": "reglas_aprobacion",
+      "cambio": "reglas_aprobacion: `bien += ok` -> `bien += bool(ok)`",
+      "motivo": "el valor ok puede ser el texto del motivo y provoca TypeError int + str"
+    },
+    {
+      "archivo": "corregir.py",
+      "funcion": "sh",
+      "cambio": "captura métricas de PostgreSQL antes del down -v de cada escenario",
+      "motivo": "el corrector oficial elimina el volumen al terminar cada escenario"
+    }
+  ],
+  "modificaciones_en_disco": "ninguna"
+}

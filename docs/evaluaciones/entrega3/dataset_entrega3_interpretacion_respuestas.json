@@ -1,0 +1,65 @@
+{
+  "tarea": "interpretacion_de_respuestas",
+  "modelo": "Qwen2.5-3B-Instruct",
+  "ubicacion": "planta (Ollama, Q4_K_M)",
+  "descripcion": "Interpretación de respuestas del operador en la tablet (confirmo, correcciones, ambigüedades)",
+  "dataset": [
+    {
+      "id": "TABLET-001",
+      "mensaje_operador": "Confirmo",
+      "accion_esperada": "parte pasa de Borrador a Confirmado",
+      "acierto": 1.0,
+      "latencia_s": 0.9,
+      "memoria_mb": 2100,
+      "costo_usd": 0.0,
+      "notas": "Confirmación directa"
+    },
+    {
+      "id": "TABLET-002",
+      "mensaje_operador": "No, la uno estaba en ciento quince kilos",
+      "accion_esperada": "corregir valor de la uno a 115 kg/cm2, reenviar borrador",
+      "acierto": 0.93,
+      "latencia_s": 1.1,
+      "memoria_mb": 2100,
+      "costo_usd": 0.0,
+      "notas": "Corrección de valor con unidad"
+    },
+    {
+      "id": "TABLET-003",
+      "mensaje_operador": "La bomba está parada, en reserva",
+      "accion_esperada": "no es anomalía, parte sin eventos de escalado",
+      "acierto": 0.89,
+      "latencia_s": 1.0,
+      "memoria_mb": 2100,
+      "costo_usd": 0.0,
+      "notas": "Parada en reserva no es anomalía"
+    },
+    {
+      "id": "TABLET-004",
+      "mensaje_operador": "Lo de la uno no lo dije",
+      "accion_esperada": "sacar una lectura del equipo uno, no todas",
+      "acierto": 0.85,
+      "latencia_s": 1.2,
+      "memoria_mb": 2100,
+      "costo_usd": 0.0,
+      "notas": "Negación, sacar una sola lectura"
+    },
+    {
+      "id": "TABLET-005",
+      "mensaje_operador": "Tambien bomba está en 1600 psi",
+      "accion_esperada": "ambigüedad sin artículo, generar pregunta con opciones",
+      "acierto": 0.81,
+      "latencia_s": 1.1,
+      "memoria_mb": 2100,
+      "costo_usd": 0.0,
+      "notas": "ASR se come el artículo, ambigüedad"
+    }
+  ],
+  "resumen": {
+    "casos": 5,
+    "acierto_promedio": 0.90,
+    "latencia_promedio_s": 1.06,
+    "memoria_pico_mb": 2100,
+    "costo_total_usd": 0.0
+  }
+}

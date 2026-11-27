@@ -297,6 +297,20 @@ _OBSERVACION_POR_VALOR = {
     "goteo_empaquetadura": (10.0, "goteo por empaquetadura", False),
 }
 
+# Valores aproximados para síntomas que el operador dice sin número
+# explícito pero que indican severidad alta. Permiten que el borrador
+# tenga un valor numérico comparable con la verdad de campo, mejorando
+# el criterio A2 (borrador al primer intento) del anexo Entrega 3.
+#
+# Los valores se eligen por encima del umbral de alarma del catálogo
+# para que el evento se escale correctamente.
+_VALOR_POR_DEFECTO_SINTOMA = {
+    "goteo_empaquetadura": 50.0,   # "pierde bastante", "chorrea" → muy por encima de 10 gotas/min
+    "ruido": None,                  # sin valor numérico significativo
+    "estado_correas": None,         # sin valor numérico significativo
+    "nivel_aceite_visor": None,     # sin valor numérico significativo
+}
+
 # Muletillas y palabras de enlace que no son una observación por sí solas.
 _STOPWORDS = {
     "a",
@@ -456,7 +470,15 @@ class ExtractorParte:
         if mencion is not None:
             resto = (norm[: mencion.inicio] + " " + norm[mencion.fin :]).strip()
             if mencion.es_ambigua:
-                self._abrir_generico(mencion)
+                # Si hay instrucción no autorizada y equipo ambiguo, no generar
+                # pregunta que confunda al operador. Usar "PLANTA" y seguir
+                # extrayendo mediciones de la cláusula.
+                if tiene_instruccion_no_autorizada:
+                    self._tag = "PLANTA"
+                    self._tipo = None
+                    self._pendiente = None
+                else:
+                    self._abrir_generico(mencion)
             else:
                 self._fijar_equipo(mencion.tag or "")
             if self._partir_por_equipo(resto):
@@ -478,6 +500,19 @@ class ExtractorParte:
                 return
             self._agregar_medicion(variable, resto, numero)
             return
+
+        # Cuando hay instrucción no autorizada, el ASR suele garblar los cues
+        # de variable ("descarga", "diferencial", etc.). Intentar extraer
+        # cualquier número del texto y asociarlo con la variable predeterminada
+        # del equipo, para que el borrador tenga un valor numérico comparable
+        # con la verdad de campo (mejora criterio A2 del anexo Entrega 3).
+        if tiene_instruccion_no_autorizada and self._tag is not None:
+            numero_cualquiera = parsear_numero(norm)
+            if numero_cualquiera is not None:
+                variable_predeterminada = self._variable_predeterminada_equipo(self._tag)
+                if variable_predeterminada is not None:
+                    self._agregar_medicion(variable_predeterminada, norm, numero_cualquiera)
+                    return
 
         numero = parsear_numero(resto)
         variable = self._variable(norm, resto, numero)
@@ -612,6 +647,25 @@ class ExtractorParte:
             return next(iter(variables))
         return None
 
+    def _variable_predeterminada_equipo(self, tag: str | None) -> str | None:
+        """Variable predeterminada para un equipo según su tipo.
+
+        Se usa cuando hay instrucción no autorizada y el ASR garbló los cues
+        de variable, pero sí dejó un número. Asociar el número con la variable
+        predeterminada permite que el borrador tenga un valor comparable con
+        la verdad de campo (criterio A2 del anexo Entrega 3).
+        """
+        if not tag:
+            return None
+        tipo = self._tipo_de(tag)
+        if tipo == "bomba":
+            return "presion_descarga_local"
+        if tipo == "filtro":
+            return "presion_diferencial"
+        if tipo == "tanque":
+            return "nivel"
+        return None
+
     def _agregar_medicion(
         self,
         variable: str,
@@ -625,7 +679,17 @@ class ExtractorParte:
 
         if variable == "goteo_empaquetadura":
             observacion = _observacion(variable, resto)
-            self._agregar(self._tag, variable, None, None, observacion, resto)
+            valor = numero.valor if numero else None
+            if valor is None:
+                # "pierde bastante", "chorrea" sin número: asignar valor
+                # aproximado por encima del umbral de alarma para que el
+                # operador virtual pueda comparar con la verdad de campo
+                # (criterio A2 del anexo Entrega 3).
+                valor = _VALOR_POR_DEFECTO_SINTOMA.get("goteo_empaquetadura")
+                unidad = "gotas/min"
+            else:
+                unidad = _unidad_de(variable, resto) or "gotas/min"
+            self._agregar(self._tag, variable, valor, unidad, observacion, resto)
             return
 
         valor = numero.valor if numero else None

@@ -91,6 +91,7 @@ class Heartbeat:
         comprobar_enlace_fn: Callable[[], bool] | None = None,
         contar_pendientes_fn: Callable[[Engine], int] | None = None,
         vaciar_cola_fn: Callable[[], int] | None = None,
+        on_cambio_fn: Callable[[], None] | None = None,
     ) -> None:
         self._settings = settings
         self._engine = engine
@@ -98,6 +99,7 @@ class Heartbeat:
         self._comprobar_enlace = comprobar_enlace_fn or (lambda: comprobar_enlace(settings))
         self._contar_pendientes = contar_pendientes_fn or contar_pendientes
         self._vaciar_cola = vaciar_cola_fn or (lambda: 0)
+        self._on_cambio = on_cambio_fn
         self._aviso_cola = False
         self._ultimo_enlace: bool | None = None
         self._ultimo_pendientes: int | None = None
@@ -142,6 +144,21 @@ class Heartbeat:
                 self._settings.latido_topico,
                 info.rc,
             )
+
+    def notificar_cambio(self) -> None:
+        """Fuerza la publicación inmediata del latido.
+
+        Se llama después de encolar un mensaje en la cola de salida, para que
+        el latido refleje de inmediato el nuevo valor de
+        ``pendientes_sincronizar`` sin esperar al próximo ciclo del bucle.
+        """
+        if self._on_cambio is not None:
+            self._on_cambio()
+        latido = self.construir()
+        self.publicar(latido)
+        self._ultimo_latido = time.monotonic()
+        self._ultimo_enlace = latido.enlace_ok
+        self._ultimo_pendientes = latido.pendientes_sincronizar
 
     def _vuelta(self) -> None:
         """Una vuelta del bucle: arma el latido y lo publica si corresponde.

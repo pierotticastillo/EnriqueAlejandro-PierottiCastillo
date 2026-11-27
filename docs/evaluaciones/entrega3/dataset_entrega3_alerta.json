@@ -1,0 +1,70 @@
+{
+  "tarea": "alerta_seguridad",
+  "modelo": "determinista (sin LLM)",
+  "ubicacion": "planta (código)",
+  "descripcion": "Detección de condiciones inseguras S1-S4 y publicación de alerta en < 30 s",
+  "dataset": [
+    {
+      "id": "ALERTA-001",
+      "tipo": "S1",
+      "descripcion": "Pérdida con proyección de agua a presión",
+      "publicada_en_30s": true,
+      "acierto": 1.0,
+      "latencia_s": 0.5,
+      "memoria_mb": 50,
+      "costo_usd": 0.0,
+      "notas": "Detector local, sin nube"
+    },
+    {
+      "id": "ALERTA-002",
+      "tipo": "S2",
+      "descripcion": "Olor a gas",
+      "publicada_en_30s": true,
+      "acierto": 1.0,
+      "latencia_s": 0.4,
+      "memoria_mb": 50,
+      "costo_usd": 0.0,
+      "notas": "Aviso por radio al supervisor, espera_respuesta=false"
+    },
+    {
+      "id": "ALERTA-003",
+      "tipo": "S3",
+      "descripcion": "Humo u olor a quemado en motor",
+      "publicada_en_30s": true,
+      "acierto": 1.0,
+      "latencia_s": 0.6,
+      "memoria_mb": 50,
+      "costo_usd": 0.0,
+      "notas": "Procedimiento MBP-4 cap. 10"
+    },
+    {
+      "id": "ALERTA-004",
+      "tipo": "S4",
+      "descripcion": "Persona lesionada",
+      "publicada_en_30s": true,
+      "acierto": 1.0,
+      "latencia_s": 0.5,
+      "memoria_mb": 50,
+      "costo_usd": 0.0,
+      "notas": "Asegurar zona, no mover lesionado"
+    },
+    {
+      "id": "ALERTA-005",
+      "tipo": "exclusion",
+      "descripcion": "Goteo sin proyección (no es S1)",
+      "publicada_en_30s": false,
+      "acierto": 1.0,
+      "latencia_s": 0.3,
+      "memoria_mb": 50,
+      "costo_usd": 0.0,
+      "notas": "Exclusión de §10.6, no escalar"
+    }
+  ],
+  "resumen": {
+    "casos": 5,
+    "acierto_promedio": 1.0,
+    "latencia_promedio_s": 0.5,
+    "memoria_pico_mb": 50,
+    "costo_total_usd": 0.0
+  }
+}

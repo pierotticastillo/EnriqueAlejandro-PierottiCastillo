@@ -79,6 +79,7 @@ class ServicioParteVoz:
         registrador: Any = None,
         crear_handoff_fn: Any = None,
         engine: Engine | None = None,
+        on_pendiente_cambio: Callable[[], None] | None = None,
     ) -> None:
         self._settings = settings
         self._repo = repositorio
@@ -106,6 +107,7 @@ class ServicioParteVoz:
         self._resolver = resolver or desde_api(planta)
         self._extractor = extractor or ExtractorParte(planta, self._resolver)
         self._enlace_ok = enlace_ok_fn or (lambda: comprobar_enlace(settings))
+        self._on_pendiente_cambio = on_pendiente_cambio
         self._cola: queue.Queue[tuple[str, object] | None] = queue.Queue()
         self._hilo: threading.Thread | None = None
         # Cola aparte para la transcripción: el ASR es la parte lenta de la
@@ -579,7 +581,9 @@ class ServicioParteVoz:
 
         # Aviso por radio al supervisor de turno (canal 1). El contrato no
         # tiene un tópico de radio: el aviso sale por la tablet, que es el
-        # canal de avisos del sistema. No espera respuesta.
+        # canal de avisos del sistema. El radio necesita el enlace: si el
+        # radioenlace está caído, el aviso queda en la cola y sale cuando
+        # vuelve el enlace (Entrega 3, criterio E2: pendientes visibles).
         radio = MensajeTablet(
             id=f"pia3-{evento_id}-radio",
             ts=nota.ts,
@@ -591,13 +595,14 @@ class ServicioParteVoz:
             ),
             espera_respuesta=False,
         )
-        if self._enlace_ok():
-            self._cliente.publicar_tablet(radio)
-        else:
-            # El aviso por radio sale de la planta: sin radioenlace no se puede
-            # enviar, pero tampoco se pierde. Queda en la cola y sale cuando
-            # el enlace vuelve.
-            encolar_aviso(self._repo, radio)
+        # Siempre encolar el aviso por radio: el drenador lo publica solo si
+        # el enlace está arriba; si está caído, queda en la cola y
+        # pendientes_sincronizar se ve en el latido.
+        encolar_aviso(self._repo, radio)
+        # Forzar publicación inmediata del latido para que
+        # pendientes_sincronizar se vea durante el corte (Entrega 3, E2).
+        if self._on_pendiente_cambio is not None:
+            self._on_pendiente_cambio()
         logger.critical(
             "Alerta %s publicada para nota %s (equipo %s) con aviso por radio canal %s",
             tipo,

@@ -1,0 +1,24 @@
+{
+  "alumno": "EnriqueAlejandro-PierottiCastillo",
+  "repo": "C:\\Users\\pierotticastillo\\Documents\\GitHub\\EnriqueAlejandro-PierottiCastillo",
+  "commit": "85abd7419027087bdff82c8384ba8275869001f9",
+  "fecha": "2026-11-27T16:34:58",
+  "corrida": {
+    "reloj": {
+      "modo": "eventos",
+      "rapida": 1800,
+      "lenta": 5,
+      "silencio_s": 5,
+      "minimo_s": 3,
+      "maximo_s": 120
+    },
+    "velocidad": 120,
+    "espera_arranque_s": 180,
+    "gracia_final_s": 60
+  },
+  "escenarios": [
+    "tormenta-perfecta",
+    "fuga-sin-enlace",
+    "sin-luz"
+  ]
+}

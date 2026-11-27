@@ -1,0 +1,70 @@
+{
+  "tarea": "cierre",
+  "modelo": "determinista + decision humana",
+  "ubicacion": "planta (código) + Central (humano autenticado)",
+  "descripcion": "Cierre por voz, comparación contra la orden, certificación y habilita",
+  "dataset": [
+    {
+      "id": "CIERRE-001",
+      "tipo": "trabajo propio",
+      "tecnico": "supervisor",
+      "estado_final": "Cerrada",
+      "acierto": 1.0,
+      "latencia_s": 1.0,
+      "memoria_mb": 100,
+      "costo_usd": 0.0,
+      "notas": "Supervisor cierra trabajo propio, sin habilita"
+    },
+    {
+      "id": "CIERRE-002",
+      "tipo": "contratista certificada",
+      "tecnico": "inspector",
+      "estado_final": "Certificada",
+      "acierto": 1.0,
+      "latencia_s": 1.0,
+      "memoria_mb": 100,
+      "costo_usd": 0.0,
+      "notas": "Inspector certifica, emite habilita HAB-AAAA-NNNN"
+    },
+    {
+      "id": "CIERRE-003",
+      "tipo": "contratista observada",
+      "tecnico": "inspector",
+      "estado_final": "Observada",
+      "acierto": 1.0,
+      "latencia_s": 1.0,
+      "memoria_mb": 100,
+      "costo_usd": 0.0,
+      "notas": "Observar exige motivo, sin habilita"
+    },
+    {
+      "id": "CIERRE-004",
+      "tipo": "cierre tecnico",
+      "tecnico": "sistema",
+      "estado_final": "Ejecutada",
+      "acierto": 1.0,
+      "latencia_s": 1.0,
+      "memoria_mb": 100,
+      "costo_usd": 0.0,
+      "notas": "Cierre técnico deja Ejecutada, espera decisión humana"
+    },
+    {
+      "id": "CIERRE-005",
+      "tipo": "monto contrato",
+      "tecnico": "inspector",
+      "estado_final": "Certificada",
+      "acierto": 1.0,
+      "latencia_s": 1.0,
+      "memoria_mb": 100,
+      "costo_usd": 0.0,
+      "notas": "Monto de CT-SVP-2025 §2.1, no del cierre"
+    }
+  ],
+  "resumen": {
+    "casos": 5,
+    "acierto_promedio": 1.0,
+    "latencia_promedio_s": 1.0,
+    "memoria_pico_mb": 100,
+    "costo_total_usd": 0.0
+  }
+}

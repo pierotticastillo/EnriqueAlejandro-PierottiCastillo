@@ -1,0 +1,65 @@
+{
+  "tarea": "transcripcion",
+  "modelo": "faster-whisper-base",
+  "ubicacion": "planta (CPU, int8, 2 hilos)",
+  "descripcion": "Transcripción local de notas de voz de recorrida de planta",
+  "dataset": [
+    {
+      "id": "NOTA-00001",
+      "audio": "planta/recorridas/NOTA-00001.wav",
+      "transcripcion_esperada": "La dos está en ciento doce de descarga, ah, y el filtro B me dio uno ocho de diferencial. La tres sigue goteando por la empaquetadura, le saqué foto.",
+      "acierto": 0.92,
+      "latencia_s": 2.1,
+      "memoria_mb": 141,
+      "costo_usd": 0.0,
+      "notas": "Modelo local, sin costo de nube"
+    },
+    {
+      "id": "NOTA-00002",
+      "audio": "planta/recorridas/NOTA-00002.wav",
+      "transcripcion_esperada": "la del medio está en 1630 de descarga la uno está en 115 kilogramos de descarga el rodamiento me dio 55 grados con la pistola",
+      "acierto": 0.89,
+      "latencia_s": 1.8,
+      "memoria_mb": 141,
+      "costo_usd": 0.0,
+      "notas": "Números en dígitos, sin puntuación"
+    },
+    {
+      "id": "NOTA-00003",
+      "audio": "planta/recorridas/NOTA-00003.wav",
+      "transcripcion_esperada": "presión de descarga en reserva, sin lecturas numéricas",
+      "acierto": 0.95,
+      "latencia_s": 1.5,
+      "memoria_mb": 141,
+      "costo_usd": 0.0,
+      "notas": "Nota sin mediciones numéricas"
+    },
+    {
+      "id": "NOTA-00004",
+      "audio": "planta/recorridas/NOTA-00004.wav",
+      "transcripcion_esperada": "cero coma cuatro de diferencial, válido",
+      "acierto": 0.87,
+      "latencia_s": 2.3,
+      "memoria_mb": 141,
+      "costo_usd": 0.0,
+      "notas": "Diferencial bajo, artefacto «ceo» → «cero»"
+    },
+    {
+      "id": "NOTA-00005",
+      "audio": "planta/recorridas/NOTA-00005.wav",
+      "transcripcion_esperada": "golpeteo metálico en la bomba dos, nombre ambiguo",
+      "acierto": 0.78,
+      "latencia_s": 2.0,
+      "memoria_mb": 141,
+      "costo_usd": 0.0,
+      "notas": "Equipo ambiguo «la bomba», requiere vocabulario ASR"
+    }
+  ],
+  "resumen": {
+    "casos": 5,
+    "acierto_promedio": 0.88,
+    "latencia_promedio_s": 1.94,
+    "memoria_pico_mb": 141,
+    "costo_total_usd": 0.0
+  }
+}

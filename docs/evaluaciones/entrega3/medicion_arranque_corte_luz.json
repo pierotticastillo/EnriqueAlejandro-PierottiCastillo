@@ -1,0 +1,36 @@
+{
+  "iteraciones": 3,
+  "iteraciones_exitosas": 3,
+  "tiempo_promedio_s": 120.34,
+  "tiempo_min_s": 116.21,
+  "tiempo_max_s": 126.67,
+  "detalle": [
+    {
+      "iteracion": 1,
+      "timestamp_utc": "2026-11-27T21:51:13.027783+00:00",
+      "tiempo_levantar_contenedores_s": 27.67,
+      "tiempo_postgres_s": 0.32,
+      "tiempo_latido_s": 35.28,
+      "tiempo_sistema_s": null,
+      "tiempo_total_arranque_s": 126.67
+    },
+    {
+      "iteracion": 2,
+      "timestamp_utc": "2026-11-27T21:53:09.242773+00:00",
+      "tiempo_levantar_contenedores_s": 11.63,
+      "tiempo_postgres_s": 0.28,
+      "tiempo_latido_s": 35.28,
+      "tiempo_sistema_s": null,
+      "tiempo_total_arranque_s": 116.21
+    },
+    {
+      "iteracion": 3,
+      "timestamp_utc": "2026-11-27T21:55:07.369281+00:00",
+      "tiempo_levantar_contenedores_s": 13.61,
+      "tiempo_postgres_s": 0.33,
+      "tiempo_latido_s": 35.29,
+      "tiempo_sistema_s": null,
+      "tiempo_total_arranque_s": 118.13
+    }
+  ]
+}

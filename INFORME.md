@@ -2835,6 +2835,8 @@ El sistema PIA-3 usa **cuatro modelos** de una lista cerrada (`src/modelos_lista
 
 Todos los modelos locales (ASR, embeddings, LLM) corren dentro del contenedor de la planta sin salir a internet. Solo el modelo de visión sale a la nube, y solo para describir fotos: la decisión nunca la toma un modelo.
 
+**Presupuesto para 1.000 notas (Entrega 3, módulo 4.4):** [`docs/evaluaciones/entrega3/presupuesto_1000_notas_entrega3.md`](docs/evaluaciones/entrega3/presupuesto_1000_notas_entrega3.md) — incluye datos reales de las 7 corridas del corrector oficial, estimación de costo por nota (USD 0.09–0.60 según escenario), presupuesto de tokens y estrategias de caching y reducción de contexto.
+
 ---
 
 ## 16. Referencias
