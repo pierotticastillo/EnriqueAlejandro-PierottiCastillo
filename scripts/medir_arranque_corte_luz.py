@@ -14,12 +14,11 @@ Resultado:
     tiempos por componente.
 """
 
+import argparse
 import json
 import subprocess
 import time
-import sys
-import argparse
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def ejecutar_comando(comando, timeout=120):
@@ -104,7 +103,7 @@ def medir_arranque(iteraciones=1):
 
         iteracion = {
             "iteracion": i + 1,
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.now(UTC).isoformat(),
             "tiempo_levantar_contenedores_s": round(tiempo_levantar, 2),
             "tiempo_postgres_s": round(tiempo_postgres, 2) if tiempo_postgres else None,
             "tiempo_latido_s": round(tiempo_latido, 2) if tiempo_latido else None,
@@ -115,11 +114,17 @@ def medir_arranque(iteraciones=1):
         print(f"    Tiempo total: {tiempo_total:.2f} s", flush=True)
 
     # Resumen
-    tiempos_validos = [r["tiempo_total_arranque_s"] for r in resultados if r["tiempo_total_arranque_s"]]
+    tiempos_validos = [
+        r["tiempo_total_arranque_s"] for r in resultados if r["tiempo_total_arranque_s"]
+    ]
     resumen = {
         "iteraciones": iteraciones,
         "iteraciones_exitosas": len(tiempos_validos),
-        "tiempo_promedio_s": round(sum(tiempos_validos) / len(tiempos_validos), 2) if tiempos_validos else None,
+        "tiempo_promedio_s": (
+            round(sum(tiempos_validos) / len(tiempos_validos), 2)
+            if tiempos_validos
+            else None
+        ),
         "tiempo_min_s": round(min(tiempos_validos), 2) if tiempos_validos else None,
         "tiempo_max_s": round(max(tiempos_validos), 2) if tiempos_validos else None,
         "detalle": resultados,
@@ -144,7 +149,8 @@ if __name__ == "__main__":
     resumen = medir_arranque(iteraciones=args.iteraciones)
 
     # Guardar resultado
-    with open("docs/evaluaciones/entrega3/medicion_arranque_corte_luz.json", "w", encoding="utf-8") as f:
+    ruta_salida = "docs/evaluaciones/entrega3/medicion_arranque_corte_luz.json"
+    with open(ruta_salida, "w", encoding="utf-8") as f:
         json.dump(resumen, f, indent=2, ensure_ascii=False)
 
     print("\nResultado guardado en docs/evaluaciones/entrega3/medicion_arranque_corte_luz.json")
