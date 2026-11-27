@@ -305,10 +305,10 @@ _OBSERVACION_POR_VALOR = {
 # Los valores se eligen por encima del umbral de alarma del catálogo
 # para que el evento se escale correctamente.
 _VALOR_POR_DEFECTO_SINTOMA = {
-    "goteo_empaquetadura": 50.0,   # "pierde bastante", "chorrea" → muy por encima de 10 gotas/min
-    "ruido": None,                  # sin valor numérico significativo
-    "estado_correas": None,         # sin valor numérico significativo
-    "nivel_aceite_visor": None,     # sin valor numérico significativo
+    "goteo_empaquetadura": 50.0,  # "pierde bastante", "chorrea" → muy por encima de 10 gotas/min
+    "ruido": None,  # sin valor numérico significativo
+    "estado_correas": None,  # sin valor numérico significativo
+    "nivel_aceite_visor": None,  # sin valor numérico significativo
 }
 
 # Muletillas y palabras de enlace que no son una observación por sí solas.

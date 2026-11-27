@@ -121,9 +121,7 @@ def medir_arranque(iteraciones=1):
         "iteraciones": iteraciones,
         "iteraciones_exitosas": len(tiempos_validos),
         "tiempo_promedio_s": (
-            round(sum(tiempos_validos) / len(tiempos_validos), 2)
-            if tiempos_validos
-            else None
+            round(sum(tiempos_validos) / len(tiempos_validos), 2) if tiempos_validos else None
         ),
         "tiempo_min_s": round(min(tiempos_validos), 2) if tiempos_validos else None,
         "tiempo_max_s": round(max(tiempos_validos), 2) if tiempos_validos else None,
