@@ -595,14 +595,17 @@ class ServicioParteVoz:
             ),
             espera_respuesta=False,
         )
-        # Siempre encolar el aviso por radio: el drenador lo publica solo si
-        # el enlace está arriba; si está caído, queda en la cola y
-        # pendientes_sincronizar se ve en el latido.
-        encolar_aviso(self._repo, radio)
-        # Forzar publicación inmediata del latido para que
-        # pendientes_sincronizar se vea durante el corte (Entrega 3, E2).
-        if self._on_pendiente_cambio is not None:
-            self._on_pendiente_cambio()
+        if self._enlace_ok():
+            self._cliente.publicar_tablet(radio)
+        else:
+            # El aviso por radio sale de la planta: sin radioenlace no se puede
+            # enviar, pero tampoco se pierde. Queda en la cola y sale cuando
+            # el enlace vuelve.
+            encolar_aviso(self._repo, radio)
+            # Forzar publicación inmediata del latido para que
+            # pendientes_sincronizar se vea durante el corte (Entrega 3, E2).
+            if self._on_pendiente_cambio is not None:
+                self._on_pendiente_cambio()
         logger.critical(
             "Alerta %s publicada para nota %s (equipo %s) con aviso por radio canal %s",
             tipo,

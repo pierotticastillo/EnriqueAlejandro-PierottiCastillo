@@ -297,20 +297,6 @@ _OBSERVACION_POR_VALOR = {
     "goteo_empaquetadura": (10.0, "goteo por empaquetadura", False),
 }
 
-# Valores aproximados para síntomas que el operador dice sin número
-# explícito pero que indican severidad alta. Permiten que el borrador
-# tenga un valor numérico comparable con la verdad de campo, mejorando
-# el criterio A2 (borrador al primer intento) del anexo Entrega 3.
-#
-# Los valores se eligen por encima del umbral de alarma del catálogo
-# para que el evento se escale correctamente.
-_VALOR_POR_DEFECTO_SINTOMA = {
-    "goteo_empaquetadura": 50.0,  # "pierde bastante", "chorrea" → muy por encima de 10 gotas/min
-    "ruido": None,  # sin valor numérico significativo
-    "estado_correas": None,  # sin valor numérico significativo
-    "nivel_aceite_visor": None,  # sin valor numérico significativo
-}
-
 # Muletillas y palabras de enlace que no son una observación por sí solas.
 _STOPWORDS = {
     "a",
@@ -680,15 +666,7 @@ class ExtractorParte:
         if variable == "goteo_empaquetadura":
             observacion = _observacion(variable, resto)
             valor = numero.valor if numero else None
-            if valor is None:
-                # "pierde bastante", "chorrea" sin número: asignar valor
-                # aproximado por encima del umbral de alarma para que el
-                # operador virtual pueda comparar con la verdad de campo
-                # (criterio A2 del anexo Entrega 3).
-                valor = _VALOR_POR_DEFECTO_SINTOMA.get("goteo_empaquetadura")
-                unidad = "gotas/min"
-            else:
-                unidad = _unidad_de(variable, resto) or "gotas/min"
+            unidad = _unidad_de(variable, resto) if numero else None
             self._agregar(self._tag, variable, valor, unidad, observacion, resto)
             return
 
