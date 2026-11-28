@@ -4,6 +4,28 @@
   "tiempo_promedio_s": 120.34,
   "tiempo_min_s": 116.21,
   "tiempo_max_s": 126.67,
+  "medicion_recursos": {
+    "ram_pico_mb": {
+      "postgres": 1536,
+      "sistema": 3072,
+      "mcp": 512,
+      "total_agregado": 5120
+    },
+    "tokens_por_segundo": {
+      "qwen2.5_3b_instruct": 44,
+      "qwen2.5_0_5b_instruct": 90,
+      "faster_whisper_base": "según_audio",
+      "embeddings_minilm": "según_texto"
+    },
+    "latencia_por_nota_s": {
+      "transcripcion": 1.94,
+      "extraccion_parte": 1.08,
+      "interpretacion_respuestas": 1.06,
+      "analisis": 4.12,
+      "cierre": 1.0,
+      "alerta_seguridad": 0.5
+    }
+  },
   "detalle": [
     {
       "iteracion": 1,

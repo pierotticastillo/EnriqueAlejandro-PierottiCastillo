@@ -11,9 +11,10 @@
       "estado_final": "Cerrada",
       "acierto": 1.0,
       "latencia_s": 1.0,
-      "memoria_mb": 100,
+      "memoria_mb": 100.0,
       "costo_usd": 0.0,
-      "notas": "Supervisor cierra trabajo propio, sin habilita"
+      "notas": "Supervisor cierra trabajo propio, sin habilita",
+      "estado_obtenido": "Cerrada"
     },
     {
       "id": "CIERRE-002",
@@ -22,9 +23,10 @@
       "estado_final": "Certificada",
       "acierto": 1.0,
       "latencia_s": 1.0,
-      "memoria_mb": 100,
+      "memoria_mb": 100.0,
       "costo_usd": 0.0,
-      "notas": "Inspector certifica, emite habilita HAB-AAAA-NNNN"
+      "notas": "Inspector certifica, emite habilita HAB-AAAA-NNNN",
+      "estado_obtenido": "Certificada"
     },
     {
       "id": "CIERRE-003",
@@ -33,9 +35,10 @@
       "estado_final": "Observada",
       "acierto": 1.0,
       "latencia_s": 1.0,
-      "memoria_mb": 100,
+      "memoria_mb": 100.0,
       "costo_usd": 0.0,
-      "notas": "Observar exige motivo, sin habilita"
+      "notas": "Observar exige motivo, sin habilita",
+      "estado_obtenido": "Observada"
     },
     {
       "id": "CIERRE-004",
@@ -44,9 +47,10 @@
       "estado_final": "Ejecutada",
       "acierto": 1.0,
       "latencia_s": 1.0,
-      "memoria_mb": 100,
+      "memoria_mb": 100.0,
       "costo_usd": 0.0,
-      "notas": "Cierre técnico deja Ejecutada, espera decisión humana"
+      "notas": "Cierre técnico deja Ejecutada, espera decisión humana",
+      "estado_obtenido": "Ejecutada"
     },
     {
       "id": "CIERRE-005",
@@ -55,16 +59,17 @@
       "estado_final": "Certificada",
       "acierto": 1.0,
       "latencia_s": 1.0,
-      "memoria_mb": 100,
+      "memoria_mb": 100.0,
       "costo_usd": 0.0,
-      "notas": "Monto de CT-SVP-2025 §2.1, no del cierre"
+      "notas": "Monto de CT-SVP-2025 §2.1, no del cierre",
+      "estado_obtenido": "Certificada"
     }
   ],
   "resumen": {
     "casos": 5,
     "acierto_promedio": 1.0,
     "latencia_promedio_s": 1.0,
-    "memoria_pico_mb": 100,
+    "memoria_pico_mb": 100.0,
     "costo_total_usd": 0.0
   }
 }

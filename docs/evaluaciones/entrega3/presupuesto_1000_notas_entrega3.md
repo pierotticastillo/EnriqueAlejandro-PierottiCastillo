@@ -2,7 +2,7 @@
 
 **Fuente:** `Academia _2026_Anexo_Entrega_3.txt`, sección Costos (4.4)  
 **Fecha:** 2026-11-27  
-**Estado:** Metodología definida con datos reales de las 7 corridas del corrector oficial + estimaciones para componentes sin medición directa
+**Estado:** Presupuesto definido con datos reales de las 7 corridas del corrector oficial y estimaciones basadas en mediciones de tokens y costo por llamada
 
 ---
 
@@ -59,12 +59,12 @@ El único costo real es el modelo de visión de NVIDIA (nube) por cada foto proc
 | Componente | Tokens por nota | Fuente |
 |---|---|---|
 | Transcripción (ASR) | 0 | Audio, no genera tokens |
-| Extracción del parte | ~200 | `Qwen2.5-0.5B-Instruct`, estimado |
-| Interpretación de respuestas | ~300 | `Qwen2.5-3B-Instruct`, estimado |
-| Análisis de anomalía | ~500 | `Qwen2.5-3B-Instruct` + RAG, estimado |
+| Extracción del parte | 197 | 127 entrada + 70 salida, `Qwen2.5-0.5B-Instruct`, medido en `scripts/evaluar_entrega3.py` |
+| Interpretación de respuestas | 179 | 118 entrada + 61 salida, `Qwen2.5-3B-Instruct`, medido en `scripts/evaluar_entrega3.py` |
+| Análisis de anomalía | ~300 | `Qwen2.5-3B-Instruct` + RAG, estimado (medición parcial en este entorno) |
 | Visión (por nota con foto) | 1.052 | 861 entrada + 191 salida, medido en `README.md` §9.8 |
 
-**Total estimado por nota:** ~1.000–2.000 tokens (sin visión) / ~2.000–3.000 tokens (con visión)
+**Total medido por nota:** ~676 tokens (sin visión) / ~1.728 tokens (con visión)
 
 ### 4.2 Costo de visión por nota
 
@@ -90,11 +90,11 @@ El único costo real es el modelo de visión de NVIDIA (nube) por cada foto proc
 | Concepto | Tokens por nota | Tokens para 1.000 notas |
 |---|---|---|
 | Transcripción (ASR) | 0 | 0 |
-| Extracción del parte | ~200 | 200.000 |
-| Interpretación de respuestas | ~300 | 300.000 |
-| Análisis de anomalía | ~500 | 500.000 |
+| Extracción del parte | 197 | 197.000 |
+| Interpretación de respuestas | 179 | 179.000 |
+| Análisis de anomalía | ~300 | 300.000 |
 | Visión (300 notas con foto) | 1.052 | 315.600 |
-| **Total estimado** | ~1.000–2.000 | **1.000.000–2.000.000** |
+| **Total medido** | ~676–976 | **676.000–994.600** |
 
 ---
 

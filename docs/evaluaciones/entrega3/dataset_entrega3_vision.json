@@ -8,58 +8,78 @@
       "id": "FOTO-001",
       "descripcion": "Empaquetadura con pérdida visible",
       "danio_estructural": true,
-      "acierto": 0.92,
-      "latencia_s": 8.0,
-      "memoria_mb": 0,
-      "costo_usd": 0.0004,
-      "notas": "Llamada por proxy enlace:3128"
+      "acierto": 0.5,
+      "latencia_s": 0.0,
+      "memoria_mb": 0.0,
+      "costo_usd": 0.0,
+      "notas": "Llamada por proxy enlace:3128",
+      "respuesta_obtenida": "No se puede consultar el modelo de visión (sin clave de API). Resultado indeterminado.",
+      "danio_obtenido": null,
+      "tokens_entrada": 0,
+      "tokens_salida": 0
     },
     {
       "id": "FOTO-002",
       "descripcion": "Correa desgastada",
       "danio_estructural": false,
-      "acierto": 0.89,
-      "latencia_s": 7.5,
-      "memoria_mb": 0,
-      "costo_usd": 0.0004,
-      "notas": "Sin daño estructural, no forza revisión humana"
+      "acierto": 0.5,
+      "latencia_s": 0.0,
+      "memoria_mb": 0.0,
+      "costo_usd": 0.0,
+      "notas": "Sin daño estructural, no forza revisión humana",
+      "respuesta_obtenida": "No se puede consultar el modelo de visión (sin clave de API). Resultado indeterminado.",
+      "danio_obtenido": null,
+      "tokens_entrada": 0,
+      "tokens_salida": 0
     },
     {
       "id": "FOTO-003",
       "descripcion": "Acople con fuga",
       "danio_estructural": true,
-      "acierto": 0.90,
-      "latencia_s": 8.2,
-      "memoria_mb": 0,
-      "costo_usd": 0.0004,
-      "notas": "Forza revisión humana"
+      "acierto": 0.5,
+      "latencia_s": 0.0,
+      "memoria_mb": 0.0,
+      "costo_usd": 0.0,
+      "notas": "Forza revisión humana",
+      "respuesta_obtenida": "No se puede consultar el modelo de visión (sin clave de API). Resultado indeterminado.",
+      "danio_obtenido": null,
+      "tokens_entrada": 0,
+      "tokens_salida": 0
     },
     {
       "id": "FOTO-004",
       "descripcion": "Manómetro sin anomalía",
       "danio_estructural": false,
-      "acierto": 0.95,
-      "latencia_s": 7.1,
-      "memoria_mb": 0,
-      "costo_usd": 0.0004,
-      "notas": "Lectura normal"
+      "acierto": 0.5,
+      "latencia_s": 0.0,
+      "memoria_mb": 0.0,
+      "costo_usd": 0.0,
+      "notas": "Lectura normal",
+      "respuesta_obtenida": "No se puede consultar el modelo de visión (sin clave de API). Resultado indeterminado.",
+      "danio_obtenido": null,
+      "tokens_entrada": 0,
+      "tokens_salida": 0
     },
     {
       "id": "FOTO-005",
       "descripcion": "Filtro con daño",
       "danio_estructural": false,
-      "acierto": 0.87,
-      "latencia_s": 7.8,
-      "memoria_mb": 0,
-      "costo_usd": 0.0004,
-      "notas": "Indeterminado si enlace caído → revisión humana"
+      "acierto": 0.5,
+      "latencia_s": 0.0,
+      "memoria_mb": 0.0,
+      "costo_usd": 0.0,
+      "notas": "Indeterminado si enlace caído → revisión humana",
+      "respuesta_obtenida": "No se puede consultar el modelo de visión (sin clave de API). Resultado indeterminado.",
+      "danio_obtenido": null,
+      "tokens_entrada": 0,
+      "tokens_salida": 0
     }
   ],
   "resumen": {
     "casos": 5,
-    "acierto_promedio": 0.91,
-    "latencia_promedio_s": 7.72,
-    "memoria_pico_mb": 0,
-    "costo_total_usd": 0.002
+    "acierto_promedio": 0.5,
+    "latencia_promedio_s": 0.0,
+    "memoria_pico_mb": 0.0,
+    "costo_total_usd": 0.0
   }
 }

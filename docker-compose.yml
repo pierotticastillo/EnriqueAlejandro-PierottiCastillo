@@ -299,6 +299,11 @@ services:
       RAG_CACHE_DIR: ${RAG_CACHE_DIR:-/modelos/rag}
       RAG_PESO_LEXICO: ${RAG_PESO_LEXICO:-0.8}
       RAG_HILOS: ${RAG_HILOS:-1}
+      # Seguridad MCP (P1-09): token Bearer opcional para proteger las tools.
+      # En producción, configurar MCP_REQUIRE_AUTH=true y MCP_TOKEN con un valor
+      # secreto. Sin token, el MCP queda abierto solo en la red interna debug.
+      MCP_REQUIRE_AUTH: ${MCP_REQUIRE_AUTH:-false}
+      MCP_TOKEN: ${MCP_TOKEN:-}
     networks:
       - planta-lan
       # `planta-lan` es una red interna (sin salida al host), así que el puerto

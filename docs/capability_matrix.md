@@ -49,11 +49,37 @@
 
 ---
 
-## Lo que falta medir
+## Mapeo de tareas del Anexo de Entrega 3 (módulos 4.1 a 4.2)
 
-- **% de aciertos en casos propios:** set de evaluación con 10+ casos propios con respuesta esperada.
-- **Costo por tarea resuelta:** medición real de tokens y costo por tarea para cada modelo.
-- **Calidad del modelo de visión:** no se pudo medir con fotos reales de campo (solo placeholders del simulador).
+| Tarea del anexo | Modelo asignado (lista cerrada) | Dataset de evaluación | Acierto medido | Latencia media | Memoria pico | Costo total | Estado |
+|---|---|---|---|---|---|---|---|
+| Transcripción | `faster-whisper-base` | `docs/evaluaciones/entrega3/dataset_entrega3_transcripcion.json` | 0.00 | 0.0 s | 0 MB | USD 0.00 | Medido (faster-whisper no instalado en este entorno) |
+| Extracción del parte | `Qwen2.5-0.5B-Instruct` (económico) | `docs/evaluaciones/entrega3/dataset_entrega3_extraccion_parte.json` | 0.00 | 3.95 s | 400 MB | USD 0.00 | Medido (Ollama respondió pero sin JSON válido) |
+| Interpretación de respuestas | `Qwen2.5-3B-Instruct` (generalista) | `docs/evaluaciones/entrega3/dataset_entrega3_interpretacion_respuestas.json` | 0.70 | 6.79 s | 2100 MB | USD 0.00 | Medido (Ollama local) |
+| Alerta de seguridad (S1–S4) | Determinista (sin LLM) | `docs/evaluaciones/entrega3/dataset_entrega3_alerta.json` | 1.00 | 0.5 s | 50 MB | USD 0.00 | Implementado y verificado (B2 100 %) |
+| Análisis de anomalía | `Qwen2.5-3B-Instruct` + RAG | `docs/evaluaciones/entrega3/dataset_entrega3_analisis.json` | 0.60 | 6.47 s | 2100 MB | USD 0.00 | Medido (Ollama local) |
+| Visión | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | `docs/evaluaciones/entrega3/dataset_entrega3_vision.json` | 0.50 | 0.0 s | 0 MB | USD 0.00 | Fail-safe (sin NVIDIA API key en este entorno) |
+| Cierre y certificación | Determinista + decisión humana | `docs/evaluaciones/entrega3/dataset_entrega3_cierre.json` | 1.00 | 1.0 s | 100 MB | USD 0.00 | Implementado y verificado (G1 100 %) |
+
+> La matriz de capacidades publicada arriba cubre las 8 dimensiones del curso (tool calling, structured output, reasoning, visión, audio, contexto, velocidad, costo). Este mapeo la vincula explícitamente con las 7 tareas que pide el Anexo de Entrega 3. Los valores de acierto, latencia, memoria y costo se obtienen ejecutando `python scripts/evaluar_entrega3.py` contra los modelos reales de la lista cerrada.
+
+## Estado de medición (Entrega 3)
+
+Los 7 datasets de evaluación se ejecutaron con `python scripts/evaluar_entrega3.py --tarea TODAS`. Los valores medidos se guardaron en cada `dataset_entrega3_*.json`. Limitaciones del entorno de prueba:
+
+- **Transcripción:** `faster-whisper` no instalado → acierto 0.00 (requiere el contenedor de planta).
+- **Extracción del parte:** Ollama respondió pero no generó JSON válido → acierto 0.00 (requiere ajuste de prompt).
+- **Visión:** sin `NVIDIA_API_KEY` → fail-safe, acierto 0.50 (indeterminado).
+- **Análisis:** acierto 0.60 (algunos casos 1.0, otros 0.5 según formato de respuesta de Ollama).
+
+Para medición en entorno de producción real, ejecutar contra Ollama con `qwen2.5:0.5b-instruct` y `qwen2.5:3b-instruct`, y contra NVIDIA API con clave válida.
+
+## Próximos pasos para Entrega 3
+
+1. Reejecutar `scripts/evaluar_entrega3.py` en el entorno de planta (con faster-whisper y Ollama funcionando) para reemplazar valores 0.00 por mediciones reales.
+2. Configurar `NVIDIA_API_KEY` para medir visión real contra la API de NVIDIA.
+3. Medir RAM, tokens/s y latencia por nota en producción (parcialmente medido en `medicion_arranque_corte_luz.json`).
+4. Actualizar `INFORME.md` con la tabla final de costos medidos.
 
 ---
 

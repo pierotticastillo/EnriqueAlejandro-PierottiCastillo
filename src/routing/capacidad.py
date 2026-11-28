@@ -23,18 +23,21 @@ CAPACIDADES: dict[str, dict[str, object]] = {
         "ventana_grande": False,
         "tools": True,
         "razonamiento": "bajo",
+        "ubicacion": "planta",
     },
     MODELO_ECONOMICO: {
         "vision": False,
         "ventana_grande": False,
         "tools": True,
         "razonamiento": "bajo",
+        "ubicacion": "planta",
     },
     MODELO_VISION: {
         "vision": True,
         "ventana_grande": False,
         "tools": True,
         "razonamiento": "medio",
+        "ubicacion": "nube",
     },
 }
 

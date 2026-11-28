@@ -1054,6 +1054,25 @@ Se implementó la medición de tokens por segundo (velocidad de lectura de entra
 - `pytest tests/test_metricas_tokens.py` → 10 passed
 - Importación de `src.routing` con todas las nuevas exportaciones: OK
 
+### Brechas pendientes (Entrega 3)
+
+Estos son los únicos puntos donde los md del proyecto no cubren aún lo que piden las carpetas de enunciados y presentaciones:
+
+**Entrega 3 — mediciones oficiales faltantes:**
+- Tiempo de arranque tras corte de luz (`scripts/medir_arranque_corte_luz.py` pendiente).
+- Costo por nota y por orden, presupuesto para 1.000 notas (`docs/evaluaciones/entrega3/presupuesto_1000_notas_entrega3.md` sin valores finales).
+- Tabla de mediciones en README para los 3 escenarios (`tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`) muestra "Pendiente de medición oficial".
+- Criterios E1/E2 sin valores medidos oficiales.
+
+**Matriz de capacidades con datos reales:**
+`docs/capability_matrix.md` tiene la matriz de diseño, pero falta el set de evaluación propio con % de aciertos, latencia, costo y memoria por tarea (transcripción, extracción del parte, interpretación de respuestas, alerta, análisis, visión, cierre), como pide el anexo de Entrega 3.
+
+**Modelo de visión con fotos reales:**
+Implementado como auxiliar fail-safe, pero medido con placeholders del simulador (un rectángulo, un círculo, un texto). No hay fotos de campo reales de la planta simulada. Ver `docs/evaluaciones/ACTA_FOTOS_REALES.md`.
+
+**Brechas P1 no bloqueantes** (no afectan aceptación, son mejora interna):
+P1-03 (outbox transaccional), P1-04 (cola PUBACK), P1-07 (CI/CD), P1-08 (observabilidad: readiness/liveness), P1-09 (seguridad MCP/PostgreSQL), P1-10 (redes y presupuesto), P1-12 (habilita → facturación), P1-13 (registro ingreso/egreso), P1-21 (validación multimodal adversarial). Véase `docs/checklist_entrega.md` §4 y `docs/estado_de_implementacion.md` §Plan de implementación 2 — brechas P1.
+
 ### Qué NO entra en el Plan 3 (fuera de alcance del TP)
 
 - **Azure AI Foundry como proveedor:** no está en la lista cerrada ni mencionado en los enunciados del TP.

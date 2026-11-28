@@ -8,58 +8,78 @@
       "id": "TABLET-001",
       "mensaje_operador": "Confirmo",
       "accion_esperada": "parte pasa de Borrador a Confirmado",
-      "acierto": 1.0,
-      "latencia_s": 0.9,
-      "memoria_mb": 2100,
+      "acierto": 0.5,
+      "latencia_s": 19.24,
+      "memoria_mb": 2100.0,
       "costo_usd": 0.0,
-      "notas": "Confirmación directa"
+      "notas": "Confirmación directa",
+      "respuesta_obtenida": "{\n  \"accion\": \"confirmar\",\n  \"motivo\": \"Confirmación de parte en borrador\"\n}",
+      "accion_obtenida": "confirmar",
+      "tokens_entrada": 110,
+      "tokens_salida": 25
     },
     {
       "id": "TABLET-002",
       "mensaje_operador": "No, la uno estaba en ciento quince kilos",
       "accion_esperada": "corregir valor de la uno a 115 kg/cm2, reenviar borrador",
-      "acierto": 0.93,
-      "latencia_s": 1.1,
-      "memoria_mb": 2100,
+      "acierto": 0.5,
+      "latencia_s": 3.49,
+      "memoria_mb": 2100.0,
       "costo_usd": 0.0,
-      "notas": "Corrección de valor con unidad"
+      "notas": "Corrección de valor con unidad",
+      "respuesta_obtenida": "{\n  \"accion\": \"corregir valor e reenviar borrador\",\n  \"motivo\": \"el valor original proporcionado era incorrecto (150 kg/cm2), debe ser 115 kg/cm2\"\n}",
+      "accion_obtenida": "corregir valor e reenviar borrador",
+      "tokens_entrada": 132,
+      "tokens_salida": 51
     },
     {
       "id": "TABLET-003",
       "mensaje_operador": "La bomba está parada, en reserva",
       "accion_esperada": "no es anomalía, parte sin eventos de escalado",
-      "acierto": 0.89,
-      "latencia_s": 1.0,
-      "memoria_mb": 2100,
+      "acierto": 1.0,
+      "latencia_s": 3.1,
+      "memoria_mb": 2100.0,
       "costo_usd": 0.0,
-      "notas": "Parada en reserva no es anomalía"
+      "notas": "Parada en reserva no es anomalía",
+      "respuesta_obtenida": "{\n  \"accion\": \"parte sin eventos de escalado\",\n  \"motivo\": \"La bomba está parada, en reserva\"\n}",
+      "accion_obtenida": "parte sin eventos de escalado",
+      "tokens_entrada": 119,
+      "tokens_salida": 32
     },
     {
       "id": "TABLET-004",
       "mensaje_operador": "Lo de la uno no lo dije",
       "accion_esperada": "sacar una lectura del equipo uno, no todas",
-      "acierto": 0.85,
-      "latencia_s": 1.2,
-      "memoria_mb": 2100,
+      "acierto": 1.0,
+      "latencia_s": 3.67,
+      "memoria_mb": 2100.0,
       "costo_usd": 0.0,
-      "notas": "Negación, sacar una sola lectura"
+      "notas": "Negación, sacar una sola lectura",
+      "respuesta_obtenida": "{\n  \"accion\": \"Sacar una lectura del equipo uno\",\n  \"motivo\": \"El operador mencionó que no había informado sobre la lectura del equipo uno, por lo que se necesita realizar una lectura para confirmar o proporcionar información adicional.\"\n}",
+      "accion_obtenida": "Sacar una lectura del equipo uno",
+      "tokens_entrada": 118,
+      "tokens_salida": 61
     },
     {
       "id": "TABLET-005",
       "mensaje_operador": "Tambien bomba está en 1600 psi",
       "accion_esperada": "ambigüedad sin artículo, generar pregunta con opciones",
-      "acierto": 0.81,
-      "latencia_s": 1.1,
-      "memoria_mb": 2100,
+      "acierto": 0.5,
+      "latencia_s": 3.92,
+      "memoria_mb": 2100.0,
       "costo_usd": 0.0,
-      "notas": "ASR se come el artículo, ambigüedad"
+      "notas": "ASR se come el artículo, ambigüedad",
+      "respuesta_obtenida": "{\n  \"accion\": \"generar_pregunta_con_opciones\",\n  \"motivo\": \"El mensaje del operador es ambiguo y no especifica si la bomba en 1600 psi es el sistema de tablet o si hay otra bomba en ese estado. Necesitamos claridad para tomar la acción correcta.\"\n}",
+      "accion_obtenida": "generar_pregunta_con_opciones",
+      "tokens_entrada": 122,
+      "tokens_salida": 75
     }
   ],
   "resumen": {
     "casos": 5,
-    "acierto_promedio": 0.90,
-    "latencia_promedio_s": 1.06,
-    "memoria_pico_mb": 2100,
+    "acierto_promedio": 0.7,
+    "latencia_promedio_s": 6.68,
+    "memoria_pico_mb": 2100.0,
     "costo_total_usd": 0.0
   }
 }

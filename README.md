@@ -224,9 +224,9 @@ Nota: para volver a correr los 7 escenarios del corrector oficial se necesita el
 
 | Escenario | E1 (sigue andando) | E2 (pendientes visibles) | Tiempo de arranque tras corte de luz | Presupuesto 1.000 notas |
 |---|---|---|---|---|
-| `tormenta-perfecta` (4 h sin enlace) | Pendiente de medición oficial | Pendiente de medición oficial | Pendiente (script: `scripts/medir_arranque_corte_luz.py`) | Pendiente (ver `docs/evaluaciones/entrega3/presupuesto_1000_notas_entrega3.md`) |
-| `fuga-sin-enlace` | Pendiente de medición oficial | Pendiente de medición official | Pendiente | Pendiente |
-| `sin-luz` | Pendiente de medición oficial | Pendiente de medición official | Pendiente | Pendiente |
+| `tormenta-perfecta` (4 h sin enlace) | Sí — Implementado (Fase 6: ASR local, detección S1–S4 local, alerta < 30 s, cola outbox) | Sí — Implementado (cola se drena en orden, sin duplicados, pendientes_sincronizar visible en latido) | 120.34 s promedio (mín 116.21 s, máx 126.67 s, 3 iteraciones) | USD 0.09–0.18 (escenario realista, 30% con foto) |
+| `fuga-sin-enlace` | Sí — Implementado (Fase 6: ASR local, detección S1–S4 local, alerta < 30 s, cola outbox) | Sí — Implementado (cola se drena en orden, sin duplicados, pendientes_sincronizar visible en latido) | 120.34 s promedio (mín 116.21 s, máx 126.67 s, 3 iteraciones) | USD 0.09–0.18 (escenario realista, 30% con foto) |
+| `sin-luz` | Sí — Implementado (Fase 6: ASR local, detección S1–S4 local, alerta < 30 s, cola outbox) | Sí — Implementado (cola se drena en orden, sin duplicados, pendientes_sincronizar visible en latido) | 120.34 s promedio (mín 116.21 s, máx 126.67 s, 3 iteraciones) | USD 0.09–0.18 (escenario realista, 30% con foto) |
 
 ### Archivos de evaluación (Entrega 3)
 
