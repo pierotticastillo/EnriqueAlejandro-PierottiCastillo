@@ -1,58 +1,36 @@
 {
   "iteraciones": 3,
   "iteraciones_exitosas": 3,
-  "tiempo_promedio_s": 120.34,
-  "tiempo_min_s": 116.21,
-  "tiempo_max_s": 126.67,
-  "medicion_recursos": {
-    "ram_pico_mb": {
-      "postgres": 1536,
-      "sistema": 3072,
-      "mcp": 512,
-      "total_agregado": 5120
-    },
-    "tokens_por_segundo": {
-      "qwen2.5_3b_instruct": 44,
-      "qwen2.5_0_5b_instruct": 90,
-      "faster_whisper_base": "según_audio",
-      "embeddings_minilm": "según_texto"
-    },
-    "latencia_por_nota_s": {
-      "transcripcion": 1.94,
-      "extraccion_parte": 1.08,
-      "interpretacion_respuestas": 1.06,
-      "analisis": 4.12,
-      "cierre": 1.0,
-      "alerta_seguridad": 0.5
-    }
-  },
+  "tiempo_promedio_s": 111.5,
+  "tiempo_min_s": 111.14,
+  "tiempo_max_s": 111.99,
   "detalle": [
     {
       "iteracion": 1,
-      "timestamp_utc": "2026-11-27T21:51:13.027783+00:00",
-      "tiempo_levantar_contenedores_s": 27.67,
-      "tiempo_postgres_s": 0.32,
-      "tiempo_latido_s": 35.28,
+      "timestamp_utc": "2026-11-28T01:17:07.682049+00:00",
+      "tiempo_levantar_contenedores_s": 9.61,
+      "tiempo_postgres_s": 0.3,
+      "tiempo_latido_s": 35.32,
       "tiempo_sistema_s": null,
-      "tiempo_total_arranque_s": 126.67
+      "tiempo_total_arranque_s": 111.14
     },
     {
       "iteracion": 2,
-      "timestamp_utc": "2026-11-27T21:53:09.242773+00:00",
-      "tiempo_levantar_contenedores_s": 11.63,
-      "tiempo_postgres_s": 0.28,
-      "tiempo_latido_s": 35.28,
+      "timestamp_utc": "2026-11-28T01:18:59.671165+00:00",
+      "tiempo_levantar_contenedores_s": 9.74,
+      "tiempo_postgres_s": 0.29,
+      "tiempo_latido_s": 35.29,
       "tiempo_sistema_s": null,
-      "tiempo_total_arranque_s": 116.21
+      "tiempo_total_arranque_s": 111.99
     },
     {
       "iteracion": 3,
-      "timestamp_utc": "2026-11-27T21:55:07.369281+00:00",
-      "tiempo_levantar_contenedores_s": 13.61,
-      "tiempo_postgres_s": 0.33,
+      "timestamp_utc": "2026-11-28T01:20:51.027253+00:00",
+      "tiempo_levantar_contenedores_s": 9.65,
+      "tiempo_postgres_s": 0.3,
       "tiempo_latido_s": 35.29,
       "tiempo_sistema_s": null,
-      "tiempo_total_arranque_s": 118.13
+      "tiempo_total_arranque_s": 111.36
     }
   ]
 }
