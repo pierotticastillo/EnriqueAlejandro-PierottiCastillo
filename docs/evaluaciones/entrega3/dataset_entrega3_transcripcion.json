@@ -9,61 +9,61 @@
       "audio": "planta/recorridas/NOTA-00001.wav",
       "transcripcion_esperada": "La dos está en ciento doce de descarga, ah, y el filtro B me dio uno ocho de diferencial. La tres sigue goteando por la empaquetadura, le saqué foto.",
       "acierto": 0.0,
-      "latencia_s": 0.0,
+      "latencia_s": 4.31,
       "memoria_mb": 0.0,
       "costo_usd": 0.0,
       "notas": "Modelo local, sin costo de nube",
-      "transcripcion_obtenida": "ERROR: No module named 'faster_whisper'"
+      "transcripcion_obtenida": "ERROR: open() got an unexpected keyword argument 'metadata_errors'"
     },
     {
       "id": "NOTA-00002",
       "audio": "planta/recorridas/NOTA-00002.wav",
       "transcripcion_esperada": "la del medio está en 1630 de descarga la uno está en 115 kilogramos de descarga el rodamiento me dio 55 grados con la pistola",
       "acierto": 0.0,
-      "latencia_s": 0.0,
+      "latencia_s": 0.74,
       "memoria_mb": 0.0,
       "costo_usd": 0.0,
       "notas": "Números en dígitos, sin puntuación",
-      "transcripcion_obtenida": "ERROR: No module named 'faster_whisper'"
+      "transcripcion_obtenida": "ERROR: open() got an unexpected keyword argument 'metadata_errors'"
     },
     {
       "id": "NOTA-00003",
       "audio": "planta/recorridas/NOTA-00003.wav",
       "transcripcion_esperada": "presión de descarga en reserva, sin lecturas numéricas",
       "acierto": 0.0,
-      "latencia_s": 0.0,
+      "latencia_s": 0.68,
       "memoria_mb": 0.0,
       "costo_usd": 0.0,
       "notas": "Nota sin mediciones numéricas",
-      "transcripcion_obtenida": "ERROR: No module named 'faster_whisper'"
+      "transcripcion_obtenida": "ERROR: open() got an unexpected keyword argument 'metadata_errors'"
     },
     {
       "id": "NOTA-00004",
       "audio": "planta/recorridas/NOTA-00004.wav",
       "transcripcion_esperada": "cero coma cuatro de diferencial, válido",
       "acierto": 0.0,
-      "latencia_s": 0.0,
+      "latencia_s": 0.71,
       "memoria_mb": 0.0,
       "costo_usd": 0.0,
       "notas": "Diferencial bajo, artefacto «ceo» → «cero»",
-      "transcripcion_obtenida": "ERROR: No module named 'faster_whisper'"
+      "transcripcion_obtenida": "ERROR: open() got an unexpected keyword argument 'metadata_errors'"
     },
     {
       "id": "NOTA-00005",
       "audio": "planta/recorridas/NOTA-00005.wav",
       "transcripcion_esperada": "golpeteo metálico en la bomba dos, nombre ambiguo",
       "acierto": 0.0,
-      "latencia_s": 0.0,
+      "latencia_s": 0.77,
       "memoria_mb": 0.0,
       "costo_usd": 0.0,
       "notas": "Equipo ambiguo «la bomba», requiere vocabulario ASR",
-      "transcripcion_obtenida": "ERROR: No module named 'faster_whisper'"
+      "transcripcion_obtenida": "ERROR: open() got an unexpected keyword argument 'metadata_errors'"
     }
   ],
   "resumen": {
     "casos": 5,
     "acierto_promedio": 0.0,
-    "latencia_promedio_s": 0.0,
+    "latencia_promedio_s": 1.44,
     "memoria_pico_mb": 0.0,
     "costo_total_usd": 0.0
   }
