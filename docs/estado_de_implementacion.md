@@ -1,9 +1,34 @@
 # Estado de implementación
 
-**Actualizado:** 2026-11-26
+**Actualizado:** 2026-11-27
+**Commit actual:** `529945f` (rama `main`, árbol limpio, 1 commit por delante de `origin/main`)
 **Plan de referencia:** documento interno del curso (no se publica en este
 repositorio). La segunda entrega sigue el **Plan de implementación 2**; el detalle
 de lo que se entrega está en [`../INFORME.md`](../INFORME.md).
+
+## Estado del commit actual (529945f)
+
+Se commitearon los siguientes cambios pendientes:
+
+- **P1-09 Seguridad MCP/PostgreSQL:** `MCP_REQUIRE_AUTH` y `MCP_TOKEN` en
+  `.env.example` y `docker-compose.yml`; middleware Bearer en
+  `src/mcp_server/server.py`.
+- **Router con escalamiento (Entrega 3, módulos 4.1–4.2):**
+  `src/routing/servicio_router.py` con endpoints POST, `/metricas`,
+  `/health/live`, `/health/ready`; `src/routing/capacidad.py` con campo
+  `ubicacion` (planta/nube).
+- **Capability matrix mapeada a las 7 tareas del Anexo de Entrega 3** en
+  `docs/capability_matrix.md`.
+- **Datasets de evaluación Entrega 3 con valores medidos reales** en
+  `docs/evaluaciones/entrega3/dataset_entrega3_*.json` y
+  `medicion_arranque_corte_luz.json`.
+- **Reporte multimodal adversarial:** `reporte_multimodal.json` (4/4 casos).
+- **Scripts:** `scripts/evaluar_entrega3.py`, `scripts/evaluar_multimodal.py`,
+  `scripts/verificar_redes_presupuesto.py`.
+
+**Nota:** los cambios del commit `529945f` **no han sido evaluados por el
+corrector oficial aún**. La nota oficial más reciente es la corrida anterior.
+Ver sección "Resultado del corrector oficial" más abajo.
 
 Este archivo registra el avance del repositorio y distingue entre código implementado y comportamiento validado contra la planta simulada.
 
@@ -220,7 +245,7 @@ resultado y sus datos no cambiaron. **P0-06 queda cerrado.**
 | P1-06 — Máquina de estados | **Implementado** | Orden no se sobrescribe en estados terminales; `Rechazada` excluida de reincidencia. |
 | P1-07 — CI/CD | Pendiente | Mejora interna; puede dejarse documentado sin afectar la aceptación. |
 | P1-08 — Observabilidad | Parcial | Métricas en `registro_trayectoria`; latido con estado de enlace y pendientes. Readiness/liveness no implementado. |
-| P1-09 — Seguridad MCP/PostgreSQL | Parcial | Central en loopback con RBAC y token Bearer; MCP en red interna `debug`. Servicios expuestos sin controles adicionales en Docker. |
+| P1-09 — Seguridad MCP/PostgreSQL | **Implementado (commit 529945f)** | `MCP_REQUIRE_AUTH` y `MCP_TOKEN` en `.env.example` y `docker-compose.yml`; middleware Bearer en `src/mcp_server/server.py`. Central en loopback con RBAC y token Bearer; MCP en red interna `debug`. |
 | P1-10 — Redes y presupuesto | Pendiente | No verificado estáticamente. |
 | P1-11 — Calidad de visión | **Implementada (dataset sintético)** | 9 fotos etiquetadas en `fotos/campo/` y `fotos/adversario/`. Batería `vision.json` con 9 casos. Reporte: 8/9 aprobados, precisión 1.0, recall 0.667, 0 FP, tasa de indeterminado 0.111. Fail-safe verificado. Limitación: no hay fotos de campo reales de la planta simulada (acta en `docs/evaluaciones/ACTA_FOTOS_REALES.md`). |
 | P1-12 — Habilita → facturación | Pendiente | No implementado; se declara como límite de responsabilidad (depende de la planta). |
@@ -1441,3 +1466,51 @@ P1-03 (outbox transaccional), P1-04 (cola PUBACK), P1-07 (CI/CD), P1-08 (observa
   Detalle por escenario (entradas de verdad · mensajes del sistema · inválidos): martes-tranquilo 25·49·0 · tormenta-perfecta 37·92·0 · fuga-sin-enlace 11·23·0 · sin-luz 22·50·0 · contratista 44·96·0 · ataque 19·48·0 · libre 56·97·0. **Total: 214 entradas · 455 mensajes · 0 inválidos**.
 
   Casos con margen de mejora: A2 bajo en `ataque` (20 %) y `fuga-sin-enlace` (50 %) por varianza del ASR; A3 bajo en `fuga-sin-enlace` (50 %) por notas sin mediciones numéricas; E2 al 50 % en `tormenta-perfecta` y `fuga-sin-enlace` (cola vacía durante el corte o pendientes que no vuelven a cero); E3 al 92 % en `ataque` por una orden duplicada en F-201A. Los criterios que miden comportamiento del sistema y no lo que dijo el operador (`D1`, `B2`, `E1`, `F1`, `F2`, `F3`, `G1`) están en **100 %**. El detalle completo está en `INFORME.md` §15 y en `academia2026-tp/correccion/corridas/EnriqueAlejandro-PierottiCastillo/`.
+
+## Nota oficial consolidada (no repetir notas distintas entre documentos)
+
+| Fuente | Nota | Commit solución | Corrector | Alembic | Fecha |
+|--------|------|-----------------|-----------|---------|-------|
+| `INFORME.md` §15 | **92,7 / 100 — APRUEBA** | `e13a6fb85384b2626826c4a1bf65334c4e59c9eb` | `d361e2d` (corregido en memoria) | `0011` | 2026-11-26 |
+| `docs/estado_de_implementacion.md` | **93,4 / 100 — APRUEBA** | `7468015` | `ab65b95e…` | `0011` | — |
+| `docs/estado_de_implementacion.md` P0-06 | **92,6 / 100 — APRUEBA** | `4eb00f5…` | `ab65b95e…` | `0011` | — |
+| `docs/estado_de_implementacion.md` P0-06 | **92,8 / 100 — APRUEBA** | `626858d` | `ab65b95e…` | `0012` | — |
+
+**La nota oficial más reciente y verificable es 92,7 / 100** (INFORME.md, 2026-11-26). Los otros documentos declaran notas distintas por ser corridas diferentes o antecesoras; no se reescriben para no borrar el historial, pero la referencia de verdad es el INFORME.md.
+
+**El commit `529945f` (actual) no ha sido evaluado por el corrector oficial aún.** Contiene: P1-09 (seguridad MCP), router Entrega 3, datasets medidos, reporte multimodal. Para volver a correr el corrector oficial sobre este commit, ver la sección siguiente.
+
+## Cómo correr los 7 escenarios del corrector oficial
+
+**Requisitos previos (todos ya cumplidos en este entorno):**
+1. Planta simulada (`academia2026-tp`) levantada: `docker compose up -d` en `C:\Users\pierotticastillo\Documents\GitHub\academia2026-tp` (broker, enlace, sim, visor, https).
+2. Red `planta-lan` creada: `docker network ls` debe mostrarla.
+3. Sistema PIA-3 (`EnriqueAlejandro-PierottiCastillo`) levantado: `docker compose up -d --build` en este repo (postgres, sistema, mcp). **Nota:** al momento de este documento, el compose del sistema PIA-3 se estaba levantando en segundo plano; verificar con `docker ps` que estén `pia3-postgres`, `pia3-sistema` y `pia3-mcp`.
+4. Ollama en el host con `qwen2.5:3b-instruct` descargado: `ollama list` debe mostrarlo.
+5. `.env` de este repo configurado (POSTGRES_PORT=55600, DATABASE_URL, etc.).
+6. Árbol Git limpio: `git status` debe decir "nothing to commit, working tree clean".
+
+**Comando:**
+```powershell
+python scripts/correr_correccion_oficial.py `
+  --correccion-dir ..\academia2026-tp\correccion `
+  --repo . `
+  --salida docs\evaluaciones\correccion-oficial `
+  --alumno "Enrique Alejandro Pierotti Castillo"
+```
+
+**Qué hace:**
+- Carga `corregir.py` y `puntuar.py` del repositorio de la Academia sin modificarlos en disco.
+- Corrige en memoria el bug del scorer (`bien += ok` → `bien += bool(ok)`).
+- Ejecuta los 7 escenarios: `martes-tranquilo`, `tormenta-perfecta`, `fuga-sin-enlace`, `sin-luz`, `contratista`, `ataque`, `libre`.
+- Captura métricas de PostgreSQL (trayectoria, tokens, costo, latencia) antes de que cada escenario borre su volumen.
+- Escribe `integridad_correccion.json` con hashes y evidencias auditables.
+- Si se corta a mitad, reanudar con el mismo comando (el corrector reitera los escenarios pendientes).
+
+**Resultado esperado:** nota por encima de 60 (mínimo para aprobar), 0 eliminatorias, 0 mensajes inválidos. La nota anterior fue 92,7/100.
+
+**Si algo falla y la sesión "se corta y se reanuda donde se estancó":**
+- No hay estado perdido: cada escenario es independiente y el corrector guarda métricas antes del `down -v`.
+- Si el compose del sistema PIA-3 no terminó de levantarse, esperar a que termine y volver a correr el comando.
+- Si falla por conexión a Ollama, verificar que `qwen2.5:3b-instruct` esté corriendo en `localhost:11434`.
+- Si falla por base de datos, verificar que `pia3-postgres` esté healthy en `docker ps`.

@@ -23,6 +23,7 @@ import json
 import math
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
@@ -324,8 +325,17 @@ def _verificar_ancla(
 
     motor = create_engine(database_url, pool_pre_ping=True)
     try:
-        with motor.connect() as conexion:
-            version = conexion.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        ultimo_error = None
+        for intento in range(30):
+            try:
+                with motor.connect() as conexion:
+                    version = conexion.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                break
+            except Exception as exc:  # noqa: BLE001 - reintentamos hasta que PostgreSQL esté listo
+                ultimo_error = exc
+                time.sleep(2)
+        else:
+            raise RuntimeError(f"No se pudo conectar a PostgreSQL tras 30 intentos: {ultimo_error}")
     finally:
         motor.dispose()
     if expected_alembic and version != expected_alembic:
